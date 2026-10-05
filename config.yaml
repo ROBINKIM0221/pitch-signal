@@ -1,8 +1,9 @@
 # 피치시그널(PitchSignal) 설정 파일
 # 모든 선택값은 여기서만 바꾼다. 코드에 숫자를 직접 쓰지 않는다 (저장소 규칙 3).
-# '잠정' 표시 값은 단계 2.4·3.1에서 확정하고, 평가 계획 고정(단계 3.2) 후에는 이 파일을 바꾸지 않는다.
-# 고정 후 개발셋에서 미리 정한 규칙대로 정하는 값(최종 λ·h, 비교 대상 임계값, 하한 상향)은
-# config_calibrated.yaml에 따로 쓴다 (단계 4.3·4.5·5.1). 코드는 두 파일을 합쳐 읽는다.
+# '잠정' 표시 값은 단계 2.4·3.1에서 확정한다.
+# 개발셋에서 미리 정한 규칙대로 정하는 값(합동 Σ_b, 최종 방식·λ·h, 비교 대상 임계값, 하한 상향)은
+# config_calibrated.yaml에 따로 쓴다 (단계 4~5.1). 코드는 두 파일을 합쳐 읽는다.
+# 평가 계획 고정(단계 3.2, 개발셋 작업인 단계 4~5.2 뒤에 함) 후에는 두 파일 모두 바꾸지 않는다.
 
 seed: 2026                         # 모든 무작위(부트스트랩, 표본 추출 등)의 기본 seed
 
@@ -21,6 +22,8 @@ data:
     dev: [2021, 2022, 2023]      # 개발셋: 설정·관리한계 조정
     val: [2024, 2025]            # 검증셋: 평가 계획 고정 후 평가
     sealed: [2026]               # 봉인 평가: 단 한 번 실행
+  raw_columns: all               # 원데이터는 Savant가 주는 열을 모두 저장한다 (다시 받지 않기 위해)
+  # 분석에서 읽는 열. 원데이터에 이 열이 없으면 경고한다.
   statcast_columns: [game_pk, game_date, game_type, game_year, pitcher, player_name, p_throws,
                      home_team, away_team, inning, inning_topbot, at_bat_number, pitch_number,
                      pitch_type, release_speed, release_pos_x, release_pos_z, release_extension,
@@ -45,15 +48,17 @@ baseline:
   reliever_min_fastballs: 120     # 불펜: 15등판과 누적 120구 중 늦은 시점까지
   refine_rounds: 1
   refine_alpha: 0.01              # 기준선 정제용 T² 한계 χ²_{p,0.99}
-  sb_eigen_floor: 0.01            # 단위 없앤 값 기준
-  fallback_previous_season: true  # 선발이 시즌 중 8등판을 못 채우면 직전 시즌 마지막 8등판
-                                  # (2021은 직전 시즌 데이터가 없으므로 대체 없이 제외)
+  sb_eigen_floor: 0.01            # 단위 없앤 값 기준 (합동 Σ_b에 적용)
+  sigma_b: pooled_by_role         # Σ_b는 개발셋 전체에서 역할(SP/RP)별로 합동 추정 (SPEC 3.7)
+  fallback_previous_season: false # 기준선을 못 채운 투수-시즌은 제외. 직전 시즌으로 대체하지 않음
   min_outings_any: 3              # 이보다 적으면 기준선을 만들지 않음 (stats_core.phase1 조건)
 
 monitor:
+  variants: [multi, union]        # 제안 방식 후보. multi = T² + 3개 특징 MEWMA, union = multi + 구속 EWMA
+  variant_tie_break: multi        # 개발셋 탐지율이 같으면 multi (단계 4.5 규칙)
   lambdas: [0.1, 0.2, 0.3]        # 개발셋에서 하나를 고름 (단계 4.5 규칙)
   t2_alpha: 0.001
-  t2_alpha_fallbacks: [0.0005, 0.0002]   # T² 단독 실측 오경보가 0.8/100등판 이상이면 차례로 사용 (평가 계획서 4.1)
+  t2_max_far_per100: 0.5          # T² 단독 개발셋 실측 오경보가 이를 넘으면 한계를 실측 0.5/100이 되는 값으로 올림
   lambda_tie_break: 0.2
   arl0_target: 100                # 100등판당 오경보 1회
   reset_after_alarm: true
@@ -72,7 +77,7 @@ labels:
 
 evaluation:
   window_outings: 5               # IL 전 5개 적격 등판
-  min_post_baseline_outings: 5    # 사례 포함 조건
+  min_post_baseline_outings: 5    # 사례 포함 조건. 대조군에도 가상 기준일 기준으로 똑같이 적용
   controls_per_case: 2
   age_tolerance: 2
   control_il_free_days: 30        # 대조군은 기준일 ±30일 안에 IL 기록이 없어야 함
@@ -83,7 +88,8 @@ evaluation:
   report_per_season_false_alarms: true
   exclude_missing_tracking_frac: 0.20   # 핵심 특징 결측 등판 비율이 이보다 크면 제외
   min_val_cases_target: 50
-  hypotheses: {h2_min_lead_outings: 2, h3_max_factor: 2}
+  # H1(주 가설): 관찰 창 안 경보 비율이 사례에서 대조군보다 높다. B1~B4 비교는 보조 분석
+  hypotheses: {h1: case_vs_control_window, h2_min_lead_outings: 2, h3_max_factor: 2}
   sensitivity: {starter_baseline_outings: [6, 8, 10]}
   h4_test: mcnemar
 
@@ -107,7 +113,8 @@ highschool:
   season: 2026
   schools: 6
   min_pitch_count_coverage: 0.90
-  competitions: [주말리그 전반기, 주말리그 후반기, 황금사자기, 청룡기, 봉황대기, 기타]   # 입력 양식 목록과 같게
+  competitions: [주말리그 전반기, 주말리그 후반기, 신세계 이마트배, 황금사자기, 청룡기, 대통령배,
+                 봉황대기, 기타]   # 입력 양식 목록과 같게
   kbsa:
     daily_max: 105
     rest_table: [[45, 0], [60, 1], [75, 2], [90, 3], [105, 4]]
