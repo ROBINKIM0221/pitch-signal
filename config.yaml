@@ -1,0 +1,148 @@
+# 피치시그널(PitchSignal) 설정 파일
+# 모든 선택값은 여기서만 바꾼다. 코드에 숫자를 직접 쓰지 않는다 (저장소 규칙 3).
+# '잠정' 표시 값은 단계 2.4·3.1에서 확정하고, 평가 계획 고정(단계 3.2) 후에는 이 파일을 바꾸지 않는다.
+# 고정 후 개발셋에서 미리 정한 규칙대로 정하는 값(최종 λ·h, 비교 대상 임계값, 하한 상향)은
+# config_calibrated.yaml에 따로 쓴다 (단계 4.3·4.5·5.1). 코드는 두 파일을 합쳐 읽는다.
+
+seed: 2026                         # 모든 무작위(부트스트랩, 표본 추출 등)의 기본 seed
+
+project:
+  name: PitchSignal
+  name_ko: 피치시그널
+  author: 김형준
+  affiliation: UNIST
+  contact: robin1967@unist.ac.kr
+
+data:
+  seasons: [2021, 2022, 2023, 2024, 2025, 2026]
+  download_window: {start: "03-15", end: "10-05"}   # 해마다 이 기간을 받고 game_type으로 거름
+  game_type: R                                     # 정규시즌만
+  split:
+    dev: [2021, 2022, 2023]      # 개발셋: 설정·관리한계 조정
+    val: [2024, 2025]            # 검증셋: 평가 계획 고정 후 평가
+    sealed: [2026]               # 봉인 평가: 단 한 번 실행
+  statcast_columns: [game_pk, game_date, game_type, game_year, pitcher, player_name, p_throws,
+                     home_team, away_team, inning, inning_topbot, at_bat_number, pitch_number,
+                     pitch_type, release_speed, release_pos_x, release_pos_z, release_extension,
+                     release_spin_rate, arm_angle, plate_x, plate_z, sz_top, sz_bot, zone,
+                     events, description]
+
+features:
+  primary_fastball_types: [FF, SI, FC]   # 투수-시즌별로 이 중 가장 많이 던진 구종
+  core: [velo, rel_z, arm_angle]         # 핵심 3개 (주 분석)
+  full: [velo, rel_z, arm_angle, rel_x, extension, spin, rel_z_sd]   # 전체 7개 (확장 3)
+  shoulder_extra: [high_rate, out_zone_rate]                         # 어깨 하위 분석 (확장 3)
+  min_fastballs: 3          # 잠정. 적격 등판 = 주력 패스트볼 3구 이상
+  min_fastballs_sd: 10      # 잠정. rel_z_sd(F7)는 10구 이상 등판에서만 계산
+  flip_rel_x_for_lhp: true
+
+role:
+  rule: season_majority_starts   # 그 시즌 등판의 과반이 선발이면 선발 투수
+
+baseline:
+  starter_outings: 8
+  reliever_outings: 15
+  reliever_min_fastballs: 120     # 불펜: 15등판과 누적 120구 중 늦은 시점까지
+  refine_rounds: 1
+  refine_alpha: 0.01              # 기준선 정제용 T² 한계 χ²_{p,0.99}
+  sb_eigen_floor: 0.01            # 단위 없앤 값 기준
+  fallback_previous_season: true  # 선발이 시즌 중 8등판을 못 채우면 직전 시즌 마지막 8등판
+                                  # (2021은 직전 시즌 데이터가 없으므로 대체 없이 제외)
+  min_outings_any: 3              # 이보다 적으면 기준선을 만들지 않음 (stats_core.phase1 조건)
+
+monitor:
+  lambdas: [0.1, 0.2, 0.3]        # 개발셋에서 하나를 고름 (단계 4.5 규칙)
+  t2_alpha: 0.001
+  t2_alpha_fallbacks: [0.0005, 0.0002]   # T² 단독 실측 오경보가 0.8/100등판 이상이면 차례로 사용 (평가 계획서 4.1)
+  lambda_tie_break: 0.2
+  arl0_target: 100                # 100등판당 오경보 1회
+  reset_after_alarm: true
+  calib: {n_sim: 4000, max_len: 1500, seed: 0}
+  calibration_plot: {n_bins: [3, 6, 10, 16], var_limit: 1.3, raise_min_to: 5}
+  design_shifts_sd: [0.5, 1.0, 1.5]       # 설계 성능표(ARL1)용 표준화 이동
+
+labels:
+  arm_keywords: [elbow, ucl, ulnar, "tommy john", forearm, flexor, pronator,
+                 shoulder, "rotator cuff", labrum, capsule]   # 던지는 팔 팔꿈치·어깨 (전완·굴곡근 포함)
+  exclude_keywords: [oblique, hamstring, ankle, knee, back, hip, groin, quad, calf, foot, toe,
+                     illness, concussion, covid, finger, blister, wrist, thumb, hand, neck]
+  first_il_per_season_only: true
+  match_throwing_side: true       # 'Right/Left'가 투구하는 팔과 같은지 확인
+  use_retroactive_date: true      # '...retroactive to <날짜>'가 있으면 그 날짜를 기준일로
+
+evaluation:
+  window_outings: 5               # IL 전 5개 적격 등판
+  min_post_baseline_outings: 5    # 사례 포함 조건
+  controls_per_case: 2
+  age_tolerance: 2
+  control_il_free_days: 30        # 대조군은 기준일 ±30일 안에 IL 기록이 없어야 함
+  baselines: [B1, B2, B3, B4]
+  consensus: {enabled: true, min_methods: 2, members: [PROPOSED, B1, B2, B3, B4]}
+  bootstrap_reps: 2000
+  multiple_testing: holm
+  report_per_season_false_alarms: true
+  exclude_missing_tracking_frac: 0.20   # 핵심 특징 결측 등판 비율이 이보다 크면 제외
+  min_val_cases_target: 50
+  hypotheses: {h2_min_lead_outings: 2, h3_max_factor: 2}
+  sensitivity: {starter_baseline_outings: [6, 8, 10]}
+  h4_test: mcnemar
+
+B1: {velo_drop_mph: 1.0}
+B2: {cusum_k: 0.5, ip_floor_outs: 1, winsor_pct: 99}
+B3: {window: 4, shrink_to_baseline_diag: 0.5}
+B4: {feature: velo}               # 구속 하나로 같은 가변 표본 MEWMA
+
+load:                              # 불펜 부하 채널 (초기값, 단계 2.7에서 유지 여부 결정)
+  acute_days: 7
+  chronic_days: 21
+  consecutive_days_flag: 3
+  apps_3d_flag: 3
+  p7d_percentile: 95
+  acwr_flag: 1.5
+  long_outing_pitches: 30
+  short_rest_days: 1
+
+highschool:
+  region: 경기도
+  season: 2026
+  schools: 6
+  min_pitch_count_coverage: 0.90
+  competitions: [주말리그 전반기, 주말리그 후반기, 황금사자기, 청룡기, 봉황대기, 기타]   # 입력 양식 목록과 같게
+  kbsa:
+    daily_max: 105
+    rest_table: [[45, 0], [60, 1], [75, 2], [90, 3], [105, 4]]
+    no_three_consecutive_days: true
+  acwr: {acute_days: 7, chronic_days: 21, flag: 1.5, min_coverage: 1.0}
+  recheck_frac: 0.10              # 입력 검수 재대조 비율
+  max_error_rate: 0.02            # 재대조 오류율이 이를 넘으면 그 학교 전체 재대조
+  foreign_rules:
+    japan: {window_days: 7, max_pitches: 500}   # 출처: 야구공작소(2026)
+    taiwan: null                                # 출처 확인 후 입력 (단계 6.6)
+    canada: null                                # 출처 확인 후 입력 (단계 6.6)
+
+kbo_case:                          # 날짜는 2026. 10. 1. 나무위키 기준 (기획서 2.5절 표)
+  baseline_starts: 8               # 2025 시즌 마지막 선발 등판 수
+  min_baseline_starts: 5
+  fetch_last_starts_2025: 10
+  pitchers:
+    - {name: 요니 치리노스, team: LG, part: elbow, removed: "2026-04-22", decision: "2026-06-02",
+       decision_type: 방출, replacement: 약셀 리오스, outcome: "6/3 후임 계약"}
+    - {name: 미치 화이트, team: SSG, part: shoulder, removed: "2026-05-01", decision: "2026-06-06",
+       decision_type: 교체, replacement: 토마스 해치, outcome: "팀을 떠남"}
+    - {name: 아리엘 후라도, team: 삼성, part: shoulder, removed: "2026-07-14", decision: "2026-07-20",
+       decision_type: 6주 대체, replacement: 오스틴 보스, outcome: "9/6 1군 복귀"}
+  response_only:
+    - {name: 오웬 화이트, team: 한화, part: hamstring, removed: "2026-04-01", decision: "2026-04-04",
+       decision_type: 6주 대체, replacement: 잭 쿠싱, outcome: "5/16 복귀, 잔류", note: "3/31 수비 중 부상, 감시 대상 아님"}
+
+dashboard:
+  framework: react-vite-recharts
+  deploy: github-pages
+  language: ko
+  base_path: /pitch-signal/
+  replay: {detected_cases: 10, missed_cases: 5, controls_per_case: 1}
+
+aaa:
+  min_arm_cases: 30                # 이보다 적으면 외부 검증 중단
+
+extensions_priority: [myt, kbo_case, full_features_shoulder, aaa_external]

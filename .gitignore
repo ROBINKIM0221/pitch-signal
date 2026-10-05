@@ -1,0 +1,21 @@
+# 데이터는 커밋하지 않는다 (저장소 규칙 5, 6). 폴더 자리표시(.gitkeep)만 남긴다.
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/highschool/*
+!data/highschool/.gitkeep
+data/kbo/*
+!data/kbo/.gitkeep
+# 환경
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# 대시보드 빌드 산출물
+dashboard-web/node_modules/
+dashboard-web/dist/
+# 기타
+.DS_Store
+Thumbs.db
+~$*.xlsx

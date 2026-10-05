@@ -1,0 +1,54 @@
+# 대시보드(dashboard-web)를 GitHub Pages로 배포한다.
+# 사전 설정: 저장소 Settings → Pages → Source를 "GitHub Actions"로 지정.
+# 비용: 공개 저장소면 GitHub Pages와 Actions 모두 무료.
+name: Deploy dashboard
+
+on:
+  push:
+    branches: [main]
+    paths: ["dashboard-web/**", ".github/workflows/deploy-pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install & build
+        working-directory: dashboard-web
+        run: |
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+          npm run build
+      - name: Verify build output
+        working-directory: dashboard-web
+        run: |
+          test -f dist/index.html || { echo "::error::dist/index.html 없음"; exit 1; }
+          n=$(ls dist/data/*.json 2>/dev/null | wc -l)
+          echo "데이터 JSON ${n}개"
+          [ "$n" -gt 0 ] || { echo "::error::dist/data에 JSON 없음"; exit 1; }
+          touch dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard-web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
