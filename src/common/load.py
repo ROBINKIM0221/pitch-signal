@@ -49,3 +49,14 @@ def load_table(outings: pd.DataFrame, windows: pd.DataFrame, rules: dict) -> pd.
         m.insert(0, "pitcher", pitcher)
         parts.append(m)
     return pd.concat(parts, ignore_index=True)
+
+
+def flag_rates(load: pd.DataFrame, chosen: pd.DataFrame, baseline_end: pd.Series) -> pd.DataFrame:
+    """고른 투수-시즌(chosen: pitcher, season)의 감시 기간 등판에서 표시별 등판 수와 비율 (단계 2.7).
+
+    감시 기간은 기준선 마지막 등판일(baseline_end, 투수-시즌별) 뒤의 모든 등판이다(적격 여부와 상관없이).
+    """
+    rows = load.merge(chosen[["pitcher", "season"]].drop_duplicates(), on=["pitcher", "season"])
+    ends = pd.MultiIndex.from_frame(rows[["pitcher", "season"]]).map(baseline_end)
+    flags = rows.loc[rows["game_date"].to_numpy() > ends.to_numpy(), [c for c in rows.columns if c.startswith("flag_")]]
+    return pd.DataFrame({"outings": len(flags), "flagged": flags.sum(), "rate": flags.mean()})

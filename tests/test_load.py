@@ -52,3 +52,17 @@ def test_seven_day_flag_uses_the_pitchers_own_baseline_percentile():
     m = metrics(rows, baseline_end="2023-04-17")
     assert list(m["flag_p7d"]) == [False] * 6 + [True]      # 기준선 기간의 7일 합(최대 20)을 넘는 35구
     assert not metrics(rows)["flag_p7d"].any()              # 기준선이 없으면 표시하지 않음
+
+
+def test_flag_rates_count_outings_after_the_baseline_of_the_chosen_pitcher_seasons():
+    load = pd.DataFrame({
+        "pitcher": [1, 1, 1, 1, 2, 2, 3], "season": 2023,
+        "game_date": pd.to_datetime(["2023-04-01", "2023-05-01", "2023-05-02", "2023-05-03",
+                                     "2023-05-01", "2023-05-02", "2023-05-01"]),
+        "flag_acwr": [True, True, False, False, True, True, True],
+        "flag_apps_3d": [True, False, False, True, False, False, True]})
+    ends = pd.Series(pd.to_datetime(["2023-04-15", "2023-05-01", "2023-04-15"]),
+                     index=pd.MultiIndex.from_tuples([(1, 2023), (2, 2023), (3, 2023)], names=["pitcher", "season"]))
+    rates = ld.flag_rates(load, pd.DataFrame({"pitcher": [1, 2], "season": 2023}), ends)     # 3번 투수는 고르지 않음
+    assert rates.loc["flag_acwr"].to_dict() == {"outings": 4, "flagged": 2, "rate": 0.5}     # 1번의 5월 3등판 + 2번의 5/2
+    assert rates.loc["flag_apps_3d"].to_dict() == {"outings": 4, "flagged": 1, "rate": 0.25}

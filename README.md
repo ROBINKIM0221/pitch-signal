@@ -14,7 +14,7 @@
 py -m venv .venv
 .venv\Scripts\Activate.ps1          # 막히면: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 pip install -r requirements.txt
-python -m pytest -q                 # 15 passed 가 나와야 함
+python -m pytest -q                 # 모두 통과해야 함
 ```
 
 ## 진행 방법

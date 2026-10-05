@@ -6,9 +6,11 @@
 
 사용 예:
     python -m src.04_load
+    python -m src.04_load --flags-dev     # 개발셋 대조군 불펜의 표시 비율 (단계 2.7, controls.csv가 있어야 함)
 """
 from __future__ import annotations
 
+import argparse
 import logging
 
 import pandas as pd
@@ -21,10 +23,27 @@ PROCESSED = ROOT / "data" / "processed"
 log = logging.getLogger("pitchsignal.load")
 
 
+def flags_dev(cfg: dict) -> None:
+    """개발셋 대조군 불펜의 감시 기간 등판에서 표시별 비율을 낸다. 기준값은 바꾸지 않고, 사례의 등판은 보지 않는다."""
+    controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig")
+    chosen = controls[controls["season"].isin(cfg["data"]["split"]["dev"]) & (controls["role"] == "RP")]
+    windows = bw.baseline_windows(pd.read_parquet(PROCESSED / "outings.parquet"), cfg["baseline"])
+    rates = ld.flag_rates(pd.read_parquet(PROCESSED / "load.parquet"), chosen,
+                          windows.set_index(["pitcher", "season"])["baseline_end"])
+    rates.to_csv(ROOT / "reports" / "tables" / "load_flags_dev.csv", encoding="utf-8-sig", index_label="flag")
+    log.info("개발셋 대조군 불펜 %d명의 감시 기간 등판 %d개에서 표시 비율 계산", len(chosen), int(rates["outings"].iloc[0]))
+    print(rates.assign(rate=(100 * rates["rate"]).round(1)).rename(columns={"rate": "rate_pct"}).to_string())
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--flags-dev", action="store_true", help="개발셋 대조군 불펜의 표시 비율 표를 만든다 (단계 2.7)")
+    a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[
         logging.FileHandler(ROOT / "reports" / "logs" / "load.log", encoding="utf-8"), logging.StreamHandler()])
     cfg = load_config()
+    if a.flags_dev:
+        return flags_dev(cfg)
     outings = pd.read_parquet(PROCESSED / "outings.parquet")
     windows = bw.baseline_windows(outings, cfg["baseline"])
     table = ld.load_table(outings, windows, cfg["load"]).merge(
