@@ -69,6 +69,33 @@ def test_download_weeks_continues_after_a_week_fails(tmp_path):
     assert result["saved"] == [date(2021, 4, 12)]
 
 
+TWO_WEEKS = {"data": {"download_window": {"start": "04-05", "end": "04-18"}, "game_type": "R"}}
+
+
+def test_download_seasons_retries_failed_weeks_once_at_the_end(tmp_path):
+    attempts = {}
+
+    def fetch(start, end):
+        attempts[start] = attempts.get(start, 0) + 1
+        if start == date(2021, 4, 5) and attempts[start] == 1:
+            raise ConnectionError("끊김")
+        return _fake_week(start, end)
+
+    summary = st.download_seasons(TWO_WEEKS, [2021, 2022], tmp_path, fetch)
+    assert summary["failed"] == []
+    assert attempts[date(2021, 4, 5)] == 2
+    assert (tmp_path / "2021" / "0405.parquet").exists()
+    assert [(s["season"], s["weeks"], s["rows"]) for s in summary["seasons"]] == [(2021, 1, 2), (2022, 2, 4)]
+
+
+def test_download_seasons_lists_weeks_that_fail_twice(tmp_path):
+    def fetch(start, end):
+        raise ConnectionError("끊김")
+
+    summary = st.download_seasons(TWO_WEEKS, [2021], tmp_path, fetch)
+    assert summary["failed"] == [date(2021, 4, 5), date(2021, 4, 12)]
+
+
 def test_missing_rates_counts_nan_share_per_column():
     df = pd.DataFrame({"release_speed": [90.0, np.nan, 92.0, 93.0], "zone": [1, 2, 3, 4]})
     rates = st.missing_rates(df, ["release_speed", "zone", "arm_angle"])

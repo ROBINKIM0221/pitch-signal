@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 log = logging.getLogger("pitchsignal.download")
 
@@ -65,6 +67,35 @@ def download_weeks(weeks, out_root: Path, fetch, game_type: str) -> dict[str, li
         log.info("%s~%s 저장 %d행 (받은 행 %d)", start, end, len(kept), len(df))
         result["saved"].append(start)
     return result
+
+
+def season_rows(out_root: Path, season: int) -> int:
+    """그 시즌 폴더에 저장된 주 파일들의 행 수 합."""
+    return sum(pq.read_metadata(f).num_rows for f in (Path(out_root) / str(season)).glob("*.parquet"))
+
+
+def download_seasons(cfg: dict, seasons: list[int], out_root: Path, fetch) -> dict:
+    """시즌을 차례로 받고, 실패한 주는 모아서 마지막에 한 번 더 시도한다.
+
+    반환: {"seasons": [{season, weeks, rows, seconds}], "failed": [끝까지 실패한 주의 시작일]}
+    seasons의 숫자는 그 시즌을 처음 돈 직후 기준이다(마지막 재시도 전).
+    """
+    game_type = cfg["data"]["game_type"]
+    summary, failed = [], []
+    for season in seasons:
+        t0 = time.monotonic()
+        weeks = week_ranges(*season_window(cfg, season))
+        result = download_weeks(weeks, out_root, fetch, game_type)
+        failed += [w for w in weeks if w[0] in result["failed"]]
+        row = {"season": season, "weeks": len(result["saved"]) + len(result["skipped"]),
+               "rows": season_rows(out_root, season), "seconds": round(time.monotonic() - t0)}
+        log.info("%d 시즌: 받은 주 %d, 행 %d, %d초, 실패 %d주", season, row["weeks"], row["rows"],
+                 row["seconds"], len(result["failed"]))
+        summary.append(row)
+    if failed:
+        log.info("실패한 %d주를 다시 시도", len(failed))
+        failed = download_weeks(failed, out_root, fetch, game_type)["failed"]
+    return {"seasons": summary, "failed": failed}
 
 
 def missing_rates(df: pd.DataFrame, columns: list[str]) -> dict[str, float]:

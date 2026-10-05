@@ -1,9 +1,11 @@
-"""Statcast 원데이터 내려받기 (단계 1.1).
+"""Statcast 원데이터 내려받기 (단계 1.1~1.2).
 
-주 단위(7일)로 받아 data/raw/statcast/<시즌>/<MMDD>.parquet로 저장한다. 이미 받은 주는 건너뛴다.
+주 단위(7일)로 받아 data/raw/statcast/<시즌>/<MMDD>.parquet로 저장한다. 이미 받은 주는 건너뛰므로
+중간에 끊기면 같은 명령을 다시 실행하면 된다.
 
 사용 예:
     python -m src.01_download --test-week
+    python -m src.01_download --all                 # 설정의 모든 시즌. --parallel을 붙이면 하루치 요청을 동시에 보냄
     python -m src.01_download --season 2023
     python -m src.01_download --season 2023 --start 2023-06-01 --end 2023-06-14
 """
@@ -29,9 +31,11 @@ def setup_log(name: str) -> None:
                         handlers=[logging.FileHandler(path, encoding="utf-8"), logging.StreamHandler()])
 
 
-def fetch(start: date, end: date) -> pd.DataFrame:
-    from pybaseball import statcast
-    return statcast(start_dt=str(start), end_dt=str(end), verbose=False, parallel=False)
+def make_fetch(parallel: bool):
+    def fetch(start: date, end: date) -> pd.DataFrame:
+        from pybaseball import statcast
+        return statcast(start_dt=str(start), end_dt=str(end), verbose=False, parallel=parallel)
+    return fetch
 
 
 def warn_missing_columns(root, cfg: dict) -> None:
@@ -61,9 +65,21 @@ def main() -> None:
     ap.add_argument("--start", type=date.fromisoformat, help="YYYY-MM-DD (기본: 설정의 download_window)")
     ap.add_argument("--end", type=date.fromisoformat)
     ap.add_argument("--test-week", action="store_true", help="설정의 시험 주만 받아 열을 점검한다")
+    ap.add_argument("--all", action="store_true", help="설정의 모든 시즌을 차례로 받는다")
+    ap.add_argument("--parallel", action="store_true", help="한 주 안의 하루치 요청을 동시에 보낸다 (빠르지만 서버 부담이 큼)")
     a = ap.parse_args()
     cfg = load_config()
     game_type = cfg["data"]["game_type"]
+    fetch = make_fetch(a.parallel)
+
+    if a.all:
+        setup_log("all")
+        summary = st.download_seasons(cfg, cfg["data"]["seasons"], RAW, fetch)
+        for season in cfg["data"]["seasons"]:
+            warn_missing_columns(RAW / str(season), cfg)
+        log.info("전체 완료. 끝까지 실패한 주 %d개 %s", len(summary["failed"]), [str(d) for d in summary["failed"]])
+        print(pd.DataFrame(summary["seasons"]).to_string(index=False))
+        return
 
     if a.test_week:
         setup_log("test")
