@@ -153,3 +153,34 @@ def test_carry_decisions_also_keeps_suggestions_and_tolerates_older_files_withou
 def test_parse_accepts_day_counts_written_without_a_hyphen():
     p = parse("Tampa Bay Rays placed RHP Some One on the 60 day injured list. Right elbow inflammation.")
     assert (p["days"], p["reason"]) == (60, "Right elbow inflammation.")       # 2021년 기록 일부의 표기
+
+
+def _auto():
+    return pd.DataFrame({"event_id": [1, 2], "pitcher": [10, 10], "season": [2023, 2023],
+                         "il_date": ["2023-08-01", "2023-05-01"], "part": ["elbow", "shoulder"], "description": ["a", "b"]})
+
+
+def _review(decisions, parts=("elbow", "", "")):
+    return pd.DataFrame({"event_id": [3, 4, 5], "pitcher": [11, 12, 10], "name": ["x", "y", "z"],
+                         "il_date": ["2023-06-01", "2023-06-02", "2023-04-01"], "description": ["c", "d", "e"],
+                         "part": list(parts), "decision": list(decisions), "note": ["", "", ""]})
+
+
+def test_unreviewed_rows_are_reported_until_every_decision_is_usable():
+    assert list(lb.unreviewed(_review(["사례", "", "제외"]))["event_id"]) == [4]          # 빈 줄
+    assert list(lb.unreviewed(_review(["사례", "모름", "제외"]))["event_id"]) == [4]      # 정해진 말이 아님
+    assert list(lb.unreviewed(_review(["사례", "사례", "제외"]))["event_id"]) == [4]      # 사례인데 부위가 없음
+    assert lb.unreviewed(_review(["사례", "제외", "제외"])).empty
+
+
+def test_final_labels_join_automatic_cases_with_reviewed_cases():
+    labels = lb.final_labels(_auto(), _review(["사례", "제외", "제외"]))
+    assert sorted(labels["event_id"]) == [1, 2, 3]
+    reviewed = labels.set_index("event_id").loc[3]
+    assert (reviewed["pitcher"], reviewed["season"], reviewed["part"], reviewed["source"]) == (11, 2023, "elbow", "review")
+
+
+def test_first_arm_il_keeps_one_event_per_pitcher_season():
+    labels = lb.final_labels(_auto(), _review(["사례", "제외", "제외"]))
+    cases = lb.first_arm_il(labels)
+    assert sorted(cases["event_id"]) == [2, 3]            # 투수 10은 5월(어깨)이 먼저, 8월(팔꿈치)은 빠짐

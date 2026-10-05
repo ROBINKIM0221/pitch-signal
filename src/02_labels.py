@@ -9,9 +9,11 @@
 
 사용 예:
     python -m src.02_labels
+    python -m src.02_labels --finalize      # 검토표를 다 채운 뒤: labels.csv, cases_raw.csv 생성 (단계 2.2)
 """
 from __future__ import annotations
 
+import argparse
 import logging
 
 import pandas as pd
@@ -25,9 +27,33 @@ REVIEW = PROCESSED / "labels_review.csv"
 log = logging.getLogger("pitchsignal.labels")
 
 
+def finalize() -> None:
+    """수기 검토 결과를 반영해 최종 라벨(labels.csv)과 투수-시즌별 첫 팔 부상 IL(cases_raw.csv)을 만든다 (단계 2.2)."""
+    review = pd.read_csv(REVIEW, encoding="utf-8-sig").fillna("")
+    waiting = lb.unreviewed(review)
+    if len(waiting):
+        print(f"아직 판단하지 않았거나 쓸 수 없는 줄이 {len(waiting)}건 있습니다 "
+              f"(decision은 '{lb.CASE}' 또는 '{lb.EXCLUDED}', 사례라면 part는 elbow 또는 shoulder).")
+        print(waiting[["event_id", "name", "il_date", "description", "part", "decision"]].to_string(index=False))
+        raise SystemExit(1)
+    labels = lb.final_labels(pd.read_csv(PROCESSED / "labels_auto.csv", encoding="utf-8-sig"), review)
+    labels.to_csv(PROCESSED / "labels.csv", index=False, encoding="utf-8-sig")
+    cases = lb.first_arm_il(labels)
+    cases.to_csv(PROCESSED / "cases_raw.csv", index=False, encoding="utf-8-sig")
+    decided = review["decision"].value_counts()
+    log.info("최종 라벨 %d건, 투수-시즌별 첫 팔 부상 IL %d건. 수기 검토 %d건 중 사례 %d, 제외 %d", len(labels),
+             len(cases), len(review), int(decided.get(lb.CASE, 0)), int(decided.get(lb.EXCLUDED, 0)))
+    print(cases.groupby(["season", "part"]).size().unstack(fill_value=0).to_string())
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--finalize", action="store_true", help="수기 검토 결과를 반영해 최종 라벨을 만든다 (단계 2.2)")
+    a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[
         logging.FileHandler(ROOT / "reports" / "logs" / "labels.log", encoding="utf-8"), logging.StreamHandler()])
+    if a.finalize:
+        return finalize()
     cfg = load_config()
     transactions = pd.concat([pd.read_parquet(f) for f in sorted((RAW / "transactions").glob("*.parquet"))],
                              ignore_index=True)

@@ -127,3 +127,29 @@ def carry_decisions(review: pd.DataFrame, previous: pd.DataFrame) -> pd.DataFram
             kept = out["event_id"].map(old[col])
             out[col] = kept.where(kept.notna() & (kept != ""), out[col])
     return out
+
+
+CASE, EXCLUDED = "사례", "제외"       # 수기 검토표 decision 열에 적는 말
+PARTS = ("elbow", "shoulder")
+
+
+def unreviewed(review: pd.DataFrame) -> pd.DataFrame:
+    """아직 쓸 수 없는 검토 줄: decision이 비었거나 '사례'/'제외'가 아니거나, '사례'인데 부위(part)가 없는 줄."""
+    usable = (review["decision"] == EXCLUDED) | ((review["decision"] == CASE) & review["part"].isin(PARTS))
+    return review[~usable]
+
+
+def final_labels(auto: pd.DataFrame, review: pd.DataFrame) -> pd.DataFrame:
+    """자동 분류된 사례와 수기 검토에서 '사례'로 정한 것을 합친 최종 라벨."""
+    reviewed = review[review["decision"] == CASE].copy()
+    reviewed["season"] = pd.to_datetime(reviewed["il_date"]).dt.year
+    columns = ["event_id", "pitcher", "season", "il_date", "part", "description"]
+    labels = pd.concat([auto[columns].assign(source="auto"), reviewed[columns].assign(source="review")],
+                       ignore_index=True)
+    labels["il_date"] = pd.to_datetime(labels["il_date"])
+    return labels
+
+
+def first_arm_il(labels: pd.DataFrame) -> pd.DataFrame:
+    """투수-시즌마다 가장 이른 팔 부상 IL 하나만 남긴다."""
+    return labels.sort_values(["il_date", "event_id"]).drop_duplicates(["pitcher", "season"]).reset_index(drop=True)
