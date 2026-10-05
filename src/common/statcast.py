@@ -1,0 +1,72 @@
+"""Statcast 원데이터를 주 단위로 내려받아 저장할 때 쓰는 보조 함수."""
+from __future__ import annotations
+
+import logging
+from datetime import date, timedelta
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+log = logging.getLogger("pitchsignal.download")
+
+
+def season_window(cfg: dict, season: int) -> tuple[date, date]:
+    """설정의 download_window('MM-DD')를 그 시즌의 시작·끝 날짜로 바꾼다."""
+    w = cfg["data"]["download_window"]
+    return date.fromisoformat(f"{season}-{w['start']}"), date.fromisoformat(f"{season}-{w['end']}")
+
+
+def week_ranges(start: date, end: date) -> list[tuple[date, date]]:
+    """start~end를 7일 단위 (시작, 끝) 목록으로 나눈다. 마지막 주는 end에서 자른다."""
+    out = []
+    while start <= end:
+        out.append((start, min(start + timedelta(days=6), end)))
+        start += timedelta(days=7)
+    return out
+
+
+def week_path(root: Path, start: date) -> Path:
+    """주 파일 경로: <root>/<시즌>/<MMDD>.parquet (MMDD는 그 주의 시작일)."""
+    return Path(root) / str(start.year) / f"{start:%m%d}.parquet"
+
+
+def keep_game_type(df: pd.DataFrame, game_type: str) -> pd.DataFrame:
+    return df[df["game_type"] == game_type]
+
+
+def download_weeks(weeks, out_root: Path, fetch, game_type: str) -> dict[str, list[date]]:
+    """주마다 fetch(start, end)로 받아 game_type 행만 <out_root>/<시즌>/<MMDD>.parquet로 저장한다.
+
+    이미 있는 파일은 건너뛴다(끊겨도 이어받기). 응답이 비었거나 받다가 오류가 난 주는
+    파일을 만들지 않고 failed에 담아 돌려준다.
+    """
+    result = {"saved": [], "skipped": [], "failed": []}
+    for start, end in weeks:
+        path = week_path(out_root, start)
+        if path.exists():
+            result["skipped"].append(start)
+            continue
+        try:
+            df = fetch(start, end)
+        except Exception as e:
+            log.warning("%s~%s 실패: %s", start, end, e)
+            result["failed"].append(start)
+            continue
+        if df.empty:
+            log.warning("%s~%s 빈 응답", start, end)
+            result["failed"].append(start)
+            continue
+        kept = keep_game_type(df, game_type)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        kept.to_parquet(tmp, compression="zstd", index=False)
+        tmp.replace(path)
+        log.info("%s~%s 저장 %d행 (받은 행 %d)", start, end, len(kept), len(df))
+        result["saved"].append(start)
+    return result
+
+
+def missing_rates(df: pd.DataFrame, columns: list[str]) -> dict[str, float]:
+    """열별 결측 비율. 열 자체가 없으면 NaN."""
+    return {c: float(df[c].isna().mean()) if c in df.columns else np.nan for c in columns}
