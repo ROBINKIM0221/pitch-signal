@@ -59,7 +59,7 @@
 
 MLB Stats API의 IL 등재 문구는 'New York Mets placed RHP Tylor Megill on the 15-day injured list. Right shoulder strain.' 같은 형식이다. 아래 규칙으로 자동 분류한 뒤, 애매한 것은 사람이 직접 판단한다.
 
-1. **새 등재만**: 'placed … on the (10|15|60)-day injured list'만 쓴다. 'transferred'(15일→60일 이동), 'activated', 'reinstated'는 제외한다. 사례 후보는 투수(RHP/LHP)로 등재된 기록뿐이며, 같은 투수·기준일·문구가 반복된 기록은 하나로 센다.
+1. **새 등재만**: 'placed … on the (7|10|15|60)-day injured list'만 쓴다('10 day'처럼 붙임표가 없는 표기 포함). 'transferred'(15일→60일 이동), 'activated', 'reinstated'는 제외한다. 7일 IL은 뇌진탕 전용이라 사례가 되지 않지만 대조군의 'IL 기록 없음' 확인에 쓴다. 사례 후보는 투수(RHP/LHP)로 등재된 기록뿐이며, 같은 투수·기준일·문구가 반복된 기록은 하나로 센다.
 2. **기준일**: 문구에 'retroactive to <날짜>'가 있으면 그 날짜, 없으면 effectiveDate(없으면 date)를 IL 기준일로 쓴다.
 3. **부위**: 마침표 뒤 사유 문장에서 config.labels.arm_keywords(elbow, UCL, ulnar, Tommy John, forearm, flexor, pronator, shoulder, rotator cuff, labrum, capsule)가 있으면 팔 부상 후보, exclude_keywords(oblique, hamstring, back, finger, blister, wrist 등)만 있으면 제외다. 광배근·삼두근·이두근처럼 사례 범위(팔꿈치·어깨) 밖인 팔·몸통 근육도 exclude_keywords에 넣었다. 사유 문장이 아예 없는 등재는 부위를 알 수 없으므로 제외한다.
 4. **좌우 일치**: 사유 문장에 'Right'/'Left'가 있으면(문장 어디에 있든) 그 투수의 투구하는 손(문구의 RHP/LHP, 선수 정보의 pitchHand)과 같은지 확인한다. 반대 팔이면 제외한다. 좌우가 없거나 둘 다 나오면 수기 검토로 보낸다.

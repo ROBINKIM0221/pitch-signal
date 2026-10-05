@@ -7,7 +7,7 @@ from datetime import date, datetime
 import pandas as pd
 
 PLACED = re.compile(
-    r"placed (?P<pos>\S+) (?P<name>.+?) on the (?P<days>\d+)-day injured list"
+    r"placed (?P<pos>\S+) (?P<name>.+?) on the (?P<days>\d+)[- ]day injured list"
     r"(?: retroactive to (?P<retro>[A-Za-z]+ \d{1,2}, \d{4}))?\.?\s*(?P<reason>.*)$")
 SIDE = re.compile(r"\b(right|left)\b", re.IGNORECASE)
 

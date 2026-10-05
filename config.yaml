@@ -78,7 +78,7 @@ monitor:
   design_shifts_sd: [0.5, 1.0, 1.5]       # 설계 성능표(ARL1)용 표준화 이동
 
 labels:
-  il_days: [10, 15, 60]           # 새 등재로 보는 IL 일수
+  il_days: [7, 10, 15, 60]        # 새 등재로 보는 IL 일수 (7일은 뇌진탕 전용. 대조군의 'IL 기록 없음' 확인에 필요)
   max_retro_days: 10              # effective_date가 기록일보다 뒤거나 이보다 더 앞이면 믿지 않고 수기 검토로 보냄
   arm_keywords: [elbow, ucl, ulnar, "tommy john", forearm, flexor, pronator,
                  shoulder, "rotator cuff", labrum, capsule]   # 던지는 팔 팔꿈치·어깨 (전완·굴곡근 포함)

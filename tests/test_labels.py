@@ -148,3 +148,8 @@ def test_carry_decisions_also_keeps_suggestions_and_tolerates_older_files_withou
     assert list(out["suggested"]) == ["", "제외"] and list(out["suggested_note"]) == ["", "대원근"]
     older = pd.DataFrame({"event_id": [2], "part": [""], "decision": ["사례"], "note": [""]})
     assert list(lb.carry_decisions(new, older)["decision"]) == ["", "사례"]
+
+
+def test_parse_accepts_day_counts_written_without_a_hyphen():
+    p = parse("Tampa Bay Rays placed RHP Some One on the 60 day injured list. Right elbow inflammation.")
+    assert (p["days"], p["reason"]) == (60, "Right elbow inflammation.")       # 2021년 기록 일부의 표기
