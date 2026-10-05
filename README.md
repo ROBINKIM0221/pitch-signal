@@ -10,8 +10,8 @@
 
 ## 시작하기 (Windows)
 ```powershell
-# Python 3.12, Git, Node.js LTS 설치 후
-py -3.12 -m venv .venv
+# Python 3.12 이상(3.13에서 확인), Git, Node.js LTS 설치 후
+py -m venv .venv
 .venv\Scripts\Activate.ps1          # 막히면: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 pip install -r requirements.txt
 python -m pytest -q                 # 15 passed 가 나와야 함
