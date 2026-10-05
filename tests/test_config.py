@@ -22,3 +22,14 @@ def test_calibrated_wins_and_keeps_other_keys(tmp_path):
     cfg = load_config(tmp_path)
     assert cfg["monitor"] == {"lambdas": [0.1, 0.2], "t2_alpha": 0.0005, "final_lambda": 0.2}
     assert cfg["seed"] == 1
+
+
+def test_save_calibrated_adds_values_without_dropping_earlier_ones(tmp_path):
+    from src.common.config import save_calibrated
+    write(tmp_path / "config.yaml", "seed: 1\nmonitor: {lambdas: [0.1, 0.2]}\n")
+    save_calibrated({"baseline": {"sigma_b_pooled": {"SP": [[0.25]]}}}, tmp_path)
+    save_calibrated({"monitor": {"final_lambda": 0.2}}, tmp_path)
+    cfg = load_config(tmp_path)
+    assert cfg["baseline"]["sigma_b_pooled"]["SP"] == [[0.25]]          # 먼저 쓴 값이 남아 있음
+    assert cfg["monitor"] == {"lambdas": [0.1, 0.2], "final_lambda": 0.2}
+    assert "final_lambda" not in (tmp_path / "config.yaml").read_text(encoding="utf-8")     # config.yaml은 건드리지 않음

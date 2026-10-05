@@ -24,3 +24,11 @@ def load_config(root: Path | str = ROOT) -> dict:
     if calibrated.exists():
         cfg = _merge(cfg, yaml.safe_load(calibrated.read_text(encoding="utf-8")) or {})
     return cfg
+
+
+def save_calibrated(updates: dict, root: Path | str = ROOT) -> None:
+    """개발셋에서 규칙대로 정한 값을 config_calibrated.yaml에 더한다. 이미 있던 값은 남기고 config.yaml은 건드리지 않는다."""
+    path = Path(root) / "config_calibrated.yaml"
+    current = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+    path.write_text(yaml.safe_dump(_merge(current or {}, updates), allow_unicode=True, sort_keys=False),
+                    encoding="utf-8", newline="\n")
