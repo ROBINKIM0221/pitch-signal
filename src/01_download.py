@@ -86,6 +86,21 @@ def save_people(cfg: dict) -> pd.DataFrame:
     return people
 
 
+def data_check(cfg: dict) -> pd.DataFrame:
+    """시즌별 점검표: Statcast 요약과 선수 이동 기록 건수 (단계 1.4). 성능 지표는 계산하지 않는다."""
+    keys = ["game_pk", "game_date", "home_team", "away_team", "pitcher", "at_bat_number", "pitch_number"]
+    checks = cfg["data"]["check_columns"]
+    rows = []
+    for season in cfg["data"]["seasons"]:
+        df = st.load_season(RAW, season, keys + checks)
+        tx = pd.read_parquet(TRANSACTIONS / f"{season}.parquet", columns=["description"])["description"]
+        rows.append({"season": season, "weeks": len(list((RAW / str(season)).glob("*.parquet"))),
+                     **st.season_summary(df, checks, cfg["data"]["min_team_games"]),
+                     "transactions": len(tx),
+                     "injured_list": int(tx.str.contains("injured list", case=False, na=False).sum())})
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int)
@@ -96,10 +111,20 @@ def main() -> None:
     ap.add_argument("--parallel", action="store_true", help="한 주 안의 하루치 요청을 동시에 보낸다 (빠르지만 서버 부담이 큼)")
     ap.add_argument("--transactions", action="store_true", help="MLB Stats API 선수 이동 기록을 받는다")
     ap.add_argument("--people", action="store_true", help="받아 둔 Statcast의 모든 투수 정보를 받는다")
+    ap.add_argument("--check", action="store_true", help="받은 데이터의 시즌별 점검표를 만든다")
     a = ap.parse_args()
     cfg = load_config()
     game_type = cfg["data"]["game_type"]
     fetch = make_fetch(a.parallel)
+
+    if a.check:
+        setup_log("check")
+        table = data_check(cfg)
+        out = ROOT / "reports" / "tables" / "data_check.csv"
+        table.to_csv(out, index=False, encoding="utf-8-sig")
+        log.info("데이터 점검표 저장 → %s", out)
+        print(table.set_index("season").T.to_string(float_format=lambda v: f"{v:.4f}"))
+        return
 
     if a.transactions:
         setup_log("transactions")

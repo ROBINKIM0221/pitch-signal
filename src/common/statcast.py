@@ -101,3 +101,21 @@ def download_seasons(cfg: dict, seasons: list[int], out_root: Path, fetch) -> di
 def missing_rates(df: pd.DataFrame, columns: list[str]) -> dict[str, float]:
     """열별 결측 비율. 열 자체가 없으면 NaN."""
     return {c: float(df[c].isna().mean()) if c in df.columns else np.nan for c in columns}
+
+
+def load_season(root: Path, season: int, columns: list[str]) -> pd.DataFrame:
+    """<root>/<시즌>/의 주 파일을 모두 읽어 한 표로 돌려준다. 행이 없는 주(시범경기뿐인 주)는 건너뛴다."""
+    frames = [pd.read_parquet(f, columns=columns) for f in sorted((Path(root) / str(season)).glob("*.parquet"))]
+    return pd.concat([f for f in frames if len(f)], ignore_index=True)
+
+
+def season_summary(df: pd.DataFrame, check_columns: list[str], min_team_games: int) -> dict:
+    """한 시즌 투구 표의 점검 숫자: 행·경기·투수 수, 첫·마지막 경기일, 팀별 경기 수, 중복 투구, 열별 결측률."""
+    games = df.drop_duplicates("game_pk")
+    team_games = pd.concat([games["home_team"], games["away_team"]]).value_counts()
+    return {"rows": len(df), "games": len(games), "pitchers": df["pitcher"].nunique(),
+            "first_game": df["game_date"].min().date(), "last_game": df["game_date"].max().date(),
+            "team_games_min": int(team_games.min()), "team_games_max": int(team_games.max()),
+            "teams_below_min": ",".join(sorted(team_games[team_games < min_team_games].index)),
+            "duplicate_pitches": int(df.duplicated(["game_pk", "at_bat_number", "pitch_number"]).sum()),
+            **{f"na_{c}": r for c, r in missing_rates(df, check_columns).items()}}

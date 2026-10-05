@@ -12,6 +12,7 @@
 | 2026. 10. 5. | 제안 방식 후보를 둘(3개 특징 T²·MEWMA / 여기에 구속 EWMA를 결합)로 두고 개발셋 탐지율로 고름 | 부상 전 변화가 구속 위주인지 여러 특징에 퍼져 있는지에 따라 유리한 방식이 다름 | 3.9 |
 | 2026. 10. 5. | 주 가설 H1을 '관찰 창 안 경보 비율이 사례에서 대조군보다 높다'로 바꾸고, B1~B4와의 비교는 보조 분석으로 내림 | 신호가 정보를 담고 있는지를 먼저 묻고, 방식 간 우열은 결과 그대로 보고하기 위함 | 3.13.1, 3.13.4 |
 | 2026. 10. 5. | T² 한계 조정 규칙을 'α를 0.0005·0.0002로 낮춤'에서 '단독 실측 오경보가 100등판당 0.5를 넘으면 실측 0.5가 되는 값으로 올림'으로 바꿈 | 이전 규칙은 조건을 만족하는 α가 없을 때 정의되지 않음 | 3.9, 3.18 |
+| 2026. 10. 5. | 라벨 규칙 세 가지: ① 범위 밖 부위 21개(광배근·삼두근·이두근, 허리·몸통, 다리, 질병)를 자동 제외 목록에 추가 ② 사유 문장이 없는 등재는 자동 제외 ③ 좌우(Right/Left)를 사유 문장 어디에서든 읽음 | 실제 IL 문구 3,300여 건을 규칙에 넣어 보니 수기 검토가 약 965건이었고, 그중 대부분은 이미 정한 기준(팔꿈치·어깨만 사례)을 그대로 적용하면 되는 것이었음. 바꾼 뒤 약 240건 | 3.3 |
 | 2026. 10. 5. | 원데이터는 모든 열을 저장하고 분석에서 필요한 열만 읽음. 고교 대회 목록에 신세계 이마트배·대통령배 추가 | 다시 받는 일을 막고, 시즌 전체 누적 부하에서 두 대회 경기가 빠지지 않게 하기 위함 | 3.1, 3.14.1 |
 
 숫자 설정은 모두 config.yaml에 있으며, 아래 표의 값과 다르면 config.yaml이 우선한다.
@@ -58,11 +59,11 @@
 
 MLB Stats API의 IL 등재 문구는 'New York Mets placed RHP Tylor Megill on the 15-day injured list. Right shoulder strain.' 같은 형식이다. 아래 규칙으로 자동 분류한 뒤, 애매한 것은 사람이 직접 판단한다.
 
-1. **새 등재만**: 'placed … on the (10|15|60)-day injured list'만 쓴다. 'transferred'(15일→60일 이동), 'activated', 'reinstated'는 제외한다.
+1. **새 등재만**: 'placed … on the (10|15|60)-day injured list'만 쓴다. 'transferred'(15일→60일 이동), 'activated', 'reinstated'는 제외한다. 사례 후보는 투수(RHP/LHP)로 등재된 기록뿐이며, 같은 투수·기준일·문구가 반복된 기록은 하나로 센다.
 2. **기준일**: 문구에 'retroactive to <날짜>'가 있으면 그 날짜, 없으면 effectiveDate(없으면 date)를 IL 기준일로 쓴다.
-3. **부위**: 마침표 뒤 사유 문장에서 config.labels.arm_keywords(elbow, UCL, ulnar, Tommy John, forearm, flexor, pronator, shoulder, rotator cuff, labrum, capsule)가 있으면 팔 부상 후보, exclude_keywords(oblique, hamstring, back, finger, blister, wrist 등)만 있으면 제외다.
-4. **좌우 일치**: 사유가 'Right'/'Left'로 시작하면 그 투수의 투구하는 손(Statcast p_throws, 문구의 RHP/LHP)과 같은지 확인한다. 반대 팔이면 제외한다. 좌우가 없으면 수기 검토로 보낸다.
-5. **애매한 문구**: 부위 없음, 'arm fatigue', 'arm soreness', 팔 키워드와 제외 키워드가 함께 있음, 좌우 없음 → labels_review.csv로 보내 사람이 '사례/제외'와 이유를 적는다.
+3. **부위**: 마침표 뒤 사유 문장에서 config.labels.arm_keywords(elbow, UCL, ulnar, Tommy John, forearm, flexor, pronator, shoulder, rotator cuff, labrum, capsule)가 있으면 팔 부상 후보, exclude_keywords(oblique, hamstring, back, finger, blister, wrist 등)만 있으면 제외다. 광배근·삼두근·이두근처럼 사례 범위(팔꿈치·어깨) 밖인 팔·몸통 근육도 exclude_keywords에 넣었다. 사유 문장이 아예 없는 등재는 부위를 알 수 없으므로 제외한다.
+4. **좌우 일치**: 사유 문장에 'Right'/'Left'가 있으면(문장 어디에 있든) 그 투수의 투구하는 손(문구의 RHP/LHP, 선수 정보의 pitchHand)과 같은지 확인한다. 반대 팔이면 제외한다. 좌우가 없거나 둘 다 나오면 수기 검토로 보낸다.
+5. **애매한 문구**: 두 목록 어디에도 없는 부위('arm fatigue', 'arm soreness', teres major, thoracic outlet 등), 팔 키워드와 제외 키워드가 함께 있음, 팔꿈치와 어깨가 함께 있음, 좌우 없음, 문구의 RHP/LHP와 선수 정보가 다름, 기록일과 effectiveDate가 맞지 않음(effectiveDate가 기록일보다 뒤이거나 10일 넘게 앞) → labels_review.csv로 보내 사람이 '사례/제외'와 이유를 적는다.
 6. **시즌 첫 팔 부상 IL만**: 같은 투수가 같은 시즌에 팔 부상 IL에 여러 번 오르면 첫 번째만 사례로 쓴다. 이전 시즌 부상 이력은 따지지 않는다.
 
 ## 3.4 역할과 선발 판정

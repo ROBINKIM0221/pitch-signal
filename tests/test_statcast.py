@@ -96,6 +96,47 @@ def test_download_seasons_lists_weeks_that_fail_twice(tmp_path):
     assert summary["failed"] == [date(2021, 4, 5), date(2021, 4, 12)]
 
 
+def test_load_season_reads_all_week_files_and_only_asked_columns(tmp_path):
+    folder = tmp_path / "2023"
+    folder.mkdir()
+    pd.DataFrame({"pitcher": [1, 2], "zone": [5, 6], "des": ["a", "b"]}).to_parquet(folder / "0403.parquet")
+    pd.DataFrame({"pitcher": [3], "zone": [7], "des": ["c"]}).to_parquet(folder / "0410.parquet")
+    pd.DataFrame({"pitcher": [], "zone": [], "des": []}).to_parquet(folder / "0315.parquet")     # 시범경기뿐인 주
+    df = st.load_season(tmp_path, 2023, ["pitcher", "zone"])
+    assert list(df.columns) == ["pitcher", "zone"]
+    assert sorted(df.pitcher) == [1, 2, 3]
+
+
+def _season_frame():
+    return pd.DataFrame({
+        "game_pk": [1, 1, 2, 2, 3],
+        "game_date": pd.to_datetime(["2023-04-01", "2023-04-01", "2023-04-02", "2023-04-02", "2023-04-03"]),
+        "home_team": ["A", "A", "A", "A", "B"], "away_team": ["B", "B", "C", "C", "C"],
+        "at_bat_number": [1, 2, 1, 2, 1], "pitch_number": [1, 1, 1, 1, 1],
+        "pitcher": [10, 11, 10, 12, 13],
+        "release_speed": [90.0, None, 91.0, 92.0, 93.0]})
+
+
+def test_season_summary_counts_rows_games_pitchers_and_team_games():
+    row = st.season_summary(_season_frame(), ["release_speed"], min_team_games=2)
+    assert (row["rows"], row["games"], row["pitchers"]) == (5, 3, 4)
+    assert (row["first_game"], row["last_game"]) == (date(2023, 4, 1), date(2023, 4, 3))
+    assert (row["team_games_min"], row["team_games_max"]) == (2, 2)       # A·B·C 모두 2경기
+    assert row["teams_below_min"] == ""
+    assert row["duplicate_pitches"] == 0
+    assert row["na_release_speed"] == 0.2
+
+
+def test_season_summary_lists_teams_with_too_few_games():
+    row = st.season_summary(_season_frame(), ["release_speed"], min_team_games=3)
+    assert row["teams_below_min"] == "A,B,C"
+
+
+def test_season_summary_counts_repeated_pitches():
+    df = pd.concat([_season_frame(), _season_frame().head(2)], ignore_index=True)
+    assert st.season_summary(df, ["release_speed"], min_team_games=2)["duplicate_pitches"] == 2
+
+
 def test_missing_rates_counts_nan_share_per_column():
     df = pd.DataFrame({"release_speed": [90.0, np.nan, 92.0, 93.0], "zone": [1, 2, 3, 4]})
     rates = st.missing_rates(df, ["release_speed", "zone", "arm_angle"])
