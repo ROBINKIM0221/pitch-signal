@@ -250,3 +250,25 @@ def test_follow_works_for_a_single_feature():
     means, n, sw = wandering_season(np.random.default_rng(26), t=12)
     one = mon.Dynamics(Q=Q_TRUE[:1, :1], Se=SE_TRUE[:1, :1])
     assert mon.follow(means[:, :1], n, sw[:1, :1], one, 8, sc.t2_ucl(1, 0.01)).u.shape == (4, 1)
+
+
+def test_dynamic_table_keeps_what_is_needed_to_explain_an_alarm():
+    import pandas as pd
+    rng = np.random.default_rng(27)
+    outing_table, fb = _pitcher_season(rng, n_outings=12)
+    features = ["velo", "rel_z", "arm_angle"]
+    arrays = mon.outing_arrays(fb, features)
+    means = pd.DataFrame({g: arrays[(1, 2022, g)].mean(axis=0) for g in range(12)}, index=features).T
+    scale, sw = mon.start_up([arrays[(1, 2022, g)] for g in range(8)])
+    fits = pd.DataFrame([{"pitcher": 1, "season": 2022, "role": "SP", "scale": scale.tolist(), "Sw": sw.ravel().tolist(),
+                          "n_baseline": 8}])
+    rules = {"starter_outings": 8, "reliever_outings": 15, "reliever_min_fastballs": 120, "refine_alpha": 0.01}
+    table = mon.dynamic_table(outing_table.join(means, on="game_pk").sample(frac=1, random_state=0), fits, {"SP": TRUE},
+                              rules, features, UCL)
+    assert list(table["game_pk"]) == [8, 9, 10, 11]                       # 시작 구간 8개 뒤, 시간순
+    row = table.iloc[1]
+    d = means.loc[9].to_numpy() - row[[f"expected_{f}" for f in features]].to_numpy(dtype=float)
+    cov = np.array(row["cov"]).reshape(P, P)                              # 예측 오차의 공분산 (원래 단위)
+    assert row["t2"] == pytest.approx(sum(row[f"u_{f}"] ** 2 for f in features))
+    assert d @ np.linalg.inv(cov) @ d == pytest.approx(row["t2"])
+    assert np.allclose(np.sqrt(np.diag(cov)), row[[f"sd_{f}" for f in features]].to_numpy(dtype=float))

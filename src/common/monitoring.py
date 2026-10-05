@@ -112,8 +112,9 @@ def dynamic_table(outings: pd.DataFrame, fits: pd.DataFrame, dynamics: dict, rul
     """시작 구간 뒤 적격 등판(감시 대상)마다 움직이는 기준선으로 표준화한 값을 붙인 표를 시간순으로 돌려준다.
 
     fits: 투수-시즌별 scale·Sw·n_baseline (06_monitor --baselines가 저장한 표). dynamics: {역할: Dynamics}
-    열: pitcher, season, role, game_pk, game_date, n_fb, u_<특징>, t2, expected_<특징>, sd_<특징>, uv
-    expected·sd는 원래 단위의 예상값과 예측 오차 표준편차, uv는 구속 하나만으로 같은 계산을 한 값이다.
+    열: pitcher, season, role, game_pk, game_date, n_fb, u_<특징>, t2, expected_<특징>, sd_<특징>, cov, uv
+    expected·sd는 원래 단위의 예상값과 예측 오차 표준편차, cov는 예측 오차의 공분산(원래 단위, 한 줄로 편 값,
+    경보 원인 분해에 씀), uv는 구속 하나만으로 같은 계산을 한 값이다.
     """
     marked = outings.assign(phase=bw.phase(outings, rules).to_numpy())
     marked = marked[marked["phase"] != ""].sort_values(bw.ORDER)
@@ -135,6 +136,7 @@ def dynamic_table(outings: pd.DataFrame, fits: pd.DataFrame, dynamics: dict, rul
             part[f"expected_{f}"] = full.expected[:, j] * scale[j]
             part[f"sd_{f}"] = np.sqrt(full.cov[:, j, j]) * scale[j]
         part["t2"] = (full.u ** 2).sum(axis=1)
+        part["cov"] = [c.ravel().tolist() for c in full.cov * np.outer(scale, scale)]
         part["uv"] = velo_only.u[:, 0]
         parts.append(part)
     return pd.concat(parts, ignore_index=True)
