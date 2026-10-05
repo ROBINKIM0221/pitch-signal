@@ -42,7 +42,7 @@ features:
   core: [velo, rel_z, arm_angle]         # 핵심 3개 (주 분석)
   full: [velo, rel_z, arm_angle, rel_x, extension, spin, rel_z_sd]   # 전체 7개 (확장 3)
   shoulder_extra: [high_rate, out_zone_rate]                         # 어깨 하위 분석 (확장 3)
-  min_fastballs: 3          # 잠정. 적격 등판 = 주력 패스트볼 3구 이상
+  min_fastballs: 3          # 확정 (2026-10-05, 단계 2.4). 적격 등판 = 주력 패스트볼 3구 이상
   min_fastballs_sd: 10      # 잠정. rel_z_sd(F7)는 10구 이상 등판에서만 계산
   nmin:                     # 단계 2.4: 하한을 정하기 위한 점검 (개발셋만 사용)
     min_outings: 8          # 적격 등판이 이보다 적은 투수-시즌은 σ_w·σ_b 계산에서 뺌
