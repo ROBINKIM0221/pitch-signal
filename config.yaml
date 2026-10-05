@@ -26,6 +26,8 @@ data:
                ["2026-04-06", "2026-04-12"]]        # 단계 1.1 시험 다운로드 (data/raw/statcast_test에 따로 저장)
   check_columns: [release_speed, release_pos_z, release_pos_x, release_extension, release_spin_rate,
                   arm_angle, plate_z, zone]         # 결측률을 점검하는 열 (단계 1.1·1.4)
+  transactions: {start: "2021-01-01", end: "2026-10-31", sport_id: 1}    # MLB Stats API 선수 이동 기록 (단계 1.3)
+  api: {pause_sec: 0.5, retries: 3, timeout_sec: 60, people_batch: 100}  # 요청 간격, 재시도 횟수, 선수 정보 묶음 크기
   raw_columns: all               # 원데이터는 Savant가 주는 열을 모두 저장한다 (다시 받지 않기 위해)
   # 분석에서 읽는 열. 원데이터에 이 열이 없으면 경고한다.
   statcast_columns: [game_pk, game_date, game_type, game_year, pitcher, player_name, p_throws,

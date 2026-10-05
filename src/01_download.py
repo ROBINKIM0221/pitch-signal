@@ -17,11 +17,14 @@ from datetime import date
 
 import pandas as pd
 
+from src.common import mlb_api as api
 from src.common import statcast as st
 from src.common.config import ROOT, load_config
 
 RAW = ROOT / "data" / "raw" / "statcast"
 RAW_TEST = ROOT / "data" / "raw" / "statcast_test"      # 시험 주는 전체 다운로드와 겹치므로 따로 둔다
+TRANSACTIONS = ROOT / "data" / "raw" / "transactions"
+PEOPLE = ROOT / "data" / "raw" / "people.parquet"
 log = logging.getLogger("pitchsignal.download")
 
 
@@ -59,6 +62,30 @@ def column_check(root, cfg: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def save_transactions(cfg: dict) -> pd.DataFrame:
+    """선수 이동 기록을 받아 시즌(달력 연도)별 파일로 저장하고 시즌별 건수를 돌려준다."""
+    df = api.fetch_transactions(cfg).drop_duplicates()
+    year = pd.to_datetime(df["date"].fillna(df["effective_date"])).dt.year
+    TRANSACTIONS.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for season, part in df.groupby(year):
+        part.to_parquet(TRANSACTIONS / f"{int(season)}.parquet", compression="zstd", index=False)
+        il = part["description"].str.contains("injured list", case=False, na=False)
+        rows.append({"season": int(season), "transactions": len(part), "injured_list": int(il.sum())})
+    if year.isna().any():
+        log.warning("날짜가 없어 저장하지 않은 기록 %d건", int(year.isna().sum()))
+    return pd.DataFrame(rows)
+
+
+def save_people(cfg: dict) -> pd.DataFrame:
+    """내려받은 Statcast에 나온 모든 투수의 이름·생년월일·투구하는 손을 받아 저장한다."""
+    files = sorted(RAW.rglob("*.parquet"))
+    ids = pd.concat([pd.read_parquet(f, columns=["pitcher"]) for f in files])["pitcher"].dropna().astype(int)
+    people = api.fetch_people(ids.unique().tolist(), cfg)
+    people.to_parquet(PEOPLE, compression="zstd", index=False)
+    return people
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int)
@@ -67,10 +94,26 @@ def main() -> None:
     ap.add_argument("--test-week", action="store_true", help="설정의 시험 주만 받아 열을 점검한다")
     ap.add_argument("--all", action="store_true", help="설정의 모든 시즌을 차례로 받는다")
     ap.add_argument("--parallel", action="store_true", help="한 주 안의 하루치 요청을 동시에 보낸다 (빠르지만 서버 부담이 큼)")
+    ap.add_argument("--transactions", action="store_true", help="MLB Stats API 선수 이동 기록을 받는다")
+    ap.add_argument("--people", action="store_true", help="받아 둔 Statcast의 모든 투수 정보를 받는다")
     a = ap.parse_args()
     cfg = load_config()
     game_type = cfg["data"]["game_type"]
     fetch = make_fetch(a.parallel)
+
+    if a.transactions:
+        setup_log("transactions")
+        table = save_transactions(cfg)
+        log.info("선수 이동 기록 %d건 저장 → %s", int(table["transactions"].sum()), TRANSACTIONS)
+        print(table.to_string(index=False))
+        return
+
+    if a.people:
+        setup_log("people")
+        people = save_people(cfg)
+        log.info("선수 정보 %d명 저장 (생년월일 결측 %d, 투구하는 손 결측 %d) → %s", len(people),
+                 int(people["birth_date"].isna().sum()), int(people["pitch_hand"].isna().sum()), PEOPLE)
+        return
 
     if a.all:
         setup_log("all")
