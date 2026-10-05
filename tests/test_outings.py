@@ -120,3 +120,33 @@ def test_events_on_automatic_calls_still_count(season):
     row = outings.set_index(["pitcher", "game_pk"]).loc[(20, 2)]
     assert (row["bb"], row["outs"]) == (1, 3)      # 고의4구 1, 병살 삼진 2 + 자동 삼진 1
     assert row["n_all"] == 3                       # 던진 공은 싱커 3개뿐
+
+
+def _one_pitcher(n_outings, rng, pitcher=1):
+    rows = []
+    for game in range(n_outings):
+        day = rng.normal(0, 0.5)
+        for v in day + rng.normal(0, 1.0, int(rng.integers(5, 30))):
+            rows.append({"pitcher": pitcher, "season": 2022, "game_pk": game, "velo": 93 + v})
+    return pd.DataFrame(rows)
+
+
+def test_variance_components_recover_known_sd_and_agree_with_core():
+    from src.core import stats_core as sc
+    fb = _one_pitcher(300, np.random.default_rng(3))
+    row = og.variance_components(fb, ["velo"], min_pitches=3, min_outings=8).iloc[0]
+    assert row["outings"] == 300
+    assert row["sigma_w_velo"] == pytest.approx(1.0, abs=0.05)
+    assert row["sigma_b_velo"] == pytest.approx(0.5, abs=0.08)
+    base = sc.phase1([g["velo"].to_numpy() for _, g in fb.groupby("game_pk")], floor=0.0)     # 같은 적률 방식
+    assert row["sigma_w_velo"] == pytest.approx(float(np.sqrt(base.Sw[0, 0])))
+    assert row["sigma_b_velo"] == pytest.approx(float(np.sqrt(base.Sb[0, 0])))
+
+
+def test_variance_components_skip_short_outings_and_thin_pitcher_seasons():
+    rng = np.random.default_rng(4)
+    fb = pd.concat([_one_pitcher(20, rng, pitcher=1), _one_pitcher(5, rng, pitcher=2),
+                    pd.DataFrame({"pitcher": 1, "season": 2022, "game_pk": 999, "velo": [80.0, 81.0]})])
+    table = og.variance_components(fb, ["velo"], min_pitches=3, min_outings=8)
+    assert list(table["pitcher"]) == [1]                 # 등판 5개뿐인 투수 2는 빠짐
+    assert table.iloc[0]["outings"] == 20                # 2구짜리 등판은 세지 않음

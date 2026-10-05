@@ -73,3 +73,25 @@ def build_outings(pitches: pd.DataFrame, season: int, features: dict) -> tuple[p
     pitches_fb = fb[KEY + list(FEATURE_COLUMNS.values())].rename(columns={v: k for k, v in FEATURE_COLUMNS.items()})
     pitches_fb.insert(1, "season", season)
     return out[columns], pitches_fb.reset_index(drop=True)
+
+
+def variance_components(pitches_fb: pd.DataFrame, features: list[str], min_pitches: int,
+                        min_outings: int) -> pd.DataFrame:
+    """투수-시즌별 등판 안 표준편차(σ_w)와 등판 간 표준편차(σ_b). stats_core.phase1과 같은 적률 방식.
+
+    σ_w² = 등판별 표본분산의 (n_i − 1) 가중 평균, σ_b² = Var(등판 평균) − mean(1/n_i)·σ_w² (음수면 0).
+    투구가 min_pitches개 미만인 등판과, 그런 등판을 뺀 뒤 등판이 min_outings개 미만인 투수-시즌은 뺀다.
+    """
+    table = None
+    for f in features:
+        o = pitches_fb.groupby(["pitcher", "season", "game_pk"])[f].agg(["count", "mean", "var"])
+        o = o[o["count"] >= min_pitches]
+        o = o.assign(ss=(o["count"] - 1) * o["var"], df=o["count"] - 1, inv=1 / o["count"])
+        ps = o.groupby(["pitcher", "season"]).agg(outings=("mean", "size"), ss=("ss", "sum"), df=("df", "sum"),
+                                                  between=("mean", "var"), inv=("inv", "mean"))
+        within = ps["ss"] / ps["df"]
+        ps[f"sigma_w_{f}"] = np.sqrt(within)
+        ps[f"sigma_b_{f}"] = np.sqrt((ps["between"] - ps["inv"] * within).clip(lower=0))
+        ps = ps.loc[ps["outings"] >= min_outings, ["outings", f"sigma_w_{f}", f"sigma_b_{f}"]]
+        table = ps if table is None else table.join(ps.drop(columns="outings"), how="inner")
+    return table.reset_index()
