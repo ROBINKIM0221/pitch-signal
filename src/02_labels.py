@@ -29,7 +29,7 @@ log = logging.getLogger("pitchsignal.labels")
 
 def finalize() -> None:
     """수기 검토 결과를 반영해 최종 라벨(labels.csv)과 투수-시즌별 첫 팔 부상 IL(cases_raw.csv)을 만든다 (단계 2.2)."""
-    review = pd.read_csv(REVIEW, encoding="utf-8-sig").fillna("")
+    review = lb.read_review(REVIEW)
     waiting = lb.unreviewed(review)
     if len(waiting):
         print(f"아직 판단하지 않았거나 쓸 수 없는 줄이 {len(waiting)}건 있습니다 "
@@ -69,7 +69,7 @@ def main() -> None:
     review = review[["event_id", "pitcher", "name", "il_date", "description", "auto_reason", "part",
                      "suggested", "suggested_note", "decision", "note"]]
     if REVIEW.exists():
-        review = lb.carry_decisions(review, pd.read_csv(REVIEW, encoding="utf-8-sig").fillna(""))
+        review = lb.carry_decisions(review, lb.read_review(REVIEW))
     review.to_csv(REVIEW, index=False, encoding="utf-8-sig")
 
     kind = events["part"].where(events["verdict"] == "case", events["verdict"])

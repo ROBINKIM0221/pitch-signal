@@ -92,7 +92,7 @@ def suggest_date(event_id: int, pitcher: int, days: int, dates: pd.DataFrame, ou
 
 def main():
     il_days = load_config()["labels"]["il_days"]
-    review = pd.read_csv(REVIEW, encoding="utf-8-sig").fillna("")
+    review = lb.read_review(REVIEW)
     raw = ROOT / "data" / "raw" / "transactions"
     dates = pd.concat([pd.read_parquet(f, columns=["id", "date", "effective_date"]) for f in sorted(raw.glob("*.parquet"))])
     dates = dates.drop_duplicates("id").set_index("id").sort_index().apply(pd.to_datetime)

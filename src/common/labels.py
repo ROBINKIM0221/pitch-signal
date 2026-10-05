@@ -119,10 +119,10 @@ def build_events(transactions: pd.DataFrame, people: pd.DataFrame, rules: dict) 
 
 
 def carry_decisions(review: pd.DataFrame, previous: pd.DataFrame) -> pd.DataFrame:
-    """사람이 이미 적어 둔 decision·note·part를 event_id로 찾아 새 검토표에 옮긴다 (다시 만들 때 지워지지 않게)."""
+    """검토표에 이미 적어 둔 판단·제안·부위·고친 기준일을 event_id로 찾아 새 검토표에 옮긴다 (다시 만들 때 지워지지 않게)."""
     old = previous.drop_duplicates("event_id").set_index("event_id")
     out = review.copy()
-    for col in ("decision", "note", "part", "suggested", "suggested_note"):
+    for col in ("decision", "note", "part", "suggested", "suggested_note", "il_date"):
         if col in old.columns and col in out.columns:
             kept = out["event_id"].map(old[col])
             out[col] = kept.where(kept.notna() & (kept != ""), out[col])
@@ -153,3 +153,12 @@ def final_labels(auto: pd.DataFrame, review: pd.DataFrame) -> pd.DataFrame:
 def first_arm_il(labels: pd.DataFrame) -> pd.DataFrame:
     """투수-시즌마다 가장 이른 팔 부상 IL 하나만 남긴다."""
     return labels.sort_values(["il_date", "event_id"]).drop_duplicates(["pitcher", "season"]).reset_index(drop=True)
+
+
+def read_review(path) -> pd.DataFrame:
+    """수기 검토표를 읽는다. Excel에서 저장하면 UTF-8이 아니라 cp949가 될 수 있어 둘 다 받아들인다."""
+    try:
+        review = pd.read_csv(path, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        review = pd.read_csv(path, encoding="cp949")
+    return review.fillna("")

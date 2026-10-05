@@ -184,3 +184,19 @@ def test_first_arm_il_keeps_one_event_per_pitcher_season():
     labels = lb.final_labels(_auto(), _review(["사례", "제외", "제외"]))
     cases = lb.first_arm_il(labels)
     assert sorted(cases["event_id"]) == [2, 3]            # 투수 10은 5월(어깨)이 먼저, 8월(팔꿈치)은 빠짐
+
+
+def test_read_review_accepts_files_saved_by_excel_in_korean_windows_encoding(tmp_path):
+    frame = pd.DataFrame({"event_id": [1], "decision": ["사례"], "note": [None]})
+    for encoding in ("utf-8-sig", "cp949"):
+        path = tmp_path / f"{encoding}.csv"
+        frame.to_csv(path, index=False, encoding=encoding)
+        got = lb.read_review(path)
+        assert got.loc[0, "decision"] == "사례" and got.loc[0, "note"] == ""       # 빈칸은 빈 문자열
+
+
+def test_carry_decisions_keeps_a_corrected_il_date():
+    new = pd.DataFrame({"event_id": [1, 2], "il_date": ["2021-04-16", "2023-06-01"], "part": ["shoulder", "elbow"],
+                        "decision": ["", ""], "note": ["", ""]})
+    old = pd.DataFrame({"event_id": [1], "il_date": ["2023-04-14"], "part": ["shoulder"], "decision": ["사례"], "note": [""]})
+    assert list(lb.carry_decisions(new, old)["il_date"]) == ["2023-04-14", "2023-06-01"]
