@@ -2,7 +2,7 @@
 
 기준: 부위가 던지는 팔의 팔꿈치·어깨(전완·굴곡근 포함)로 명시된 경우만 '사례'. 부위가 없거나 범위 밖이면 '제외'.
 아래 규칙을 위에서부터 차례로 맞춰 보고 처음 맞는 것을 제안으로 적는다. 판단이 갈릴 수 있는 것은 이유 끝에
-'(확인 필요)'를 붙였다. 제안은 suggested·suggested_note 열에 적고, 확정은 사람이 decision 열에 한다.
+'(확인 필요)'를 붙이고 그런 줄을 표 맨 위로 올린다. 제안은 suggested·suggested_note 열에 적고, 확정은 사람이 decision 열에 한다.
 기록일과 effective_date가 어긋난 기록은 기준일(il_date)도 제안한 날짜로 바꿔 적는다(원래 날짜는 이유에 남김).
 
 사용 예:
@@ -110,6 +110,8 @@ def main():
             review.loc[i, "suggested_note"] = note
         else:
             review.loc[i, ["suggested", "part", "suggested_note"]] = suggest(placement["reason"], row["part"])
+    review = (review.assign(rest=~review["suggested_note"].str.contains(CHECK, regex=False))     # 확인 필요한 줄을 맨 위로
+              .sort_values(["rest", "auto_reason"], kind="stable").drop(columns="rest"))
     review.to_csv(REVIEW, index=False, encoding="utf-8-sig")
     print(review["suggested"].replace("", "(제안 없음)").value_counts().to_string())
     print(f"'(확인 필요)'가 붙은 줄: {int(review['suggested_note'].str.contains('확인 필요').sum())}건 / 전체 {len(review)}건")

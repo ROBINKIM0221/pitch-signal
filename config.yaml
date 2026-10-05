@@ -103,6 +103,10 @@ evaluation:
   controls_per_case: 2
   age_tolerance: 2
   control_il_free_days: 30        # 대조군은 기준일 ±30일 안에 IL 기록이 없어야 함
+  # 아래 세 값은 잠정 (단계 2.6, 결정 대기). 관찰 창 규칙 둘은 사례와 대조군에 똑같이 적용
+  max_days_last_outing_to_index: 15   # 관찰 창 마지막 등판이 기준일 전 이 일수 안에 있어야 함 (기준일 직전까지 던진 투수만)
+  max_gap_in_window_days: 30          # 관찰 창 안 등판 간격이 이보다 길면 제외 (강등·리그 이동 등으로 데이터가 끊긴 경우)
+  control_no_arm_il_in_season: true   # 그 시즌에 팔 부상 IL이 있는 투수는 대조군으로 쓰지 않음
   baselines: [B1, B2, B3, B4]
   consensus: {enabled: true, min_methods: 2, members: [PROPOSED, B1, B2, B3, B4]}
   bootstrap_reps: 2000

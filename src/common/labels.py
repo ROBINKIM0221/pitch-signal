@@ -7,7 +7,7 @@ from datetime import date, datetime
 import pandas as pd
 
 PLACED = re.compile(
-    r"placed (?P<pos>\S+) (?P<name>.+?) on the (?P<days>\d+)[- ]day injured list"
+    r"placed (?P<pos>\S+) (?P<name>.+?) on the (?P<days>\d+)[- ]day (?:injured|disabled) list"
     r"(?: retroactive to (?P<retro>[A-Za-z]+ \d{1,2}, \d{4}))?\.?\s*(?P<reason>.*)$")
 SIDE = re.compile(r"\b(right|left)\b", re.IGNORECASE)
 
@@ -103,6 +103,8 @@ def build_events(transactions: pd.DataFrame, people: pd.DataFrame, rules: dict) 
         effective = t.effective_date if isinstance(t.effective_date, str) else None
         when, conflict = il_date(p["retro"], effective, t.date, rules["max_retro_days"])
         listed, known = PITCHER_POS.get(p["pos"]), hands[t.person_id]
+        if p["pos"] == "P":                 # 2021년 4월 초까지의 기록('... on the 10 day disabled list.')은 P로만 적혀 있다
+            listed = known
         if listed is None:
             verdict, part, why = "exclude", "", "not_pitcher"
         else:

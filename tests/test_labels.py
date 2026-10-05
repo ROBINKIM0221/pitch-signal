@@ -200,3 +200,10 @@ def test_carry_decisions_keeps_a_corrected_il_date():
                         "decision": ["", ""], "note": ["", ""]})
     old = pd.DataFrame({"event_id": [1], "il_date": ["2023-04-14"], "part": ["shoulder"], "decision": ["사례"], "note": [""]})
     assert list(lb.carry_decisions(new, old)["il_date"]) == ["2023-04-14", "2023-06-01"]
+
+
+def test_build_events_keeps_early_2021_placements_worded_as_disabled_list():
+    tx = pd.DataFrame([_tx(1, 10, "T placed P P10 on the 10 day disabled list.", "2021-04-01", "2021-04-01")])
+    ev = lb.build_events(tx, pd.DataFrame({"id": [10], "pitch_hand": ["R"]}), RULES)
+    assert list(ev["event_id"]) == [1]                       # 대조군의 'IL 기록 없음' 확인에 필요한 기록
+    assert (ev.iloc[0]["verdict"], ev.iloc[0]["why"], ev.iloc[0]["days"]) == ("exclude", "no_reason", 10)
