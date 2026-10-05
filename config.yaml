@@ -146,6 +146,9 @@ highschool:
     rest_table: [[45, 0], [60, 1], [75, 2], [90, 3], [105, 4]]
     no_three_consecutive_days: true
   acwr: {acute_days: 7, chronic_days: 21, flag: 1.5, min_coverage: 1.0}
+  window_days: [3, 7]             # 누적 투구 수를 보는 기간 (최근 3일, 7일)
+  input_ranges:                   # 입력 검사 범위 (SPEC 표 13). team_outs_per_game은 한 경기에서 한 학교 투수들의 아웃 수 합
+    {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [1, 30]}
   recheck_frac: 0.10              # 입력 검수 재대조 비율
   max_error_rate: 0.02            # 재대조 오류율이 이를 넘으면 그 학교 전체 재대조
   foreign_rules:
