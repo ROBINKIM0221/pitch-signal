@@ -43,8 +43,8 @@ def main():
     outings = pd.read_parquet(ROOT / "data" / "processed" / "outings.parquet")
     games = outings["game_pk"].drop_duplicates().sample(a.games, random_state=cfg["seed"])
     box = pd.DataFrame([row for g in games for row in boxscore_lines(int(g), cfg)])
-    both = box.merge(outings[["game_pk", "pitcher", "n_all", "outs", "h", "bb", "is_start"]], on=["game_pk", "pitcher"],
-                     how="outer", indicator=True)
+    ours = outings.loc[outings["game_pk"].isin(games), ["game_pk", "pitcher", "n_all", "outs", "h", "bb", "is_start"]]
+    both = box.merge(ours, on=["game_pk", "pitcher"], how="outer", indicator=True)
     matched = both[both["_merge"] == "both"]
     print(f"경기 {a.games}개, 박스스코어 투수 등판 {len(box)}개, 등판 표와 짝이 맞은 것 {len(matched)}개, "
           f"한쪽에만 있는 것 {int((both['_merge'] != 'both').sum())}개")

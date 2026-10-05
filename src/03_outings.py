@@ -87,9 +87,8 @@ def nmin_report(cfg: dict) -> None:
         ax.hist(counts.clip(upper=top), bins=range(0, top + 2), weights=np.full(len(counts), 100 / len(counts)),
                 color=plots.SERIES, rwidth=0.82)
         ax.axvline(floor, color=plots.MUTED, linewidth=0.8)
-        ax.annotate(f"하한 {floor}구 (미만 {100 * (counts < floor).mean():.1f}%)", (floor, 0.97),
-                    xycoords=("data", "axes fraction"), xytext=(6, 0), textcoords="offset points",
-                    va="top", color=plots.INK_SECONDARY)
+        ax.text(0.98, 0.96, f"세로선: 하한 {floor}구\n하한 미만 등판 {100 * (counts < floor).mean():.1f}%",
+                transform=ax.transAxes, ha="right", va="top", color=plots.INK_SECONDARY)
         ax.set_title(f"{title} (등판 {len(counts):,}개)")
         ax.set_xlabel("등판당 주력 패스트볼 투구 수 (상위 0.5%는 마지막 막대에 합침)")
         ax.set_ylabel("등판 비율 (%)")
