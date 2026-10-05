@@ -103,7 +103,7 @@ evaluation:
   controls_per_case: 2
   age_tolerance: 2
   control_il_free_days: 30        # 대조군은 기준일 ±30일 안에 IL 기록이 없어야 함
-  # 아래 세 값은 잠정 (단계 2.6, 결정 대기). 관찰 창 규칙 둘은 사례와 대조군에 똑같이 적용
+  # 아래 세 값은 2026-10-05 확정 (단계 2.6). 관찰 창 규칙 둘은 사례와 대조군에 똑같이 적용
   max_days_last_outing_to_index: 15   # 관찰 창 마지막 등판이 기준일 전 이 일수 안에 있어야 함 (기준일 직전까지 던진 투수만)
   max_gap_in_window_days: 30          # 관찰 창 안 등판 간격이 이보다 길면 제외 (강등·리그 이동 등으로 데이터가 끊긴 경우)
   control_no_arm_il_in_season: true   # 그 시즌에 팔 부상 IL이 있는 투수는 대조군으로 쓰지 않음
@@ -124,13 +124,13 @@ B2: {cusum_k: 0.5, ip_floor_outs: 1, winsor_pct: 99}
 B3: {window: 4, shrink_to_baseline_diag: 0.5}
 B4: {feature: velo}               # 구속 하나로 같은 가변 표본 MEWMA
 
-load:                              # 불펜 부하 채널 (초기값, 단계 2.7에서 유지 여부 결정)
+load:                              # 불펜 부하 채널 표시 기준 (단계 2.7에서 점검)
   acute_days: 7
   chronic_days: 21
   consecutive_days_flag: 3
   apps_3d_flag: 3
   p7d_percentile: 95
-  acwr_flag: 1.5
+  acwr_flag: 1.8                   # 2026-10-05 결정. 초기값 1.5는 개발셋 대조군 불펜 등판의 20% 이상에서 켜져 한 단계 올림
   long_outing_pitches: 30
   short_rest_days: 1
 
