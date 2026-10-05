@@ -1,4 +1,4 @@
-"""MLB Stats API 호출 보조 함수 (선수 이동 기록, 선수 정보)."""
+"""MLB Stats API 호출 보조 함수 (선수 이동 기록, 선수 정보, 경기별 구장)."""
 from __future__ import annotations
 
 import calendar
@@ -77,3 +77,17 @@ def fetch_people(ids, cfg: dict, get=requests.get) -> pd.DataFrame:
         data = get_json(f"{BASE}/people", params, get=get, **_api_options(cfg))
         rows += [flatten_person(p) for p in data.get("people", [])]
     return pd.DataFrame(rows)
+
+
+def fetch_venues(cfg: dict, get=requests.get) -> pd.DataFrame:
+    """설정의 시즌마다 경기 일정을 불러 경기별 구장(game_pk, venue_id, venue_name)을 돌려준다. 한 경기는 한 줄."""
+    data_cfg = cfg["data"]
+    rows = []
+    for season in data_cfg["seasons"]:
+        params = {"sportId": data_cfg["transactions"]["sport_id"], "season": season, "gameType": data_cfg["game_type"]}
+        data = get_json(f"{BASE}/schedule", params, get=get, **_api_options(cfg))
+        for day in data.get("dates", []):
+            for game in day.get("games", []):
+                venue = game.get("venue") or {}
+                rows.append({"game_pk": game.get("gamePk"), "venue_id": venue.get("id"), "venue_name": venue.get("name")})
+    return pd.DataFrame(rows).drop_duplicates("game_pk", ignore_index=True)

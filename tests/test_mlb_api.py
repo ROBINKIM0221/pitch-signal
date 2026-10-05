@@ -102,3 +102,19 @@ def test_get_json_gives_up_after_the_allowed_retries():
     with pytest.raises(ConnectionError):
         api.get_json("u", {}, pause=0, retries=3, timeout=1, get=get)
     assert len(calls) == 4          # 첫 시도 1번 + 재시도 3번
+
+
+def test_fetch_venues_asks_season_by_season_and_keeps_one_row_per_game():
+    seen = []
+
+    def get(url, params, timeout):
+        seen.append((url.rsplit("/", 1)[-1], params["season"], params["sportId"], params["gameType"]))
+        first = {"gamePk": 10 * params["season"], "venue": {"id": 5, "name": "A Park"}}
+        other = {"gamePk": 10 * params["season"] + 1, "venue": {"id": 6, "name": "B Field"}}
+        return _Resp({"dates": [{"games": [first, other]}, {"games": [first]}]})      # 중단됐다 이어진 경기는 두 번 나온다
+
+    cfg = {"data": {**CFG["data"], "seasons": [2021, 2022], "game_type": "R"}}
+    df = api.fetch_venues(cfg, get=get)
+    assert seen == [("schedule", 2021, 1, "R"), ("schedule", 2022, 1, "R")]
+    assert df.to_dict("list") == {"game_pk": [20210, 20211, 20220, 20221], "venue_id": [5, 6, 5, 6],
+                                  "venue_name": ["A Park", "B Field", "A Park", "B Field"]}

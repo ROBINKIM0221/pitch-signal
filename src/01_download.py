@@ -8,6 +8,7 @@
     python -m src.01_download --all                 # 설정의 모든 시즌. --parallel을 붙이면 하루치 요청을 동시에 보냄
     python -m src.01_download --season 2023
     python -m src.01_download --season 2023 --start 2023-06-01 --end 2023-06-14
+    python -m src.01_download --venues              # 경기별 구장 (구장 보정에 씀)
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ RAW = ROOT / "data" / "raw" / "statcast"
 RAW_TEST = ROOT / "data" / "raw" / "statcast_test"      # 시험 주는 전체 다운로드와 겹치므로 따로 둔다
 TRANSACTIONS = ROOT / "data" / "raw" / "transactions"
 PEOPLE = ROOT / "data" / "raw" / "people.parquet"
+VENUES = ROOT / "data" / "raw" / "venues.parquet"
 log = logging.getLogger("pitchsignal.download")
 
 
@@ -111,6 +113,7 @@ def main() -> None:
     ap.add_argument("--parallel", action="store_true", help="한 주 안의 하루치 요청을 동시에 보낸다 (빠르지만 서버 부담이 큼)")
     ap.add_argument("--transactions", action="store_true", help="MLB Stats API 선수 이동 기록을 받는다")
     ap.add_argument("--people", action="store_true", help="받아 둔 Statcast의 모든 투수 정보를 받는다")
+    ap.add_argument("--venues", action="store_true", help="MLB Stats API 경기 일정에서 경기별 구장을 받는다 (구장 보정용)")
     ap.add_argument("--check", action="store_true", help="받은 데이터의 시즌별 점검표를 만든다")
     a = ap.parse_args()
     cfg = load_config()
@@ -131,6 +134,14 @@ def main() -> None:
         table = save_transactions(cfg)
         log.info("선수 이동 기록 %d건 저장 → %s", int(table["transactions"].sum()), TRANSACTIONS)
         print(table.to_string(index=False))
+        return
+
+    if a.venues:
+        setup_log("venues")
+        venues = api.fetch_venues(cfg)
+        venues.to_parquet(VENUES, compression="zstd", index=False)
+        log.info("경기 %d개의 구장 저장 (구장 %d곳, 구장 정보 없는 경기 %d) → %s", len(venues),
+                 venues["venue_id"].nunique(), int(venues["venue_id"].isna().sum()), VENUES)
         return
 
     if a.people:
