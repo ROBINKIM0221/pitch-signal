@@ -2,6 +2,7 @@
 
     python -m src.08_evaluate --split dev
     python -m src.08_evaluate --split val      # docs/eval_plan.md가 FROZEN: true 일 때만
+    python -m src.08_evaluate --split dev --h4 # H4: 불펜 사례·대조군의 관찰 창 기간 부하 표시 (단계 5.5)
 2026 봉인 평가는 09_sealed로만 실행한다.
 
 결과 (reports/tables): <split>_results.csv(방법별 지표), <split>_false_alarms.csv(역할·시즌별 오경보),
@@ -134,6 +135,42 @@ def evaluate(cfg: dict, split: str) -> None:
     print(pd.DataFrame(tests).to_string(index=False, float_format=lambda v: f"{v:.4f}"))
 
 
+def h4(cfg: dict, split: str) -> None:
+    """H4 (단계 5.5): 불펜 사례의 관찰 창 기간에 부하 채널 표시가 대조군보다 자주 나타나는가.
+
+    표시 기준은 config.load(개발셋에서 정한 값) 그대로 load.parquet에 들어 있다. 사례마다 가장 가까운 대조군(누적 투구 수 차이가
+    가장 작은 쪽) 1명을 짝지어 McNemar 정확 검정을 하고, 사례 − 대조군 평균의 부트스트랩 95% CI도 함께 낸다.
+    판정: McNemar p < 0.05이고 사례 쪽 표시 비율이 더 높으면 지지. 선발 포함 결과는 참고로 함께 적는다.
+    """
+    outings, _, cases, controls, windows = split_data(cfg, split)
+    load = pd.read_parquet(PROCESSED / "load.parquet")
+    flags = [c for c in load.columns if c.startswith("flag_")]
+    marks = mt.window_flags(windows, outings, load, flags).merge(cases[["case_id", "role"]], on="case_id")
+    nearest = controls.sort_values(["case_id", "dist", "pitcher"]).drop_duplicates("case_id")[["case_id", "pitcher"]]
+    reps, seed = cfg["evaluation"]["bootstrap_reps"], cfg["seed"]
+    rows = []
+    for scope, part in (("RP", marks[marks["role"] == "RP"]), ("all", marks)):
+        case = part[part["group"] == "case"].set_index("case_id")
+        ctl = part[part["group"] == "control"]
+        partner = ctl.merge(nearest, on=["case_id", "pitcher"]).set_index("case_id").reindex(case.index)
+        for flag in [*flags, "any"]:
+            a, b = case[flag].astype(bool), partner[flag].fillna(False).astype(bool)
+            p = mt.mcnemar_exact(a[partner[flag].notna()], b[partner[flag].notna()])
+            diff, lo, hi = mt.bootstrap_ci((case[flag].astype(float) - ctl.groupby("case_id")[flag].mean()).dropna(), reps, seed)
+            rows.append({"scope": scope, "flag": flag, "cases": len(case), "case_rate": 100 * a.mean(),
+                         "control_rate": 100 * ctl[flag].mean(), "nearest_control_rate": 100 * b.mean(),
+                         "diff": 100 * diff, "diff_lo": 100 * lo, "diff_hi": 100 * hi, "mcnemar_p": p,
+                         "supported": bool(p < 0.05 and a.mean() > b.mean()) if flag == "any" else np.nan})
+    table = pd.DataFrame(rows)
+    table.to_csv(TABLES / f"{split}_h4_load.csv", index=False, encoding="utf-8-sig")
+    verdict = table[(table["scope"] == "RP") & (table["flag"] == "any")].iloc[0]
+    log.info("H4 (%s, 불펜 사례 %d): 표시 있음 사례 %.1f%% vs 가장 가까운 대조군 %.1f%%, McNemar p = %.3f → %s", split,
+             verdict["cases"], verdict["case_rate"], verdict["nearest_control_rate"], verdict["mcnemar_p"],
+             "지지" if verdict["supported"] else "지지 안 됨")
+    pd.set_option("display.width", 220)
+    print(table.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+
+
 def draw_opcurve(points: pd.DataFrame, split: str, cfg: dict) -> None:
     plots.use_style()
     fig, ax = plt.subplots(figsize=(7.5, 5))
@@ -154,12 +191,13 @@ def draw_opcurve(points: pd.DataFrame, split: str, cfg: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", choices=["dev", "val"], required=True, help="dev = 개발셋 시험 실행, val = 검증셋 (고정 뒤)")
+    ap.add_argument("--h4", action="store_true", help="불펜 부하 채널 가설(H4)만 계산한다 (단계 5.5)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[
         logging.FileHandler(ROOT / "reports" / "logs" / f"evaluate_{a.split}.log", encoding="utf-8"), logging.StreamHandler()])
     if a.split == "val" and not frozen():
         raise SystemExit("평가 계획이 아직 고정되지 않았습니다 (docs/eval_plan.md 첫 줄이 FROZEN: true 여야 함). 검증셋은 고정 뒤에 실행합니다.")
-    evaluate(load_config(), a.split)
+    (h4 if a.h4 else evaluate)(load_config(), a.split)
 
 
 if __name__ == "__main__":

@@ -88,3 +88,15 @@ def test_mcnemar_exact_uses_only_discordant_cases():
 
 def test_holm_adjusts_in_step_down_order():
     assert mt.holm([0.01, 0.04, 0.03, 0.20]) == pytest.approx([0.04, 0.09, 0.09, 0.20])      # 0.04×2 = 0.08은 앞 단계 0.09보다 작아 0.09로
+
+
+def test_window_flags_mark_any_load_flag_inside_the_window_period():
+    w = windows((1, "case", 1, [11, 12]), (1, "control", 2, [21, 22]))
+    dates = pd.DataFrame({"pitcher": [1, 1, 2, 2], "season": 2023, "game_pk": [11, 12, 21, 22],
+                          "game_date": pd.to_datetime(["2023-05-01", "2023-05-09", "2023-05-02", "2023-05-10"])})
+    load = pd.DataFrame({"pitcher": [1, 1, 1, 2, 2], "season": 2023,
+                         "game_date": pd.to_datetime(["2023-04-20", "2023-05-05", "2023-05-09", "2023-05-02", "2023-05-11"]),
+                         "flag_acwr": [True, False, True, False, True], "flag_apps_3d": [False, True, False, False, False]})
+    out = mt.window_flags(w, dates, load, ["flag_acwr", "flag_apps_3d"]).set_index("group")
+    assert out.loc["case", "flag_acwr"] and out.loc["case", "flag_apps_3d"] and out.loc["case", "any"]   # 4/20 표시는 창 밖, 5/5·5/9는 안
+    assert not out.loc["control", "any"]                                                                  # 5/11 표시는 창(5/2~5/10) 밖

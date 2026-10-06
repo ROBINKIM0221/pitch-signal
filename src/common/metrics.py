@@ -91,3 +91,18 @@ def holm(pvalues: list[float]) -> list[float]:
     out = np.empty(len(p))
     out[order] = np.minimum(adjusted, 1.0)
     return out.tolist()
+
+
+def window_flags(windows: pd.DataFrame, dates: pd.DataFrame, load: pd.DataFrame, flags: list[str]) -> pd.DataFrame:
+    """사례·대조군마다 관찰 창 기간(첫 창 등판일~마지막 창 등판일) 안에 부하 표시가 있었는지 (표시별, 그리고 any). H4용.
+
+    dates: pitcher, season, game_pk, game_date. load: pitcher, season, game_date와 flag_* 열 (적격 여부와 상관없이 모든 등판).
+    """
+    span = windows.merge(dates[[*OUTING, "game_date"]], on=OUTING).groupby(SET)["game_date"].agg(["min", "max"]).reset_index()
+    rows = []
+    for r in span.itertuples(index=False):
+        inside = load[(load["pitcher"] == r.pitcher) & (load["season"] == r.season)
+                      & load["game_date"].between(r.min, r.max)]
+        hit = {f: bool(inside[f].any()) for f in flags}
+        rows.append({"case_id": r.case_id, "group": r.group, "pitcher": r.pitcher, "season": r.season, **hit, "any": any(hit.values())})
+    return pd.DataFrame(rows)
