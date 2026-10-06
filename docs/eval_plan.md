@@ -1,4 +1,4 @@
-FROZEN: false
+FROZEN: true
 
 # 피치시그널 평가 계획서 (eval-plan-v1)
 
@@ -8,9 +8,9 @@ FROZEN: false
 > ⑥ 이 파일을 본인 메일로 발송. 고정 전에는 2024~2026 데이터로 성능 지표를 계산하지 않는다.
 
 - 작성자: 김형준 (UNIST, robin1967@unist.ac.kr)
-- 고정 일시: ____ / 커밋 해시: ____ / Release 링크: ____
-- 설정 파일 해시 (`config.yaml` SHA-256): ____
-- 개발셋 확정값 파일 해시 (`config_calibrated.yaml` SHA-256): ____
+- 고정 일시: 2026-10-06 13:50 KST / 커밋 해시: (다음 커밋에서 기입) / Release 링크: https://github.com/ROBINKIM0221/pitch-signal/releases/tag/eval-plan-v1
+- 설정 파일 해시 (`config.yaml` SHA-256): f972e1a8ffc7ee306fb302b7ff23583a0400897c44fa4e18bbf35fd36c6d0feb
+- 개발셋 확정값 파일 해시 (`config_calibrated.yaml` SHA-256): ed2d6a382b76d3fe35956f2106b70aefd09e9495654b8886b4aa7d93179c2129
 
 ## 1. 목적과 가설
 - **H1 (주 가설)** 검증셋에서 관찰 창의 구속 하락 지수(창 안 5등판의 최댓값)는 사례가 짝지은 대조군보다 크다.
