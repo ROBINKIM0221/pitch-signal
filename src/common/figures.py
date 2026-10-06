@@ -303,10 +303,10 @@ def captions(results: pd.DataFrame, tests: pd.DataFrame, sim: dict, stories: dic
         "04_case_detected.png": (f"그림 4. 탐지 사례 — {det['name']}({ROLE[det['role']]}, {PART[det['part']]}, {det['season']}). 시작 구간에서 학습한 평소 구속에서 "
                                  f"예상보다 낮은 등판이 이어지자 구속 하락 지수가 1을 넘어 경보가 울렸고, 관찰 창 안 첫 경보부터 IL 등재까지 {det['lead']}등판이었다"
                                  + (f"(창 밖 경보 {det['pre_window_alarms']}회 포함하면 더 이르다)." if det["pre_window_alarms"] else "."),
-                                 f"dashboard-web/public/data/replay_{CASES['detected']}.json (data/processed/monitor_val.parquet에서 내보냄)"),
+                                 f"dashboard-web/public/data/replay/{CASES["detected"]}.json (data/processed/monitor_val.parquet에서 내보냄)"),
         "05_case_missed.png": (f"그림 5. 놓친 사례 — {mis['name']}({ROLE[mis['role']]}, {PART[mis['part']]}, {mis['season']}). 관찰 창 다섯 등판의 구속이 평소 범위 안에 머물러 "
                                f"구속 하락 지수가 1에 이르지 못했다(창 안 최댓값 {mis['index'][mis['in_window']].max():.2f}). 구속이 떨어지지 않는 부상은 이 신호로 잡히지 않는다.",
-                               f"dashboard-web/public/data/replay_{CASES['missed']}.json"),
+                               f"dashboard-web/public/data/replay/{CASES["missed"]}.json"),
         "07_kbo_timeline.png": (f"그림 7. 2026 KBO 외국인 투수 부상 이후 결정까지. 완전 교체 두 건은 {timeline[timeline['kind'] == '완전 교체']['days'].min()}~"
                                 f"{timeline[timeline['kind'] == '완전 교체']['days'].max()}일, 6주 대체 두 건은 {timeline[timeline['kind'] == '6주 대체']['days'].min()}~"
                                 f"{timeline[timeline['kind'] == '6주 대체']['days'].max()}일 만에 결정되었다. 오웬 화이트는 수비 중 하체 부상이라 투구 신호 감시 대상이 아니지만 "
@@ -327,7 +327,7 @@ def draw_all(out: Path | str = FINAL) -> list[str]:
     tests = pd.read_csv(TABLES / "val_tests.csv")
     points = pd.read_csv(TABLES / "val_opcurve.csv")
     sim = sim_rows(pd.read_csv(TABLES / "sim_short_outings.csv"))
-    stories = {k: replay_story(json.loads((DASH / f"replay_{v}.json").read_text(encoding="utf-8"))) for k, v in CASES.items()}
+    stories = {k: replay_story(json.loads((DASH / f"replay/{v}.json").read_text(encoding="utf-8"))) for k, v in CASES.items()}
     timeline = kbo_timeline(KBO)
     names = []
     draw_system(out / "01_system.png"); names.append("01_system.png")

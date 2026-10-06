@@ -3,155 +3,241 @@ import {
   Area, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { FEATURE, PART, ROLE, fmt, useJson } from "../lib/data.js";
+import { ChartTip, GRID, LABEL, TICK, TIP_STYLE } from "../lib/chart.jsx";
 
 const SIGNAL = { velo: { name: "구속 하락 신호", color: "var(--velo)" }, change: { name: "폼 변화 신호", color: "var(--change)" } };
+const GROUP_NAME = { case: "사례", control: "대조군", other: "그 밖의 투수" };
+const SEASON_OPTIONS = ["all", 2025, 2024];
+const KIND = { all: "전체", case: "사례(팔 부상 IL)", alarm: "경보가 있던 투수", control: "대조군" };
 
-function label(p) {
-  const who = p.group === "case" ? (p.detected ? "사례 · 신호 있음" : "사례 · 신호 없음") : "대조군";
-  return `${p.name} · ${p.season} ${ROLE[p.role]} · ${who}`;
+function who(p) {
+  if (p.group === "case") return `사례 · ${PART[p.part]} · IL ${p.il_date}${p.detected ? " · 신호 있음" : " · 신호 없음"}`;
+  if (p.group === "control") return `대조군 · 가상 기준일 ${p.il_date}`;
+  return p.il_date ? `팔 부상 IL ${p.il_date} (사례 기준 미충족)` : "팔 부상 IL 없음";
 }
 
-function AlarmDot({ cx, cy, payload }) {
+function AlarmDot({ cx, cy, payload, onPick }) {
   if (!payload?.alarm_here || cx == null) return null;
-  return <circle cx={cx} cy={cy} r={5} fill="var(--alarm)" stroke="#fff" strokeWidth={1.5} />;
+  return (
+    <g style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onPick?.(payload); }}>
+      <circle cx={cx} cy={cy} r={12} fill="transparent" />
+      <circle cx={cx} cy={cy} r={5.5} fill="var(--alarm)" stroke="#fff" strokeWidth={1.5} />
+    </g>
+  );
+}
+
+// 등판 순서 축: 정수 눈금만 (1, 5, 10, … 처럼 보기 좋은 간격)
+function outingTicks(n) {
+  const step = n <= 12 ? 1 : n <= 30 ? 2 : n <= 60 ? 5 : 10;
+  const ticks = [1];
+  for (let k = step; k <= n; k += step) ticks.push(k);
+  return ticks;
 }
 
 export default function Replay() {
-  const { data: index } = useJson("replay_index.json");
+  const { data: index } = useJson("pitchers.json");
   const { data: alerts } = useJson("alerts.json");
+  const [query, setQuery] = useState("");
+  const [season, setSeason] = useState("all");
+  const [kind, setKind] = useState("all");
+  const [open, setOpen] = useState(false);
   const [id, setId] = useState(null);
   const [shown, setShown] = useState(null);
   const [side, setSide] = useState(false);
   const [picked, setPicked] = useState(null);
-  const cases = useMemo(() => (index || []).filter((p) => p.group === "case"), [index]);
-  useEffect(() => { if (cases.length && !id) setId(cases[0].id); }, [cases, id]);
+
+  const sorted = useMemo(() => (index || []).slice().sort((a, b) => a.name.localeCompare(b.name) || b.season - a.season), [index]);
+  useEffect(() => { if (sorted.length && !id) setId((sorted.find((p) => p.group === "case" && p.detected) || sorted[0]).id); }, [sorted, id]);
+  const q = query.trim().toLowerCase();
+  const matches = useMemo(() => sorted.filter((p) =>
+    (season === "all" || p.season === Number(season)) &&
+    (kind === "all" || (kind === "case" && p.group === "case") || (kind === "control" && p.group === "control") || (kind === "alarm" && (p.alarms_velo + p.alarms_change) > 0)) &&
+    (!q || p.name.toLowerCase().includes(q) || p.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(q))),
+  [sorted, season, kind, q]);
+
   const entry = index?.find((p) => p.id === id);
-  const partner = index?.find((p) => p.case_id === entry?.case_id && p.group !== entry?.group);
-  const { data: me } = useJson(id ? `replay_${id}.json` : null);
-  const { data: other } = useJson(side && partner ? `replay_${partner.id}.json` : null);
+  const partner = entry?.case_id != null ? index?.find((p) => p.case_id === entry.case_id && p.group !== entry.group && (entry.group === "case" ? p.group === "control" : p.group === "case")) : null;
+  const { data: me } = useJson(id ? `replay/${id}.json` : null);
+  const { data: other } = useJson(side && partner ? `replay/${partner.id}.json` : null);
   useEffect(() => { if (me) { setShown(me.outings.length); setPicked(null); } }, [me]);
 
-  if (!index) return <div className="placeholder">리플레이 목록을 읽는 중…</div>;
+  if (!index) return <div className="placeholder">투수 목록을 읽는 중…</div>;
   const baselineCount = me ? me.outings.filter((o) => o.phase === "baseline").length : 0;
+  const counts = { all: index.length, case: index.filter((p) => p.group === "case").length, control: index.filter((p) => p.group === "control").length,
+    alarm: index.filter((p) => p.alarms_velo + p.alarms_change > 0).length };
   return (
     <div className="page">
-      <h1>① 리플레이 · ② 경보 카드</h1>
+      <h1>리플레이 · 경보 카드</h1>
       <p className="lead">
-        한 투수의 시즌을 등판 순서대로 다시 돌려 봅니다. 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보), 빨간 점은 경보,
-        세로선은 IL 등재(대조군은 짝지은 사례의 기준일)입니다. 경보 점을 누르면 카드가 열립니다.
+        검증셋 2024~2025에서 시작 구간을 채워 감시가 돌아간 <b>투수-시즌 {index.length.toLocaleString()}개</b>를 모두 찾아볼 수 있습니다. 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보),
+        빨간 점은 경보, 검은 세로선은 팔 부상 IL 등재(대조군은 짝지은 사례의 기준일)입니다. 경보 점이나 경보 칩을 누르면 카드가 열립니다.
       </p>
-      <div className="row">
-        <label>투수
-          {" "}
-          <select value={id || ""} onChange={(e) => setId(e.target.value)}>
-            {cases.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
+      <div className="toolbar search">
+        <label className="search-box"><span>투수 검색</span>
+          <input type="search" value={query} placeholder="이름 (예: Soroka, Skubal)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} aria-label="투수 이름 검색" />
+        </label>
+        <label><span>시즌</span>
+          <select value={season} onChange={(e) => { setSeason(e.target.value); setOpen(true); }}>
+            {SEASON_OPTIONS.map((s) => <option key={s} value={s}>{s === "all" ? "2024~2025" : s}</option>)}
           </select>
         </label>
-        {me && (
-          <label>재생 위치 {shown}/{me.outings.length} 등판
-            {" "}
-            <input type="range" min={Math.max(1, baselineCount)} max={me.outings.length} value={shown ?? me.outings.length}
-              onChange={(e) => setShown(Number(e.target.value))} />
-          </label>
+        <label><span>구분</span>
+          <select value={kind} onChange={(e) => { setKind(e.target.value); setOpen(true); }}>
+            {Object.entries(KIND).map(([k, v]) => <option key={k} value={k}>{v} ({counts[k].toLocaleString()})</option>)}
+          </select>
+        </label>
+        <span className="caption" style={{ margin: 0 }}>검색 결과 {matches.length.toLocaleString()}명</span>
+        {partner && <button className={`btn ${side ? "on" : ""}`} style={{ marginLeft: "auto" }} onClick={() => setSide(!side)}>{side ? "짝 닫기" : entry.group === "case" ? "대조군 나란히 보기" : "짝지은 사례 보기"}</button>}
+        {open && (
+          <ul className="results" role="listbox">
+            {matches.slice(0, 40).map((p) => (
+              <li key={p.id} role="option" aria-selected={p.id === id} className={p.id === id ? "on" : ""}
+                onMouseDown={() => { setId(p.id); setQuery(""); setOpen(false); }}>
+                <span className="who">{p.name} <small>{p.season} {ROLE[p.role]}</small></span>
+                <span className="tags">
+                  {p.group === "case" && <span className={`light ${p.detected ? "alarm" : "base"}`}>{p.detected ? "사례 · 신호 있음" : "사례 · 신호 없음"}</span>}
+                  {p.group === "control" && <span className="light base">대조군</span>}
+                  {p.group === "other" && p.il_date && <span className="light warn">팔 부상 IL</span>}
+                  {p.alarms_velo > 0 && <span className="light velo">구속 경보 {p.alarms_velo}</span>}
+                  {p.alarms_change > 0 && <span className="light change">폼 경보 {p.alarms_change}</span>}
+                </span>
+              </li>
+            ))}
+            {matches.length === 0 && <li className="empty">일치하는 투수가 없습니다</li>}
+            {matches.length > 40 && <li className="empty">{matches.length - 40}명 더 있음 — 이름을 더 입력하세요</li>}
+          </ul>
         )}
-        {partner && <button className={`btn ${side ? "on" : ""}`} onClick={() => setSide(!side)}>대조군 나란히 보기</button>}
       </div>
-      {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} picked={picked} setPicked={setPicked} />}
-      {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} picked={picked} setPicked={setPicked} compact />}
+      {me && (
+        <div className="toolbar" style={{ gap: 14 }}>
+          <label><span>재생 위치</span>
+            <input type="range" min={Math.max(1, baselineCount)} max={me.outings.length} value={shown ?? me.outings.length}
+              onChange={(e) => setShown(Number(e.target.value))} aria-label="재생 위치" />
+            <span className="range-value">{shown}/{me.outings.length} 등판</span>
+          </label>
+          <span className="caption" style={{ margin: 0 }}>슬라이더를 왼쪽으로 돌리면 그 등판까지만 보고, 경보가 언제 울렸는지 확인할 수 있습니다.</span>
+        </div>
+      )}
+      {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} setPicked={setPicked} />}
+      {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} setPicked={setPicked} compact />}
       {picked && <AlertCard alert={picked} onClose={() => setPicked(null)} />}
     </div>
   );
 }
 
-function Pitcher({ data, shown, alerts, picked, setPicked, compact }) {
+function Pitcher({ data, shown, alerts, setPicked, compact }) {
+  const n = data.outings.length;
   const rows = data.outings.slice(0, shown).map((o, i) => ({
     ...o, i: i + 1, alarm_here: o.velo_alarm || o.change_alarm,
-    velo_index: o.velo_index, change_index: o.change_index,
     ...Object.fromEntries(Object.keys(FEATURE).map((f) => [`band_${f}`, o.exp ? [o.exp[f] - 2 * o.sd[f], o.exp[f] + 2 * o.sd[f]] : null])),
   }));
-  const ilAt = (() => {
-    const before = data.outings.filter((o) => o.date < data.il_date).length;
-    return before < data.outings.length ? before + 0.5 : data.outings.length + 0.5;
-  })();
+  // IL 등재(기준일) 위치: 그 날짜 전 등판 수 + 0.5. 시즌 마지막 등판 뒤라면 축을 한 칸 늘려 오른쪽에 그린다.
+  const before = data.il_date ? data.outings.filter((o) => o.date < data.il_date).length : null;
+  const ilAt = before == null ? null : before + 0.5;
+  const xMax = ilAt != null && ilAt > n ? n + 1.5 : n + 0.5;
   const baseline = rows.filter((r) => r.phase === "baseline").length;
   const myAlerts = (alerts || []).filter((a) => a.id === data.id);
-  const onClick = (state) => {
-    const row = state?.activePayload?.[0]?.payload;
-    if (!row?.alarm_here) return;
+  const visibleAlerts = myAlerts.filter((a) => a.date <= (rows.at(-1)?.date ?? ""));
+  const openAlert = (row) => {
     const hit = myAlerts.filter((a) => a.date === row.date);
     if (hit.length) setPicked({ ...hit[0], others: hit.slice(1), who: data.name, row });
   };
+  const onClick = (state) => {
+    const row = state?.activePayload?.[0]?.payload;
+    if (!row) return;
+    // 가리킨 등판에 경보가 없으면 바로 옆 등판(±1)의 경보를 연다 — 툴팁을 보고 누를 때 손이 조금 비껴가도 열리게
+    const target = row.alarm_here ? row : rows.find((r) => r.alarm_here && Math.abs(r.i - row.i) <= 1);
+    if (target) openAlert(target);
+  };
   const yMax = Math.max(1.6, ...rows.flatMap((r) => [r.velo_index ?? 0, r.change_index ?? 0])) * 1.08;
+  const ilLabel = data.group === "control" ? "기준일" : `IL 등재 ${fmt.date(data.il_date)}`;
+  const ticks = outingTicks(n);
+  const dateOf = (i) => fmt.date(data.outings[i - 1]?.date);
+  // 띠·선의 글자는 첫 차트(지수)에만 적는다. 특징 차트는 선이 띠 안을 지나가 글자와 겹친다.
+  const common = (withText) => (
+    <>
+      <CartesianGrid vertical={false} stroke={GRID} />
+      {baseline > 0 && <ReferenceArea x1={0.5} x2={baseline + 0.5} fill="var(--base)" fillOpacity={0.12}
+        label={withText ? { value: `시작 구간 · 평소를 배우는 첫 ${baseline}등판`, position: "insideBottom", ...LABEL, fill: "var(--muted)", dy: -6 } : undefined} />}
+      {ilAt != null && <ReferenceLine x={ilAt} stroke="var(--ink)" strokeWidth={1.2}
+        label={withText ? { value: ilLabel, position: ilAt > n * 0.8 ? "insideTopRight" : "insideTopLeft", ...LABEL, dy: -2 } : undefined} />}
+    </>
+  );
+  const xAxis = (hideLabel) => (
+    <XAxis dataKey="i" type="number" domain={[0.5, xMax]} ticks={ticks} tickFormatter={dateOf} interval="preserveStartEnd" minTickGap={28} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false}
+      label={hideLabel ? undefined : { value: "등판 (날짜순, 간격은 등판 순서)", position: "bottom", offset: 2, ...LABEL }} />
+  );
   return (
     <div className="card">
-      <h2>{data.name} · {data.season} {ROLE[data.role]} · {data.group === "case" ? `사례 (${PART[data.part]}, IL ${data.il_date})` : `대조군 (가상 기준일 ${data.il_date})`}</h2>
-      <div className="legend">
-        <span><i style={{ background: "var(--velo)" }} />구속 하락 지수</span>
-        <span><i style={{ background: "var(--change)" }} />폼 변화 지수</span>
-        <span><i className="dot" style={{ background: "var(--alarm)" }} />경보 (지수 &gt; 1)</span>
-        <span><i style={{ background: "var(--base)", height: 10 }} />시작 구간</span>
-        <span><i style={{ background: "var(--ink)" }} />IL 등재(기준일)</span>
+      <div className="card-head">
+        <h2>{data.name} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {data.season} {ROLE[data.role]} · {who(data)}</span></h2>
+        <div className="legend">
+          <span><i style={{ background: "var(--velo)" }} />구속 하락 지수</span>
+          <span><i style={{ background: "var(--change)" }} />폼 변화 지수</span>
+          <span><i className="dot" style={{ background: "var(--alarm)" }} />경보 (지수 &gt; 1)</span>
+          <span><i className="dash" />경보 한계 1</span>
+          <span><i className="band" style={{ background: "var(--base-bg)", border: "1px solid var(--line-2)" }} />시작 구간</span>
+          <span><i style={{ background: "var(--ink)" }} />IL 등재(기준일)</span>
+        </div>
       </div>
-      <ResponsiveContainer width="100%" height={compact ? 200 : 260}>
-        <ComposedChart data={rows} onClick={onClick} margin={{ top: 10, right: 20, left: 0, bottom: 14 }}>
-          <CartesianGrid vertical={false} stroke="var(--line)" />
-          <XAxis dataKey="i" type="number" domain={[0.5, data.outings.length + 0.5]} tickCount={8} tick={{ fontSize: 11 }} label={{ value: "등판 순서", position: "bottom", offset: 0, fontSize: 11 }} />
-          <YAxis domain={[Math.floor(Math.min(-0.5, ...rows.map((r) => r.velo_index ?? 0)) * 2) / 2, Math.ceil(yMax * 2) / 2]} tickFormatter={(v) => v.toFixed(1)} tick={{ fontSize: 11 }} width={34} />
-          <Tooltip content={<IndexTip />} />
-          {baseline > 0 && <ReferenceArea x1={0.5} x2={baseline + 0.5} fill="var(--base)" fillOpacity={0.18} />}
-          <ReferenceLine y={1} stroke="var(--alarm)" strokeDasharray="4 4" label={{ value: "경보 한계 1", position: "right", fontSize: 11, fill: "var(--ink-2)" }} />
-          <ReferenceLine y={0} stroke="var(--line)" />
-          {ilAt <= data.outings.length && <ReferenceLine x={ilAt} stroke="var(--ink)" label={{ value: "IL", position: "top", fontSize: 11 }} />}
-          <Line type="monotone" dataKey="velo_index" stroke="var(--velo)" dot={false} strokeWidth={2} connectNulls name="구속 하락 지수" isAnimationActive={false} />
-          <Line type="monotone" dataKey="change_index" stroke="var(--change)" dot={false} strokeWidth={2} connectNulls name="폼 변화 지수" isAnimationActive={false} />
-          <Scatter dataKey="velo_index" shape={<AlarmDot />} isAnimationActive={false} legendType="none" data={rows.filter((r) => r.velo_alarm)} />
-          <Scatter dataKey="change_index" shape={<AlarmDot />} isAnimationActive={false} legendType="none" data={rows.filter((r) => r.change_alarm)} />
+      {visibleAlerts.length > 0 ? (
+        <p className="chips">
+          <span className="caption" style={{ margin: 0 }}>경보 {visibleAlerts.length}건 — 누르면 카드가 열립니다:</span>
+          {visibleAlerts.map((a) => {
+            const s = SIGNAL[a.signal === "velo_drop" ? "velo" : "change"];
+            return (
+              <button key={a.date + a.signal} className="pill" onClick={() => setPicked({ ...a, who: data.name })}>
+                <span className="dot" style={{ background: s.color }} />{fmt.date(a.date)} {s.name}
+              </button>
+            );
+          })}
+        </p>
+      ) : rows.some((r) => r.phase === "monitor") ? <p className="caption">여기까지 경보가 없습니다.</p> : null}
+      <h3 className="chart-title">신호 지수 <small>1을 넘으면 경보 · 경보 뒤에는 0에서 다시 시작</small></h3>
+      <ResponsiveContainer width="100%" height={compact ? 220 : 250}>
+        <ComposedChart data={rows} onClick={onClick} margin={{ top: 14, right: 16, left: 0, bottom: compact ? 16 : 4 }}>
+          {common(true)}
+          {xAxis(!compact)}
+          <YAxis domain={[Math.floor(Math.min(-0.5, ...rows.map((r) => r.velo_index ?? 0)) * 2) / 2, Math.ceil(yMax * 2) / 2]} tickFormatter={(v) => v.toFixed(1)}
+            tick={TICK} width={40} axisLine={false} tickLine={false} />
+          <Tooltip content={<ChartTip render={(payload) => <IndexTip r={payload[0].payload} />} />} cursor={{ stroke: "var(--line-2)" }} />
+          <ReferenceLine y={1} stroke="var(--alarm)" strokeDasharray="4 4" />
+          <ReferenceLine y={0} stroke="var(--line-2)" />
+          <Line type="monotone" dataKey="velo_index" stroke="var(--velo)" dot={false} strokeWidth={2.2} connectNulls name="구속 하락 지수" isAnimationActive={false} />
+          <Line type="monotone" dataKey="change_index" stroke="var(--change)" dot={false} strokeWidth={1.8} connectNulls name="폼 변화 지수" isAnimationActive={false} />
+          <Scatter dataKey="velo_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" data={rows.filter((r) => r.velo_alarm)} />
+          <Scatter dataKey="change_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" data={rows.filter((r) => r.change_alarm)} />
         </ComposedChart>
       </ResponsiveContainer>
-      {!compact && (
-        <div className="grid3">
-          {Object.entries(FEATURE).map(([f, name]) => (
-            <div key={f}>
-              <h3>{name} · 띠는 평소 범위(예상 ± 2σ, 투구 수 반영)</h3>
-              <ResponsiveContainer width="100%" height={150}>
-                <ComposedChart data={rows} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="var(--line)" />
-                  <XAxis dataKey="i" type="number" domain={[0.5, data.outings.length + 0.5]} hide />
-                  <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10 }} width={40} />
-                  <Tooltip formatter={(v) => (Array.isArray(v) ? `${fmt.num(v[0])} ~ ${fmt.num(v[1])}` : fmt.num(v))} labelFormatter={(i) => `${i}번째 등판`} />
-                  {baseline > 0 && <ReferenceArea x1={0.5} x2={baseline + 0.5} fill="var(--base)" fillOpacity={0.18} />}
-                  <Area dataKey={`band_${f}`} stroke="none" fill="var(--velo)" fillOpacity={0.14} connectNulls isAnimationActive={false} />
-                  <Line type="monotone" dataKey={f} stroke="var(--ink-2)" strokeWidth={1.5} dot={{ r: 2 }} isAnimationActive={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          ))}
+      {!compact && Object.entries(FEATURE).map(([f, name], k, arr) => (
+        <div key={f}>
+          <h3 className="chart-title">{name} <small>등판 평균 · 파란 띠는 평소 범위(예상 ± 2σ, 투구 수 반영)</small></h3>
+          <ResponsiveContainer width="100%" height={k === arr.length - 1 ? 230 : 210}>
+            <ComposedChart data={rows} onClick={onClick} margin={{ top: 14, right: 16, left: 0, bottom: k === arr.length - 1 ? 16 : 4 }}>
+              {common(false)}
+              {xAxis(k !== arr.length - 1)}
+              <YAxis domain={["auto", "auto"]} tick={TICK} width={40} axisLine={false} tickLine={false} tickFormatter={(v) => fmt.num(v, f === "rel_z" ? 2 : 1)} />
+              <Tooltip {...TIP_STYLE} formatter={(v, nm) => [Array.isArray(v) ? `${fmt.num(v[0])} ~ ${fmt.num(v[1])}` : fmt.num(v), nm]} labelFormatter={(i) => `${dateOf(i)} · ${i}번째 등판`} />
+              <Area dataKey={`band_${f}`} stroke="none" fill="var(--velo)" fillOpacity={0.14} connectNulls isAnimationActive={false} name="평소 범위" />
+              <Line type="monotone" dataKey={f} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} isAnimationActive={false} name={name} />
+              <Scatter dataKey={f} shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" data={rows.filter((r) => r.alarm_here)} />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
-      )}
-      {myAlerts.length > 0 && (
-        <p className="note">
-          이 투수의 경보 {myAlerts.filter((a) => a.date <= (rows.at(-1)?.date ?? "")).length}건:
-          {" "}{myAlerts.filter((a) => a.date <= (rows.at(-1)?.date ?? "")).map((a) => (
-            <button key={a.date + a.signal} className="pill" style={{ cursor: "pointer" }} onClick={() => setPicked({ ...a, who: data.name })}>
-              {fmt.date(a.date)} {SIGNAL[a.signal === "velo_drop" ? "velo" : "change"].name}
-            </button>
-          ))}
-        </p>
-      )}
+      ))}
     </div>
   );
 }
 
-function IndexTip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const r = payload[0].payload;
+function IndexTip({ r }) {
   return (
-    <div className="card" style={{ padding: "8px 10px", fontSize: 12 }}>
-      <div><b>{r.i}번째 등판</b> {r.date} · 주력 패스트볼 {r.n_fb}구 · {r.phase === "baseline" ? "시작 구간" : "감시"}</div>
+    <>
+      <div><b>{r.date}</b> · {r.i}번째 등판 · 주력 패스트볼 {r.n_fb}구 · {r.phase === "baseline" ? "시작 구간" : "감시"}</div>
       {r.phase !== "baseline" && (
-        <div>구속 하락 지수 {fmt.num(r.velo_index)} · 폼 변화 지수 {fmt.num(r.change_index)} {r.alarm_here ? "· 경보 (눌러서 카드 보기)" : ""}</div>
+        <div>구속 하락 지수 {fmt.num(r.velo_index)} · 폼 변화 지수 {fmt.num(r.change_index)} {r.alarm_here && <span className="alarm">· 경보 — 빨간 점을 누르면 카드가 열립니다</span>}</div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -161,33 +247,35 @@ function AlertCard({ alert, onClose }) {
   const total = velo ? 0 : feats.reduce((s, f) => s + Math.max(0, alert.step[f]), 0);
   return (
     <div className={`card alert-card ${velo ? "velo" : ""}`}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h2 style={{ margin: 0 }}>경보 카드 · {alert.who} · {alert.date} · {velo ? "구속 하락 신호" : `폼 변화 신호 (${alert.rule})`}</h2>
+      <div className="card-head">
+        <h2>경보 카드 · {alert.who} · {alert.date} · {velo ? "구속 하락 신호" : `폼 변화 신호 (${alert.rule})`}</h2>
         <button className="btn" onClick={onClose}>닫기</button>
       </div>
-      <p style={{ fontSize: 15, margin: "6px 0 10px" }}>{alert.card}</p>
+      <p className="headline">{alert.card}</p>
       {velo ? (
-        <p className="note">구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(alert.velo_mph).toFixed(1)} mph {alert.velo_mph < 0 ? "낮았습니다" : "높았습니다"}.
+        <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(alert.velo_mph).toFixed(1)} mph {alert.velo_mph < 0 ? "낮았습니다" : "높았습니다"}.
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>
-          <p className="note">세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나 벗어났는지(표준화 이탈, σ)와 T² 기여 몫입니다.</p>
-          <table className="tbl">
-            <thead><tr><th>특징</th><th>표준화 이탈</th><th>기여 몫</th><th></th></tr></thead>
-            <tbody>
-              {feats.map((f) => (
-                <tr key={f}>
-                  <td>{FEATURE[f]}</td>
-                  <td>{alert.z[f] > 0 ? "+" : ""}{fmt.num(alert.z[f], 1)}σ</td>
-                  <td>{fmt.num(alert.step[f], 1)}</td>
-                  <td style={{ width: "40%" }}><div className="bar"><span style={{ width: `${total ? (100 * Math.max(0, alert.step[f])) / total : 0}%` }} /></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="note" style={{ margin: "0 0 8px" }}>세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나 벗어났는지(표준화 이탈, σ)와 T² 기여 몫입니다.</p>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead><tr><th>특징</th><th className="num">표준화 이탈</th><th className="num">기여 몫</th><th style={{ width: "40%" }}></th></tr></thead>
+              <tbody>
+                {feats.map((f) => (
+                  <tr key={f}>
+                    <td>{FEATURE[f]}</td>
+                    <td className="num">{alert.z[f] > 0 ? "+" : ""}{fmt.num(alert.z[f], 1)}σ</td>
+                    <td className="num">{fmt.num(alert.step[f], 1)}</td>
+                    <td><div className="bar"><span style={{ width: `${total ? (100 * Math.max(0, alert.step[f])) / total : 0}%` }} /></div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
-      <p className="note" style={{ marginBottom: 0 }}>관리도가 낸 점검 시작 신호입니다. 부상 여부의 판단은 사람이 합니다.</p>
+      <p className="note">관리도가 낸 점검 시작 신호입니다. 부상 여부의 판단은 사람이 합니다.</p>
     </div>
   );
 }

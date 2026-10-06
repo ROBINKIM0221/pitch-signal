@@ -24,13 +24,13 @@
 
 그림 4. 탐지 사례 — Michael Soroka(선발, 어깨, 2025). 시작 구간에서 학습한 평소 구속에서 예상보다 낮은 등판이 이어지자 구속 하락 지수가 1을 넘어 경보가 울렸고, 관찰 창 안 첫 경보부터 IL 등재까지 4등판이었다(창 밖 경보 1회 포함하면 더 이르다).
 
-출처: dashboard-web/public/data/replay_647336_2025.json (data/processed/monitor_val.parquet에서 내보냄)
+출처: dashboard-web/public/data/replay/647336_2025.json (data/processed/monitor_val.parquet에서 내보냄)
 
 ## 05_case_missed.png
 
 그림 5. 놓친 사례 — José Soriano(선발, 팔꿈치, 2025). 관찰 창 다섯 등판의 구속이 평소 범위 안에 머물러 구속 하락 지수가 1에 이르지 못했다(창 안 최댓값 0.50). 구속이 떨어지지 않는 부상은 이 신호로 잡히지 않는다.
 
-출처: dashboard-web/public/data/replay_667755_2025.json
+출처: dashboard-web/public/data/replay/667755_2025.json
 
 ## 07_kbo_timeline.png
 
