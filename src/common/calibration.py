@@ -61,7 +61,7 @@ def t2_limit(t2: np.ndarray, start: float, max_per100: float) -> float:
     return float(np.sort(t2)[-(allowed + 1)])
 
 
-def _lowest_limit(per100, target: float, tol: float) -> float:
+def lowest_limit(per100, target: float, tol: float) -> float:
     """per100(한계) ≤ target이 되는 가장 작은 한계 (오차 tol). per100은 한계가 커질수록 줄어든다고 본다."""
     lo, hi = 0.0, FIRST_GUESS
     while per100(hi) > target:
@@ -74,13 +74,13 @@ def _lowest_limit(per100, target: float, tol: float) -> float:
 
 def fit_velo(seasons: list[np.ndarray], lam: float, target: float, tol: float = 0.01) -> VeloRule:
     """구속 하락 신호: 대조군(uv 목록) 실측 오경보가 100등판당 target 이하가 되는 가장 낮은 k."""
-    k = _lowest_limit(lambda k: false_alarms_per100([velo_signal(uv, VeloRule(lam, k))[0] for uv in seasons]), target, tol)
+    k = lowest_limit(lambda k: false_alarms_per100([velo_signal(uv, VeloRule(lam, k))[0] for uv in seasons]), target, tol)
     return VeloRule(lam, k)
 
 
 def fit_change(seasons: list[np.ndarray], lam: float, t2: float, target: float, tol: float = 0.01) -> ChangeRule:
     """폼 변화 신호: T² 한계를 고정한 채 대조군(u 목록) 실측 오경보가 100등판당 target 이하가 되는 가장 낮은 h."""
-    h = _lowest_limit(lambda h: false_alarms_per100([change_signal(u, ChangeRule(lam, t2, h))[0] for u in seasons]), target, tol)
+    h = lowest_limit(lambda h: false_alarms_per100([change_signal(u, ChangeRule(lam, t2, h))[0] for u in seasons]), target, tol)
     return ChangeRule(lam, t2, h)
 
 

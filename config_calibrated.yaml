@@ -83,3 +83,20 @@ monitor:
       RP:
         t2: 17.457
         h: 8.25
+comparators:
+  B2:
+    whip_cap: 9.0
+    SP:
+      h: 10.1406
+    RP:
+      h: 11.9297
+  B3:
+    SP:
+      d2: 22.5966
+    RP:
+      d2: 19.6412
+  B4:
+    SP:
+      h: 4.375
+    RP:
+      h: 3.6016
