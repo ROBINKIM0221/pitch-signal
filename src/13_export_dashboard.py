@@ -31,9 +31,17 @@ log = logging.getLogger("pitchsignal.export")
 
 
 def dump(name: str, payload) -> int:
+    """JSON으로 저장한다. 표준 JSON에는 NaN이 없으므로 결측은 null로 바꾼다 (브라우저의 JSON.parse가 NaN을 거부함)."""
     path = OUT / name
-    path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=_json_default), encoding="utf-8")
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=_json_default, allow_nan=False)
+    path.write_text(text, encoding="utf-8")
     return path.stat().st_size
+
+
+def records(frame: pd.DataFrame, digits: int) -> list[dict]:
+    """표를 레코드 목록으로. 결측은 None."""
+    rounded = frame.round(digits)
+    return rounded.astype(object).where(pd.notna(rounded), None).to_dict("records")
 
 
 def _json_default(value):
@@ -151,7 +159,7 @@ def highschool_payload(daily: pd.DataFrame, violated: pd.DataFrame, rules: dict,
                                        "acwr": r3(r.acwr) if r.acwr_ok else None, "flag": bool(r.acwr_flag)}
                                       for r in g.itertuples() if r.pitches != 0 or r.acwr_flag]})
         schools.append({"code": school, "pitchers": pitchers})
-    summary = hs.summary(daily, violated).to_dict("records")
+    summary = records(hs.summary(daily, violated), 3)
     return {"synthetic": synthetic, "season": rules["season"], "acwr_flag": flag, "kbsa": rules["kbsa"],
             "foreign_rules": {k: v for k, v in rules["foreign_rules"].items() if v}, "schools": schools, "summary": summary}
 
@@ -204,9 +212,9 @@ def main() -> None:
             {"z": {f: r3(getattr(a, f"z_{f}")) for f in core}, "step": {f: r3(getattr(a, f"step_{f}")) for f in core},
              "zc": {f: r3(getattr(a, f"zc_{f}")) for f in core}})} for a in mine.itertuples()])
     performance = {"split": SPLIT, "seasons": seasons, "design_far": 100 / cfg["monitor"]["arl0_target"],
-                   "results": pd.read_csv(TABLES / f"{SPLIT}_results.csv", encoding="utf-8-sig").round(3).to_dict("records"),
-                   "opcurve": pd.read_csv(TABLES / f"{SPLIT}_opcurve.csv", encoding="utf-8-sig").round(3).to_dict("records"),
-                   "tests": pd.read_csv(TABLES / f"{SPLIT}_tests.csv", encoding="utf-8-sig").round(4).to_dict("records")}
+                   "results": records(pd.read_csv(TABLES / f"{SPLIT}_results.csv", encoding="utf-8-sig"), 3),
+                   "opcurve": records(pd.read_csv(TABLES / f"{SPLIT}_opcurve.csv", encoding="utf-8-sig"), 3),
+                   "tests": records(pd.read_csv(TABLES / f"{SPLIT}_tests.csv", encoding="utf-8-sig"), 4)}
     sizes["performance.json"] = dump("performance.json", performance)
     sizes["bullpen.json"] = dump("bullpen.json", bullpen_file(replay, monitor, names))
     if (PROCESSED / "hs_daily.parquet").exists():
