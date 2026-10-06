@@ -4,6 +4,7 @@
     python -m src.06_monitor --baselines     # 4.1 평소가 움직이는 크기(합동 추정)와 투수-시즌별 시작 구간
     python -m src.06_monitor --theory-h      # 4.4 이론 관리한계 표와 설계 성능표
     python -m src.06_monitor --run           # 4.2 시작 구간 뒤 등판에 T²·MEWMA 적용 (이론 한계)
+    python -m src.06_monitor --calib-plot    # 4.3 개발셋 대조군의 투구 수 보정 그래프 (고정 기준선과 비교)
     python -m src.06_monitor --calibrate     # 4.5 두 신호의 실측 보정(역할별)과 개발셋 지표 → config_calibrated.yaml
 """
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -18,6 +20,7 @@ from src.common import baseline_window as bw
 from src.common import calibration as cal
 from src.common import metrics as mt
 from src.common import monitoring as mon
+from src.common import plots
 from src.common.config import ROOT, load_config, save_calibrated
 from src.core import stats_core as sc
 
@@ -151,6 +154,96 @@ def run(cfg: dict) -> None:
         lambda t: 100 * (t > limits["t2_ucl"].iloc[0]).mean())).round(2).to_dict())
 
 
+def dev_controls(cfg: dict) -> pd.DataFrame:
+    controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig")
+    return controls[controls["season"].isin(cfg["data"]["split"]["dev"])]
+
+
+def control_rows(table: pd.DataFrame, controls: pd.DataFrame) -> np.ndarray:
+    """표의 줄 가운데 대조군 투수-시즌의 것."""
+    return pd.MultiIndex.from_frame(table[["pitcher", "season"]]).isin(pd.MultiIndex.from_frame(controls[["pitcher", "season"]]))
+
+
+def calib_plot(cfg: dict) -> None:
+    """투구 수 보정 그래프 (단계 4.3). 개발셋 대조군 감시 등판에서 구간별 u 분산을 보고, 고정 기준선(비교용)과 견준다.
+
+    결과: reports/tables/calib_by_n.csv, calib_by_order.csv, reports/figures/calib_by_n.png.
+    평가 계획서 4.1 규칙: 대조군 등판이 min_bin_outings개 이상인 구간 중 분산이 var_limit를 넘는 곳이 있으면 하한을 올린다.
+    """
+    core, cp, rules = cfg["features"]["core"], cfg["monitor"]["calibration_plot"], cfg["baseline"]
+    controls = dev_controls(cfg)
+    moving = pd.read_parquet(PROCESSED / "monitor_dev.parquet").sort_values(bw.ORDER)
+    moving = moving[control_rows(moving, controls)]
+    outings = dev_outings(cfg)
+    outings = outings[control_rows(outings, controls)]
+    pitches_fb = pd.read_parquet(PROCESSED / "pitches_fb.parquet")
+    pitches_fb = pitches_fb[control_rows(pitches_fb, controls)]
+    fixed = mon.fixed_table(outings, mon.outing_arrays(pitches_fb, core), pd.read_parquet(PROCESSED / "baselines.parquet"),
+                            rules, core)
+
+    by_n, by_order = [], []
+    for name, table in (("moving", moving), ("fixed", fixed)):
+        for role in ROLES:
+            part = table[table["role"] == role]
+            by_n.append(mon.calibration_by_n(part, core, cp["n_bins"]).assign(role=role, baseline=name))
+            by_order.append(mon.calibration_by_order(part, core, cp["order_bins"]).assign(role=role, baseline=name))
+    by_n, by_order = pd.concat(by_n, ignore_index=True), pd.concat(by_order, ignore_index=True)
+    by_n.to_csv(TABLES / "calib_by_n.csv", index=False, encoding="utf-8-sig")
+    by_order.to_csv(TABLES / "calib_by_order.csv", index=False, encoding="utf-8-sig")
+
+    labels = {"velo": "구속", "rel_z": "수직 릴리스", "arm_angle": "팔 각도"}
+    colors = {"velo": plots.SERIES, "rel_z": "#d9822b", "arm_angle": "#3f9b6c"}
+    plots.use_style()
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.2))
+    for row, role in enumerate(ROLES):
+        ax = axes[row, 0]
+        part = by_n[(by_n["role"] == role) & (by_n["baseline"] == "moving")]
+        x = np.arange(len(part))
+        for j, f in enumerate(core):
+            ax.bar(x + (j - 1) * 0.26, part[f"var_u_{f}"], width=0.24, color=colors[f], label=labels[f])
+        for i, n in enumerate(part["outings"]):
+            ax.text(x[i], 0.04, f"{n:,}", ha="center", va="bottom", color=plots.INK_SECONDARY, fontsize=8)
+        ax.axhline(1.0, color=plots.MUTED, linewidth=0.8)
+        ax.axhline(cp["var_limit"], color=plots.MUTED, linewidth=0.8, linestyle="--")
+        ax.set_xticks(x, part["n_fb_bin"])
+        ax.set_ylim(0, max(1.6, float(part[[f"var_u_{f}" for f in core]].max().max()) + 0.15))
+        ax.set_title(f"{'선발' if role == 'SP' else '불펜'} 대조군: 주력 패스트볼 수 구간별 u 분산 (움직이는 기준선)")
+        ax.set_xlabel("등판의 주력 패스트볼 수 (막대 아래 숫자는 등판 수)")
+        ax.set_ylabel("u 분산 (정상이면 1, 점선은 한계 1.3)")
+        if row == 0:
+            ax.legend(frameon=False, ncol=3, loc="upper right")
+
+        ax = axes[row, 1]
+        for name, color, label in (("moving", plots.SERIES, "움직이는 기준선"), ("fixed", plots.MUTED, "고정 기준선 (비교용)")):
+            part = by_order[(by_order["role"] == role) & (by_order["baseline"] == name)]
+            ax.plot(part["order_bin"], part[[f"var_u_{f}" for f in core]].mean(axis=1), marker="o", color=color, label=label)
+        ax.axhline(1.0, color=plots.MUTED, linewidth=0.8)
+        ax.set_title(f"{'선발' if role == 'SP' else '불펜'} 대조군: 시작 구간 뒤 등판 순서별 u 분산 (세 특징 평균)")
+        ax.set_xlabel("시작 구간 뒤 몇 번째 감시 등판인지")
+        ax.set_ylabel("u 분산")
+        if row == 0:
+            ax.legend(frameon=False, loc="upper left")
+    dev = cfg["data"]["split"]["dev"]
+    fig.suptitle(f"표준화 점검, 개발셋 {dev[0]}~{dev[-1]} 대조군 {controls.groupby(['pitcher', 'season']).ngroups}명", x=0.01, ha="left", fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(ROOT / "reports" / "figures" / "calib_by_n.png")
+
+    flagged = []
+    for role in ROLES:
+        part = by_n[(by_n["role"] == role) & (by_n["baseline"] == "moving")]
+        flagged += [(role, *hit) for hit in mon.over_limit(part, core, cp["var_limit"], cp["min_bin_outings"])]
+    log.info("보정 그래프 저장. 등판 %d개 이상 구간 중 분산 %.1f 초과: %s", cp["min_bin_outings"], cp["var_limit"], flagged or "없음")
+    print(by_n[by_n["baseline"] == "moving"].to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+    print("\n고정 기준선과 비교 (등판 순서별, 세 특징 평균 분산)")
+    wide = by_order.assign(var=by_order[[f"var_u_{f}" for f in core]].mean(axis=1)).pivot_table(
+        index=["role", "order_bin"], columns="baseline", values="var", sort=False)
+    print(wide.to_string(float_format=lambda v: f"{v:.2f}"))
+    thin = by_n[(by_n["baseline"] == "moving") & (by_n["outings"] < cp["min_bin_outings"])]
+    if len(thin):
+        print("\n등판이 적어 판정에서 뺀 구간:", [(r, b, int(n)) for r, b, n in zip(thin["role"], thin["n_fb_bin"], thin["outings"])])
+    print("규칙에 걸린 구간:", flagged or "없음 → 하한 유지")
+
+
 def calibrate(cfg: dict) -> None:
     """두 신호의 실측 보정 (단계 4.5). 개발셋 대조군만으로 역할별 한계를 맞추고, 개발셋 사례로 지표를 낸다.
 
@@ -213,6 +306,7 @@ def main() -> None:
     ap.add_argument("--baselines", action="store_true", help="평소가 움직이는 크기의 합동 추정과 투수-시즌별 시작 구간 (단계 4.1)")
     ap.add_argument("--theory-h", action="store_true", help="이론 관리한계 표와 설계 성능표 (단계 4.4)")
     ap.add_argument("--run", action="store_true", help="시작 구간 뒤 등판에 T²·MEWMA 적용 (단계 4.2)")
+    ap.add_argument("--calib-plot", action="store_true", help="개발셋 대조군의 투구 수 보정 그래프 (단계 4.3)")
     ap.add_argument("--calibrate", action="store_true", help="두 신호의 실측 보정과 개발셋 지표 (단계 4.5)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[
@@ -224,10 +318,12 @@ def main() -> None:
         print(theory(cfg).pivot(index="p", columns="lambda", values="h").round(2).to_string())
     elif a.run:
         run(cfg)
+    elif a.calib_plot:
+        calib_plot(cfg)
     elif a.calibrate:
         calibrate(cfg)
     else:
-        ap.error("할 일을 골라 주세요 (--baselines, --theory-h, --run, --calibrate)")
+        ap.error("할 일을 골라 주세요 (--baselines, --theory-h, --run, --calib-plot, --calibrate)")
 
 
 if __name__ == "__main__":

@@ -158,14 +158,31 @@ def run_charts(table: pd.DataFrame, features: list[str], limits: dict, reset_aft
     return out
 
 
-def calibration_by_n(table: pd.DataFrame, features: list[str], edges: list[int]) -> pd.DataFrame:
-    """주력 패스트볼 수 구간별 등판 수, u의 분산(정상이면 1), T² 평균(정상이면 특징 수)."""
+def _binned(table: pd.DataFrame, values: pd.Series, features: list[str], edges: list[int], name: str) -> pd.DataFrame:
     labels = [f"{a}~{b - 1}" for a, b in zip(edges, edges[1:])] + [f"{edges[-1]}+"]
-    bins = pd.cut(table["n_fb"], [*edges, np.inf], right=False, labels=labels)
+    bins = pd.cut(values, [*edges, np.inf], right=False, labels=labels)
     grouped = table.groupby(bins, observed=True)
     out = pd.DataFrame({"outings": grouped.size(), **{f"var_u_{f}": grouped[f"u_{f}"].var() for f in features},
                         "mean_t2": grouped["t2"].mean()})
-    return out.rename_axis("n_fb_bin").reset_index()
+    return out.rename_axis(name).reset_index()
+
+
+def calibration_by_n(table: pd.DataFrame, features: list[str], edges: list[int]) -> pd.DataFrame:
+    """주력 패스트볼 수 구간별 등판 수, u의 분산(정상이면 1), T² 평균(정상이면 특징 수)."""
+    return _binned(table, table["n_fb"], features, edges, "n_fb_bin")
+
+
+def calibration_by_order(table: pd.DataFrame, features: list[str], edges: list[int]) -> pd.DataFrame:
+    """시작 구간 뒤 몇 번째 감시 등판인지(1부터) 구간별 같은 표. 표는 투수-시즌 안에서 시간순이어야 한다."""
+    order = table.groupby(["pitcher", "season"], sort=False).cumcount() + 1
+    return _binned(table, order, features, edges, "order_bin")
+
+
+def over_limit(by_n: pd.DataFrame, features: list[str], limit: float, min_outings: int) -> list[tuple]:
+    """등판이 min_outings개 이상인 구간 가운데 u 분산이 limit를 넘는 (구간, 특징, 분산) 목록 (평가 계획서 4.1 규칙)."""
+    full = by_n[by_n["outings"] >= min_outings]
+    return [(row["n_fb_bin"], f, float(row[f"var_u_{f}"])) for _, row in full.iterrows() for f in features
+            if row[f"var_u_{f}"] > limit]
 
 
 # ---------------------------------------------------------------------------

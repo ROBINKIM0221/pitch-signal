@@ -272,3 +272,20 @@ def test_dynamic_table_keeps_what_is_needed_to_explain_an_alarm():
     assert row["t2"] == pytest.approx(sum(row[f"u_{f}"] ** 2 for f in features))
     assert d @ np.linalg.inv(cov) @ d == pytest.approx(row["t2"])
     assert np.allclose(np.sqrt(np.diag(cov)), row[[f"sd_{f}" for f in features]].to_numpy(dtype=float))
+
+
+def test_calibration_by_order_bins_outings_by_their_place_after_the_start_up():
+    import pandas as pd
+    table = pd.DataFrame({"pitcher": [1] * 7 + [2] * 3, "season": 2022, "u_velo": [1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 0.5, 1.0, -1.0, 0.0],
+                          "t2": [1.0, 1.0, 4.0, 4.0, 9.0, 9.0, 0.25, 1.0, 1.0, 0.0]})
+    got = mon.calibration_by_order(table, ["velo"], [1, 3, 5]).set_index("order_bin")
+    assert list(got.index) == ["1~2", "3~4", "5+"]
+    assert list(got["outings"]) == [4, 3, 3]                   # 투수 1의 1·2번째 + 투수 2의 1·2번째 …
+    assert got.loc["3~4", "var_u_velo"] == pytest.approx(np.var([2.0, -2.0, 0.0], ddof=1))
+
+
+def test_over_limit_names_only_well_filled_bins_whose_variance_is_too_high():
+    import pandas as pd
+    by_n = pd.DataFrame({"n_fb_bin": ["3~5", "6~9", "16+"], "outings": [31, 250, 2000],
+                         "var_u_velo": [1.41, 1.35, 0.9], "var_u_rel_z": [0.9, 1.0, 1.31]})
+    assert mon.over_limit(by_n, ["velo", "rel_z"], limit=1.3, min_outings=200) == [("6~9", "velo", 1.35), ("16+", "rel_z", 1.31)]
