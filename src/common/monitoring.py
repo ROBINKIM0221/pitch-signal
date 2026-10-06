@@ -269,3 +269,18 @@ def fixed_table(outings: pd.DataFrame, arrays: dict, fits: pd.DataFrame, rules: 
         part["t2"] = (u ** 2).sum(axis=1)
         parts.append(part)
     return pd.concat(parts, ignore_index=True)
+
+
+def start_up_table(outings: pd.DataFrame, arrays: dict, rules: dict) -> pd.DataFrame:
+    """시작 구간이 있는 투수-시즌마다 단위를 없애는 값(scale)과 본인의 Σ_w (dynamic_table이 읽는 fits 표).
+
+    열: pitcher, season, role, n_baseline, baseline_end, scale(목록), Sw(한 줄로 편 목록). 합동 추정은 하지 않으므로
+    개발셋이 아닌 시즌(검증·봉인)에도 그대로 쓴다.
+    """
+    windows = bw.baseline_windows(outings, rules)
+    rows = []
+    for w in windows[windows["n_baseline"] > 0].itertuples():
+        scale, sw = start_up([arrays[(w.pitcher, w.season, game)] for game in w.baseline_games])
+        rows.append({"pitcher": w.pitcher, "season": w.season, "role": w.role, "n_baseline": w.n_baseline,
+                     "baseline_end": w.baseline_end, "scale": scale.tolist(), "Sw": sw.ravel().tolist()})
+    return pd.DataFrame(rows)

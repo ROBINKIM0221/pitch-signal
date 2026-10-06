@@ -67,3 +67,24 @@ def test_bootstrap_ci_brackets_the_mean_and_is_reproducible():
     mean, lo, hi = mt.bootstrap_ci(values, reps=500, seed=1)
     assert mean == pytest.approx(values.mean()) and lo < mean < hi and hi - lo < 0.15
     assert (mean, lo, hi) == mt.bootstrap_ci(values, reps=500, seed=1)
+
+
+def test_false_alarm_table_reports_rates_by_role_and_season_with_arl0():
+    table = pd.DataFrame({"role": ["SP"] * 4 + ["RP"] * 6, "season": [2021, 2021, 2022, 2022] + [2021] * 6,
+                          "alarm": [True, False, False, False, False, True, False, False, False, False]})
+    out = mt.false_alarm_table(table, "alarm").set_index(["role", "season"])
+    assert out.loc[("SP", 2021), "per100"] == 50.0 and out.loc[("SP", "all"), "per100"] == 25.0
+    assert out.loc[("RP", "all"), "arl0"] == 6.0 and out.loc[("all", "all"), "outings"] == 10
+    assert np.isnan(out.loc[("SP", 2022), "arl0"])            # 경보가 없으면 ARL0는 정의되지 않음
+
+
+def test_mcnemar_exact_uses_only_discordant_cases():
+    a = pd.Series([True, True, True, True, False, False, False, True, True, True])
+    b = pd.Series([True, True, False, False, False, False, False, False, False, False])     # 두 번째 방법이 놓친 사례 5개
+    p = mt.mcnemar_exact(a, b)
+    assert p == pytest.approx(2 * 0.5 ** 5)                   # 불일치 5쌍이 모두 한쪽: 양쪽 정확 검정 p = 2 × (1/2)^5
+    assert mt.mcnemar_exact(a, a) == 1.0
+
+
+def test_holm_adjusts_in_step_down_order():
+    assert mt.holm([0.01, 0.04, 0.03, 0.20]) == pytest.approx([0.04, 0.09, 0.09, 0.20])      # 0.04×2 = 0.08은 앞 단계 0.09보다 작아 0.09로

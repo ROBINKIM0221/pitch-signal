@@ -115,6 +115,7 @@ evaluation:
   baselines: [B1, B2, B3, B4]
   consensus: {enabled: true, min_methods: 2, members: [PROPOSED, B1, B2, B3, B4]}
   bootstrap_reps: 2000
+  opcurve_scales: [0.5, 0.7, 1.0, 1.4, 2.0, 3.0]   # 운영 곡선: 모든 한계에 곱하는 배수 (1.0이 설계점)
   multiple_testing: holm
   report_per_season_false_alarms: true
   exclude_missing_tracking_frac: 0.20   # 핵심 특징 결측 등판 비율이 이보다 크면 제외

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 OUTING = ["pitcher", "season", "game_pk"]
 SET = ["case_id", "group", "pitcher", "season"]
@@ -58,3 +59,35 @@ def bootstrap_ci(values: pd.Series, reps: int, seed: int) -> tuple[float, float,
     means = x[draws].mean(axis=1)
     lo, hi = np.percentile(means, [2.5, 97.5])
     return float(x.mean()), float(lo), float(hi)
+
+
+def false_alarm_table(table: pd.DataFrame, alarm: str) -> pd.DataFrame:
+    """대조군 감시 등판에서 역할별·시즌별(그리고 전체) 100등판당 경보 수와 실측 ARL0(경보 사이 평균 등판 수)."""
+    rows = []
+    for role in [*sorted(table["role"].unique()), "all"]:
+        by_role = table if role == "all" else table[table["role"] == role]
+        for season in [*sorted(by_role["season"].unique()), "all"]:
+            part = by_role if season == "all" else by_role[by_role["season"] == season]
+            n, a = len(part), int(part[alarm].sum())
+            rows.append({"role": role, "season": season, "outings": n, "alarms": a,
+                         "per100": 100 * a / n if n else np.nan, "arl0": n / a if a else np.nan})
+    return pd.DataFrame(rows)
+
+
+def mcnemar_exact(a: pd.Series, b: pd.Series) -> float:
+    """두 방법의 사례별 탐지 여부를 짝지어 비교하는 McNemar 정확 검정(양쪽)의 p값. 불일치 쌍만 쓴다."""
+    a, b = np.asarray(a, dtype=bool), np.asarray(b, dtype=bool)
+    only_a, only_b = int((a & ~b).sum()), int((~a & b).sum())
+    if only_a + only_b == 0:
+        return 1.0
+    return float(stats.binomtest(only_a, only_a + only_b, 0.5).pvalue)
+
+
+def holm(pvalues: list[float]) -> list[float]:
+    """Holm 단계적 보정. 입력 순서대로 보정한 p값을 돌려준다."""
+    p = np.asarray(pvalues, dtype=float)
+    order = np.argsort(p)
+    adjusted = np.maximum.accumulate((len(p) - np.arange(len(p))) * p[order])      # 작은 p부터 (m − 순위 + 1)배, 앞 단계보다 작아지지 않게
+    out = np.empty(len(p))
+    out[order] = np.minimum(adjusted, 1.0)
+    return out.tolist()

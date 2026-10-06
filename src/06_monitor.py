@@ -21,6 +21,7 @@ from src.common import calibration as cal
 from src.common import metrics as mt
 from src.common import monitoring as mon
 from src.common import plots
+from src.common.pipeline import dynamics_from_config
 from src.common.config import ROOT, load_config, save_calibrated
 from src.core import stats_core as sc
 
@@ -38,11 +39,6 @@ def lambdas(cfg: dict) -> list[float]:
 def dev_outings(cfg: dict) -> pd.DataFrame:
     outings = pd.read_parquet(PROCESSED / "outings.parquet")
     return outings[outings["season"].isin(cfg["data"]["split"]["dev"])]
-
-
-def dynamics_from_config(cfg: dict) -> dict:
-    saved = cfg["baseline"]["dynamics"]
-    return {role: mon.Dynamics(Q=np.array(saved[role]["Q"]), Se=np.array(saved[role]["Se"])) for role in ROLES}
 
 
 def baselines(cfg: dict) -> None:

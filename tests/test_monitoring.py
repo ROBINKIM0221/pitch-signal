@@ -289,3 +289,18 @@ def test_over_limit_names_only_well_filled_bins_whose_variance_is_too_high():
     by_n = pd.DataFrame({"n_fb_bin": ["3~5", "6~9", "16+"], "outings": [31, 250, 2000],
                          "var_u_velo": [1.41, 1.35, 0.9], "var_u_rel_z": [0.9, 1.0, 1.31]})
     assert mon.over_limit(by_n, ["velo", "rel_z"], limit=1.3, min_outings=200) == [("6~9", "velo", 1.35), ("16+", "rel_z", 1.31)]
+
+
+def test_start_up_table_fits_scale_and_within_covariance_for_pitcher_seasons_with_a_baseline():
+    import pandas as pd
+    rng = np.random.default_rng(28)
+    outing_table, fb = _pitcher_season(rng, n_outings=10)
+    short, short_fb = _pitcher_season(rng, n_outings=5)                      # 시작 구간(8개)을 못 채우는 투수
+    short, short_fb = short.assign(pitcher=2), short_fb.assign(pitcher=2)
+    outings, pitches = pd.concat([outing_table, short]), pd.concat([fb, short_fb])
+    rules = {"starter_outings": 8, "reliever_outings": 15, "reliever_min_fastballs": 120}
+    fits = mon.start_up_table(outings, mon.outing_arrays(pitches, ["velo", "rel_z", "arm_angle"]), rules)
+    assert list(fits["pitcher"]) == [1] and fits.iloc[0]["n_baseline"] == 8
+    scale, sw = mon.start_up([mon.outing_arrays(fb, ["velo", "rel_z", "arm_angle"])[(1, 2022, g)] for g in range(8)])
+    assert np.allclose(fits.iloc[0]["scale"], scale) and np.allclose(fits.iloc[0]["Sw"], sw.ravel())
+    assert fits.iloc[0]["baseline_end"] == pd.Timestamp("2022-04-01") + pd.Timedelta(days=35)
