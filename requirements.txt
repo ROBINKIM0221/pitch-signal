@@ -10,3 +10,6 @@ statsmodels>=0.14
 openpyxl>=3.1
 matplotlib>=3.8
 pytest>=8
+# 제안서 조립 (tools/build_proposal.py)
+python-docx>=1.1
+qrcode>=7

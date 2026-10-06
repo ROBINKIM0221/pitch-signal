@@ -37,13 +37,13 @@ export default function Performance() {
             <YAxis dataKey="detection" type="number" tick={{ fontSize: 11 }} width={44} label={{ value: "탐지율 (%)", angle: -90, position: "insideLeft", offset: 12, fontSize: 12 }} />
             <Tooltip formatter={(v, n) => [fmt.num(v, 1), n]} labelFormatter={(v) => `오경보 ${fmt.num(v, 2)}/100`} />
             <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12, paddingBottom: 6 }} />
-            <ReferenceLine x={data.design_far} stroke="var(--muted)" strokeDasharray="4 4" label={{ value: "설계점 1회", position: "top", fontSize: 11 }} />
+            <ReferenceLine x={data.design_far} stroke="var(--muted)" strokeDasharray="4 4" label={{ value: "설계점 1회", position: "insideTopLeft", fontSize: 11, fill: "var(--muted)" }} />
             {LINES.map((name) => (
               <Line key={name} data={data.opcurve.filter((p) => p.method === name).sort((a, b) => a.false_alarms_per100 - b.false_alarms_per100)}
                 dataKey="detection" name={name} stroke={COLORS[name]} strokeWidth={name === "구속 하락 신호" ? 3 : 1.5} dot={{ r: 3 }} isAnimationActive={false} />
             ))}
             {POINTS.map((name) => (
-              <Scatter key={name} data={data.opcurve.filter((p) => p.method === name)} dataKey="detection" name={name} fill={COLORS[name]} shape="diamond" legendType="diamond" isAnimationActive={false} />
+              <Scatter key={name} data={data.opcurve.filter((p) => p.method === name && p.scale === 1)} dataKey="detection" name={name} fill={COLORS[name]} shape="diamond" legendType="diamond" isAnimationActive={false} />
             ))}
           </ComposedChart>
         </ResponsiveContainer>

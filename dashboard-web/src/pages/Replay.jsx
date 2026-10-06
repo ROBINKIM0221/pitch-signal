@@ -93,9 +93,9 @@ function Pitcher({ data, shown, alerts, picked, setPicked, compact }) {
         <span><i style={{ background: "var(--ink)" }} />IL 등재(기준일)</span>
       </div>
       <ResponsiveContainer width="100%" height={compact ? 200 : 260}>
-        <ComposedChart data={rows} onClick={onClick} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+        <ComposedChart data={rows} onClick={onClick} margin={{ top: 10, right: 20, left: 0, bottom: 14 }}>
           <CartesianGrid vertical={false} stroke="var(--line)" />
-          <XAxis dataKey="i" type="number" domain={[0.5, data.outings.length + 0.5]} tickCount={8} tick={{ fontSize: 11 }} label={{ value: "등판 순서", position: "insideBottomRight", offset: -4, fontSize: 11 }} />
+          <XAxis dataKey="i" type="number" domain={[0.5, data.outings.length + 0.5]} tickCount={8} tick={{ fontSize: 11 }} label={{ value: "등판 순서", position: "bottom", offset: 0, fontSize: 11 }} />
           <YAxis domain={[Math.floor(Math.min(-0.5, ...rows.map((r) => r.velo_index ?? 0)) * 2) / 2, Math.ceil(yMax * 2) / 2]} tickFormatter={(v) => v.toFixed(1)} tick={{ fontSize: 11 }} width={34} />
           <Tooltip content={<IndexTip />} />
           {baseline > 0 && <ReferenceArea x1={0.5} x2={baseline + 0.5} fill="var(--base)" fillOpacity={0.18} />}
