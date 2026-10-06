@@ -45,3 +45,26 @@ def test_ewma_vectors_match_the_chart_including_restarts_after_alarms():
     z = myt.ewma_vectors(u, chart.alarm, 0.2)
     assert chart.alarm.sum() >= 2
     assert np.allclose((2 - 0.2) / 0.2 * (z ** 2).sum(axis=1), chart.q)
+
+
+def test_alerts_describe_each_alarm_with_a_card_and_a_decomposition_that_sums_to_t2():
+    import pandas as pd
+    from src.common import calibration as cal
+    cov = np.diag([0.25, 0.01, 1.0])                                   # 원래 단위의 예측 오차 공분산 (구속 mph², 릴리스 ft², 팔 각도 도²)
+    base = {"pitcher": 1, "season": 2023, "role": "SP", "game_date": pd.Timestamp("2023-06-01"), "cov": [cov.ravel().tolist()] * 3,
+            "expected_velo": 94.0, "expected_rel_z": 6.0, "expected_arm_angle": 40.0, "n_fb": 20}
+    table = pd.DataFrame({**base, "game_pk": [1, 2, 3],
+                          "u_velo": [-1.0, -2.5, 0.0], "u_rel_z": [0.0, -3.0, 0.0], "u_arm_angle": [0.0, 0.0, 0.0], "uv": [-1.0, -2.5, 0.0],
+                          "t2": [1.0, 15.25, 0.0], "velo_alarm": [False, True, False], "velo_index": [0.4, 1.3, 0.1],
+                          "change_alarm": [False, True, False], "change_index": [0.2, 1.1, 0.0]})
+    means = pd.DataFrame({"pitcher": 1, "season": 2023, "game_pk": [1, 2, 3], "velo": [93.5, 92.75, 94.0],
+                          "rel_z": [6.0, 5.7, 6.0], "arm_angle": [40.0, 40.0, 40.0]})
+    rules = {"SP": (cal.VeloRule(0.2, 1.7), cal.ChangeRule(0.2, 14.0, 12.0))}
+    alerts = myt.build_alerts(table, means, NAMES, rules)
+    assert list(alerts["signal"]) == ["velo_drop", "change"] and list(alerts["game_pk"]) == [2, 2]
+    velo = alerts.iloc[0]
+    assert velo["card"] == "구속 하락 지수 1.3, 최근 등판 구속 예상보다 −1.2 mph" and velo["rule"] == "EWMA"
+    change = alerts.iloc[1]
+    assert change["rule"] == "T²" and change["card"] == "수직 릴리스 −3.0σ, 구속 −2.5σ"
+    assert change["step_velo"] + change["step_rel_z"] + change["step_arm_angle"] == pytest.approx(15.25)
+    assert change["z_rel_z"] == pytest.approx(-3.0) and change["zc_rel_z"] == pytest.approx(-0.6)    # MEWMA 벡터: 0.2·(−3) (앞 등판은 0)

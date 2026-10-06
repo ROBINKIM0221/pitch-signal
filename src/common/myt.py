@@ -50,3 +50,35 @@ def ewma_vectors(u: np.ndarray, alarm: np.ndarray, lam: float) -> np.ndarray:
         if alarm[t]:
             z = np.zeros(u.shape[1])
     return out
+
+
+OUTING = ["pitcher", "season", "game_pk"]
+
+
+def build_alerts(table: pd.DataFrame, means: pd.DataFrame, features: list[str], rules: dict) -> pd.DataFrame:
+    """두 신호의 경보마다 한 줄: 카드 문구와 원인 분해.
+
+    table: 두 신호의 경보·지수가 붙은 감시 표(투수-시즌 안에서 시간순). means: 등판 평균(원래 단위, 특징 열).
+    rules: {역할: (VeloRule, ChangeRule)}. 폼 변화 경보는 T²와 MEWMA 중 어느 규칙이 울렸는지(rule), 특징별 표준화 이탈(z_*),
+    T²의 몫(step_*), MEWMA 벡터 성분(zc_*)을 적고, 구속 하락 경보는 지수와 최근 등판의 구속 예측 오차(mph)를 적는다.
+    """
+    t = table.merge(means[[*OUTING, *features]], on=OUTING, how="left").sort_values(["pitcher", "season", "game_date", "game_pk"])
+    rows = []
+    for (pitcher, season), g in t.groupby(["pitcher", "season"], sort=False):
+        velo_rule, change_rule = rules[g["role"].iloc[0]]
+        zc = ewma_vectors(g[[f"u_{f}" for f in features]].to_numpy(dtype=float), g["change_alarm"].to_numpy(dtype=bool), change_rule.lam)
+        for i, row in enumerate(g.itertuples(index=False)):
+            common = {"pitcher": pitcher, "season": season, "role": row.role, "game_pk": row.game_pk, "game_date": row.game_date}
+            if row.velo_alarm:
+                diff = row.velo - row.expected_velo
+                rows.append({**common, "signal": "velo_drop", "rule": "EWMA", "index": row.velo_index, "velo_mph": diff,
+                             "card": f"구속 하락 지수 {row.velo_index:.1f}, 최근 등판 구속 예상보다 {diff:+.1f} mph".replace("-", "−")})
+            if row.change_alarm:
+                p = len(features)
+                parts = decompose([getattr(row, f) for f in features], [getattr(row, f"expected_{f}") for f in features],
+                                  np.array(row.cov, dtype=float).reshape(p, p), features)
+                rows.append({**common, "signal": "change", "rule": "T²" if row.t2 > change_rule.t2 else "MEWMA",
+                             "index": row.change_index, "card": card(parts),
+                             **{f"z_{f}": parts.loc[f, "z"] for f in features}, **{f"step_{f}": parts.loc[f, "step"] for f in features},
+                             **{f"zc_{f}": zc[i, j] for j, f in enumerate(features)}})
+    return pd.DataFrame(rows)

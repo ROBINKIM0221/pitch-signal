@@ -127,3 +127,11 @@ def table_signals(table: pd.DataFrame, features: list[str], rules: dict) -> pd.D
         new["velo_alarm"][rows], new["velo_index"][rows] = velo_signal(part["uv"].to_numpy(dtype=float), velo)
         new["change_alarm"][rows], new["change_index"][rows] = change_signal(part[columns].to_numpy(dtype=float), change)
     return out.assign(**new)
+
+
+def final_rules(cfg: dict) -> dict:
+    """config_calibrated.yaml의 monitor.final(단계 4.5 결과)에서 역할별 (VeloRule, ChangeRule)을 만든다."""
+    final = cfg["monitor"]["final"]
+    return {role: (VeloRule(final["lam"], final["velo"][role]["k"]),
+                   ChangeRule(final["lam"], final["change"][role]["t2"], final["change"][role]["h"]))
+            for role in final["velo"]}

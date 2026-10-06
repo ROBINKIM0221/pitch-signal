@@ -72,3 +72,11 @@ def test_table_signals_use_each_roles_limits_and_restart_per_pitcher_season():
     assert out["velo_index"].iloc[2] > 1 and out["velo_index"].iloc[6] < 1
     assert not out["change_alarm"].any() and (out["change_index"] == 0).all()
     assert len(cal.sequences(table, ["a"])) == 2
+
+
+def test_final_rules_come_from_the_calibrated_settings():
+    cfg = {"monitor": {"final": {"lam": 0.2, "velo": {"SP": {"k": 1.66}, "RP": {"k": 1.70}},
+                                 "change": {"SP": {"t2": 21.9, "h": 13.7}, "RP": {"t2": 17.5, "h": 8.25}}}}}
+    rules = cal.final_rules(cfg)
+    assert rules["SP"] == (cal.VeloRule(0.2, 1.66), cal.ChangeRule(0.2, 21.9, 13.7))
+    assert rules["RP"][1].h == 8.25
