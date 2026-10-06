@@ -4,6 +4,7 @@
     python -m src.06_monitor --baselines     # 4.1 평소가 움직이는 크기(합동 추정)와 투수-시즌별 시작 구간
     python -m src.06_monitor --theory-h      # 4.4 이론 관리한계 표와 설계 성능표
     python -m src.06_monitor --run           # 4.2 시작 구간 뒤 등판에 T²·MEWMA 적용 (이론 한계)
+    python -m src.06_monitor --calibrate     # 4.5 두 신호의 실측 보정(역할별)과 개발셋 지표 → config_calibrated.yaml
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import numpy as np
 import pandas as pd
 
 from src.common import baseline_window as bw
+from src.common import calibration as cal
+from src.common import metrics as mt
 from src.common import monitoring as mon
 from src.common.config import ROOT, load_config, save_calibrated
 from src.core import stats_core as sc
@@ -22,6 +25,11 @@ PROCESSED = ROOT / "data" / "processed"
 TABLES = ROOT / "reports" / "tables"
 ROLES = ("SP", "RP")
 log = logging.getLogger("pitchsignal.monitor")
+
+
+def lambdas(cfg: dict) -> list[float]:
+    """고정값 λ와 민감도 분석용 λ."""
+    return [cfg["monitor"]["lam"], *cfg["monitor"]["sensitivity_lambdas"]]
 
 
 def dev_outings(cfg: dict) -> pd.DataFrame:
@@ -101,7 +109,7 @@ def theory(cfg: dict) -> pd.DataFrame:
     limits, design = [], []
     for p in m["theory_feature_counts"]:
         ucl = sc.t2_ucl(p, m["t2_alpha"])
-        for lam in m["lambdas"]:
+        for lam in lambdas(cfg):
             h = sc.calibrate_h(p, lam, ucl, target=m["arl0_target"], seed=m["calib"]["seed"], **sim)
             limits.append({"p": p, "lambda": lam, "t2_ucl": ucl, "h": h})
             for shift in m["design_shifts_sd"]:
@@ -111,6 +119,9 @@ def theory(cfg: dict) -> pd.DataFrame:
     limits = pd.DataFrame(limits)
     limits.to_csv(TABLES / "h_theory.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(design).to_csv(TABLES / "arl1_design.csv", index=False, encoding="utf-8-sig")
+    k = pd.DataFrame({"lambda": lambdas(cfg), "k": [cal.theory_k(lam, m["arl0_target"], seed=m["calib"]["seed"], **sim)
+                                                   for lam in lambdas(cfg)]})
+    k.to_csv(TABLES / "k_theory.csv", index=False, encoding="utf-8-sig")        # 구속 하락 신호(한 방향 EWMA)의 이론 한계
     return limits
 
 
@@ -122,7 +133,7 @@ def run(cfg: dict) -> None:
     path = TABLES / "h_theory.csv"
     limits = pd.read_csv(path, encoding="utf-8-sig") if path.exists() else theory(cfg)
     limits = limits[limits["p"] == len(core)].set_index("lambda")
-    table = mon.run_charts(table, core, {lam: (limits.loc[lam, "h"], limits.loc[lam, "t2_ucl"]) for lam in m["lambdas"]},
+    table = mon.run_charts(table, core, {lam: (limits.loc[lam, "h"], limits.loc[lam, "t2_ucl"]) for lam in lambdas(cfg)},
                            m["reset_after_alarm"])
     table.to_parquet(PROCESSED / "monitor_dev.parquet", compression="zstd", index=False)
 
@@ -133,11 +144,68 @@ def run(cfg: dict) -> None:
         print(role)
         print(mon.calibration_by_n(table[table["role"] == role], core, m["calibration_plot"]["n_bins"])
               .to_string(index=False, float_format=lambda v: f"{v:.2f}"))
-    alarms = table.groupby("role")[[f"alarm_{lam}" for lam in m["lambdas"]]].mean() * 100
+    alarms = table.groupby("role")[[f"alarm_{lam}" for lam in lambdas(cfg)]].mean() * 100
     print("이론 한계에서 100등판당 경보 수 — 감시 등판 전체 기준")
     print(alarms.to_string(float_format=lambda v: f"{v:.2f}"))
     print("T²만으로 100등판당:", (table.groupby("role")["t2"].apply(
         lambda t: 100 * (t > limits["t2_ucl"].iloc[0]).mean())).round(2).to_dict())
+
+
+def calibrate(cfg: dict) -> None:
+    """두 신호의 실측 보정 (단계 4.5). 개발셋 대조군만으로 역할별 한계를 맞추고, 개발셋 사례로 지표를 낸다.
+
+    결과: config_calibrated.yaml의 monitor.final, reports/tables/calibration_dev.csv,
+          monitor_dev.parquet에 두 신호의 경보·지수 열 추가. 검증셋은 쓰지 않는다.
+    """
+    core, m, dev = cfg["features"]["core"], cfg["monitor"], cfg["data"]["split"]["dev"]
+    lam, target, reps = m["lam"], 100 / m["arl0_target"], cfg["evaluation"]["bootstrap_reps"]
+    table = pd.read_parquet(PROCESSED / "monitor_dev.parquet").sort_values(bw.ORDER).reset_index(drop=True)
+    controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig")
+    controls = controls[controls["season"].isin(dev)]
+    cases = pd.read_csv(PROCESSED / "cases.csv", encoding="utf-8-sig")
+    windows = pd.read_csv(PROCESSED / "windows.csv", encoding="utf-8-sig")
+    windows = windows[windows["season"].isin(dev)]
+    is_control = pd.MultiIndex.from_frame(table[["pitcher", "season"]]).isin(
+        pd.MultiIndex.from_frame(controls[["pitcher", "season"]]))
+    k_theory = pd.read_csv(TABLES / "k_theory.csv", encoding="utf-8-sig").set_index("lambda")["k"]
+    h_theory = pd.read_csv(TABLES / "h_theory.csv", encoding="utf-8-sig")
+    h_theory = h_theory[h_theory["p"] == len(core)].set_index("lambda")["h"]
+    t2_start = sc.t2_ucl(len(core), m["t2_alpha"])
+
+    rules, rows = {}, []
+    for role in ROLES:
+        ctl = table[is_control & (table["role"] == role).to_numpy()]
+        seqs = cal.sequences(ctl, core)
+        t2 = cal.t2_limit(ctl["t2"].to_numpy(), t2_start, m["t2_max_far_per100"])
+        velo = cal.fit_velo([uv for _, uv in seqs], lam, target)
+        change = cal.fit_change([u for u, _ in seqs], lam, t2, target)
+        rules[role] = (velo, change)
+        rows.append({"role": role, "control_outings": len(ctl), "k_theory": k_theory[lam], "k": velo.k,
+                     "t2_theory": t2_start, "t2": t2, "h_theory": h_theory[lam], "h": change.h})
+    table = cal.table_signals(table, core, rules)
+    table.to_parquet(PROCESSED / "monitor_dev.parquet", compression="zstd", index=False)
+
+    summary = pd.DataFrame(rows).set_index("role")
+    for signal in ("velo", "change"):
+        alarm, index = f"{signal}_alarm", f"{signal}_index"
+        results = mt.window_results(windows, table, alarm=alarm, index=index).merge(cases[["case_id", "role"]], on="case_id")
+        for role, sel, part in [(r, is_control & (table["role"] == r).to_numpy(), results[results["role"] == r]) for r in ROLES] + \
+                               [("all", is_control, results)]:
+            d = mt.detection(part)
+            mean, lo, hi = mt.bootstrap_ci(mt.concordance(part), reps, cfg["seed"])
+            summary.loc[role, f"{signal}_far"] = 100 * table.loc[sel, alarm].mean()
+            summary.loc[role, f"{signal}_detection"] = 100 * d["detection_rate"]
+            summary.loc[role, f"{signal}_control_window"] = 100 * d["control_window_rate"]
+            summary.loc[role, f"{signal}_median_lead"] = d["median_lead"]
+            summary.loc[role, f"{signal}_concordance"] = mean
+            summary.loc[role, f"{signal}_concordance_lo"], summary.loc[role, f"{signal}_concordance_hi"] = lo, hi
+    summary.to_csv(TABLES / "calibration_dev.csv", encoding="utf-8-sig")
+    save_calibrated({"monitor": {"final": {
+        "lam": lam, "velo": {role: {"k": round(float(rules[role][0].k), 4)} for role in ROLES},
+        "change": {role: {"t2": round(float(rules[role][1].t2), 4), "h": round(float(rules[role][1].h), 4)} for role in ROLES}}}})
+
+    log.info("실측 보정 완료 (λ = %s, 신호마다 역할별 100등판당 %.1f). 결과 → %s", lam, target, TABLES / "calibration_dev.csv")
+    print(summary.T.to_string(float_format=lambda v: f"{v:.3f}"))
 
 
 def main() -> None:
@@ -145,6 +213,7 @@ def main() -> None:
     ap.add_argument("--baselines", action="store_true", help="평소가 움직이는 크기의 합동 추정과 투수-시즌별 시작 구간 (단계 4.1)")
     ap.add_argument("--theory-h", action="store_true", help="이론 관리한계 표와 설계 성능표 (단계 4.4)")
     ap.add_argument("--run", action="store_true", help="시작 구간 뒤 등판에 T²·MEWMA 적용 (단계 4.2)")
+    ap.add_argument("--calibrate", action="store_true", help="두 신호의 실측 보정과 개발셋 지표 (단계 4.5)")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=[
         logging.FileHandler(ROOT / "reports" / "logs" / "monitor.log", encoding="utf-8"), logging.StreamHandler()])
@@ -155,8 +224,10 @@ def main() -> None:
         print(theory(cfg).pivot(index="p", columns="lambda", values="h").round(2).to_string())
     elif a.run:
         run(cfg)
+    elif a.calibrate:
+        calibrate(cfg)
     else:
-        ap.error("할 일을 골라 주세요 (--baselines, --theory-h, --run)")
+        ap.error("할 일을 골라 주세요 (--baselines, --theory-h, --run, --calibrate)")
 
 
 if __name__ == "__main__":
