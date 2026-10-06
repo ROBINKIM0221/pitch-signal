@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { FEATURE, FEATURE_HELP, PART, PITCH_NAME, ROLE, fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK, TIP_STYLE } from "../lib/chart.jsx";
+import { recompute, syntheticAlert } from "../lib/signals.js";
 
 const SIGNAL = { velo: { name: "구속 하락 신호", color: "var(--velo)" }, change: { name: "폼 변화 신호", color: "var(--change)" } };
 const GROUP_NAME = { case: "사례", control: "대조군", other: "그 밖의 투수" };
@@ -29,6 +30,39 @@ function AlarmDot({ cx, cy, payload, onPick }) {
   );
 }
 
+export function clampMult(v) {
+  const m = Number(v);
+  if (!Number.isFinite(m) || m <= 0) return 1;
+  return Math.min(3, Math.max(0.3, Math.round(m * 100) / 100));
+}
+
+// 운영 곡선(performance.json)에서 배수에 해당하는 대조군 오경보(100등판당)를 선형 보간한다
+export function farAt(perf, m) {
+  if (!perf) return null;
+  const pick = (method) => {
+    const pts = perf.opcurve.filter((p) => p.method === method).sort((a, b) => a.scale - b.scale);
+    if (!pts.length) return null;
+    if (m <= pts[0].scale) return pts[0].false_alarms_per100;
+    if (m >= pts.at(-1).scale) return pts.at(-1).false_alarms_per100;
+    const hi = pts.find((p) => p.scale >= m), lo = pts[pts.indexOf(hi) - 1];
+    const w = (m - lo.scale) / (hi.scale - lo.scale);
+    return lo.false_alarms_per100 + w * (hi.false_alarms_per100 - lo.false_alarms_per100);
+  };
+  const v = pick("구속 하락 신호"), c = pick("폼 변화 신호");
+  return v == null ? null : { velo: v.toFixed(1), change: c == null ? "—" : c.toFixed(1) };
+}
+
+export function MultiplierControl({ value, onChange }) {
+  return (
+    <label className="mult"><span>한계 배수</span>
+      <input type="range" min={0.5} max={2} step={0.05} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label="한계 배수" style={{ width: 160 }} />
+      <span className="range-value" style={{ minWidth: "3.2em" }}>{value.toFixed(2)}</span>
+      <button className="btn" onClick={() => onChange(1)} disabled={value === 1} style={{ height: 28, padding: "0 10px" }}>기본 1.0</button>
+      <span className="caption" style={{ margin: 0 }}>1보다 작으면 경보가 더 잘 울리고(오경보도 늘고), 크면 덜 울립니다.</span>
+    </label>
+  );
+}
+
 function baselineCountOf(data) {
   return data.outings.filter((o) => o.phase === "baseline").length;
 }
@@ -50,14 +84,17 @@ export default function Replay() {
   const [open, setOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("p");
-  const setId = (next) => setParams(next ? { p: next } : {}, { replace: false });
+  const mult = clampMult(params.get("m"));
+  const setId = (next) => setParams(next ? { p: next, ...(mult !== 1 ? { m: String(mult) } : {}) } : {}, { replace: false });
+  const setMult = (m) => setParams({ ...(id ? { p: id } : {}), ...(clampMult(m) !== 1 ? { m: String(clampMult(m)) } : {}) }, { replace: true });
+  const { data: perf } = useJson("performance.json");
   const [shown, setShown] = useState(null);
   const [side, setSide] = useState(false);
   const [picked, setPicked] = useState(null);
 
   const sorted = useMemo(() => (index || []).slice().sort((a, b) => a.name.localeCompare(b.name) || b.season - a.season), [index]);
   useEffect(() => {
-    if (sorted.length && (!id || !sorted.some((p) => p.id === id))) setParams({ p: (sorted.find((p) => p.group === "case" && p.detected) || sorted[0]).id }, { replace: true });
+    if (sorted.length && (!id || !sorted.some((p) => p.id === id))) setParams({ p: (sorted.find((p) => p.group === "case" && p.detected) || sorted[0]).id, ...(mult !== 1 ? { m: String(mult) } : {}) }, { replace: true });
   }, [sorted, id]);
   const q = query.trim().toLowerCase();
   const matches = useMemo(() => sorted.filter((p) =>
@@ -128,18 +165,23 @@ export default function Replay() {
               onChange={(e) => setShown(Number(e.target.value))} aria-label="재생 위치" />
             <span className="range-value">{shown}/{me.outings.length} 등판</span>
           </label>
-          <span className="caption" style={{ margin: 0 }}>슬라이더를 왼쪽으로 돌리면 그 등판까지만 보고, 경보가 언제 울렸는지 확인할 수 있습니다.</span>
+          <MultiplierControl value={mult} onChange={setMult} />
         </div>
       )}
-      {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} setPicked={setPicked} />}
-      {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} setPicked={setPicked} compact />}
+      {mult !== 1 && <p className="notice">한계 배수 <b>{mult.toFixed(2)}</b> — 고정한 평가 계획의 설계점(1.0, 정상 상태 100등판에 1회)이 아닌 <b>사후 조정</b>입니다. 모든 한계(구속 k, 폼 T²·h)에 같은 배수를 곱했습니다.
+        {farAt(perf, mult) && <> 검증셋 대조군 기준 오경보는 100등판당 구속 하락 신호 약 <b>{farAt(perf, mult).velo}</b>회, 폼 변화 신호 약 <b>{farAt(perf, mult).change}</b>회입니다(운영 곡선에서 보간).</>}
+        {" "}이 배수에서 새로 생긴 경보의 카드는 원인 분해 없이 표준화 이탈만 보여 줍니다.</p>}
+      {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} setPicked={setPicked} multiplier={mult} />}
+      {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} setPicked={setPicked} compact multiplier={mult} />}
       {picked && <AlertCard alert={picked} onClose={() => setPicked(null)} />}
     </div>
   );
 }
 
-export function Pitcher({ data, shown, alerts, setPicked, compact, features = Object.keys(FEATURE), signals = ["velo", "change"], unit = "mph" }) {
+export function Pitcher({ data, shown, alerts, setPicked, compact, features = Object.keys(FEATURE), signals = ["velo", "change"], unit = "mph", multiplier = 1 }) {
   const n = data.outings.length;
+  // 한계 배수가 1이 아니면 내보낸 표준화 오차로 신호를 다시 계산한다 (배수 1이면 내보낸 값 그대로)
+  const source = multiplier === 1 || !data.limits?.velo_k ? data.outings : recompute(data.outings, data.limits, multiplier);
   const withChange = signals.includes("change");
   const featureName = (f) => (f === "velo" && unit !== "mph" ? FEATURE[f].replace("mph", unit) : FEATURE[f]);
   // IL 등재(기준일) 위치: 그 날짜 전 등판 수 + 0.5. 시즌 마지막 등판 뒤라면 축을 한 칸 늘려 오른쪽에 그린다.
@@ -148,7 +190,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
   const xMax = ilAt != null && ilAt > n ? n + 1.5 : n + 0.5;
   // 기준일 앞뒤로 선을 끊는다: 앞은 실선(_pre), 뒤는 점선(_post). 두 계열을 따로 그리면 기준일에서 이어지지 않는다.
   const split = (value, i) => (ilAt != null && i + 1 > ilAt ? [null, value] : [value, null]);
-  const rows = data.outings.slice(0, shown).map((o, i) => {
+  const rows = source.slice(0, shown).map((o, i) => {
     const [vp, vq] = split(o.velo_index, i), [cp, cq] = split(o.change_index, i);
     return {
       ...o, i: i + 1, alarm_here: o.velo_alarm || o.change_alarm,
@@ -161,7 +203,9 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
   });
   const afterIl = ilAt != null && ilAt < n;          // 기준일 뒤에도 등판이 있다
   const baseline = rows.filter((r) => r.phase === "baseline").length;
-  const myAlerts = (alerts || []).filter((a) => a.id === data.id);
+  const myAlerts = multiplier === 1 || !data.limits?.velo_k
+    ? (alerts || []).filter((a) => a.id === data.id)
+    : source.flatMap((o) => [...(o.velo_alarm ? [syntheticAlert(o, { ...data, unit }, "velo")] : []), ...(o.change_alarm ? [syntheticAlert(o, { ...data, unit }, "change")] : [])]);
   const visibleAlerts = myAlerts.filter((a) => a.date <= (rows.at(-1)?.date ?? ""));
   const openAlert = (row) => {
     const hit = myAlerts.filter((a) => a.date === row.date);
@@ -297,7 +341,8 @@ export function AlertCard({ alert, onClose }) {
   const velo = alert.signal === "velo_drop";
   const unit = alert.unit ?? "mph", delta = alert.velo_delta ?? alert.velo_mph;
   const feats = velo ? [] : Object.keys(FEATURE);
-  const total = velo ? 0 : feats.reduce((s, f) => s + Math.max(0, alert.step[f]), 0);
+  const hasStep = !velo && !!alert.step;
+  const total = hasStep ? feats.reduce((s, f) => s + Math.max(0, alert.step[f]), 0) : 0;
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
@@ -316,17 +361,17 @@ export function AlertCard({ alert, onClose }) {
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>
-          <p className="note" style={{ margin: "0 0 8px" }}>세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나 벗어났는지(표준화 이탈, σ)와 T² 기여 몫입니다.</p>
+          <p className="note" style={{ margin: "0 0 8px" }}>세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나 벗어났는지(표준화 이탈, σ){hasStep ? "와 T² 기여 몫" : ""}입니다.{!hasStep && " 원인 분해(기여 몫)는 설계점(배수 1.0)의 경보에서만 제공합니다."}</p>
           <div className="tbl-wrap">
             <table className="tbl">
-              <thead><tr><th>특징</th><th className="num">표준화 이탈</th><th className="num">기여 몫</th><th style={{ width: "40%" }}></th></tr></thead>
+              <thead><tr><th>특징</th><th className="num">표준화 이탈</th>{hasStep && <><th className="num">기여 몫</th><th style={{ width: "40%" }}></th></>}</tr></thead>
               <tbody>
                 {feats.map((f) => (
                   <tr key={f}>
                     <td>{FEATURE[f]}</td>
-                    <td className="num">{alert.z[f] > 0 ? "+" : ""}{fmt.num(alert.z[f], 1)}σ</td>
-                    <td className="num">{fmt.num(alert.step[f], 1)}</td>
-                    <td><div className="bar"><span style={{ width: `${total ? (100 * Math.max(0, alert.step[f])) / total : 0}%` }} /></div></td>
+                    <td className="num">{alert.z?.[f] > 0 ? "+" : ""}{fmt.num(alert.z?.[f], 1)}σ</td>
+                    {hasStep && <><td className="num">{fmt.num(alert.step[f], 1)}</td>
+                    <td><div className="bar"><span style={{ width: `${total ? (100 * Math.max(0, alert.step[f])) / total : 0}%` }} /></div></td></>}
                   </tr>
                 ))}
               </tbody>

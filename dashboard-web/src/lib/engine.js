@@ -80,11 +80,11 @@ export function run(rows, nStart, params) {
 }
 
 // 화면(리플레이 카드)이 읽는 모양으로 묶는다. 구속은 입력 단위(km/h)로 되돌려 보여 준다.
-export function analyze(rows, role, params, rules, unit = "km/h") {
+export function analyze(rows, role, params, rules, unit = "km/h", multiplier = 1) {
   const toMph = unit === "km/h" ? 1 / KMH_PER_MPH : 1, fromMph = 1 / toMph;
   const mphRows = rows.map((r) => ({ ...r, velo: r.velo * toMph }));
   const nStart = startUpLength(mphRows, role, rules);
-  const res = run(mphRows, nStart, params[role]);
+  const res = run(mphRows, nStart, { ...params[role], k: params[role].k * multiplier });
   const outings = rows.map((r, i) => ({
     date: r.date, game_pk: i + 1, n_fb: r.n_fb, n_all: r.n_all ?? null, fb: "직구", phase: res[i].phase, velo: round(r.velo, 1),
     ...(res[i].phase === "monitor" ? {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useJson } from "../lib/data.js";
 import { analyze, parseInput } from "../lib/engine.js";
-import { AlertCard, Pitcher } from "./Replay.jsx";
+import { AlertCard, MultiplierControl, Pitcher } from "./Replay.jsx";
 
 const PART = { elbow: "팔꿈치", shoulder: "어깨", hamstring: "햄스트링" };
 const EXAMPLE = `날짜,직구 평균구속(km/h),직구 수,전체 투구 수
@@ -35,6 +35,8 @@ export default function Kbo() {
   const [result, setResult] = useState(null);
   const [problems, setProblems] = useState([]);
   const [picked, setPicked] = useState(null);
+  const [mult, setMult] = useState(1);
+  useEffect(() => { if (result) run(); }, [mult]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify({ name, role, unit, text, season })); } catch { /* 저장 못 해도 동작엔 지장 없음 */ } }, [name, role, unit, text, season]);
 
   const run = () => {
@@ -42,7 +44,7 @@ export default function Kbo() {
     const { rows, problems: bad } = parseInput(text, Number(season));
     setProblems(bad);
     if (rows.length < 3) { setResult(null); setProblems([...bad, "등판이 3개 이상 있어야 합니다."]); return; }
-    const out = analyze(rows, role, params.roles, params.rules, unit);
+    const out = analyze(rows, role, params.roles, params.rules, unit, mult);
     const label = name.trim() || "직접 입력한 투수";
     setResult({
       data: { id: "manual", manual: true, name: label, season: Number(season), role, group: "other", il_date: null,
@@ -94,7 +96,8 @@ export default function Kbo() {
       </div>
       {result && (
         <>
-          <p className="caption">등판 {result.data.outings.length}개 중 시작 구간 {result.nStart}개, 감시 {result.monitored}개 · 경보 {result.alerts.length}건. 시작 구간은 {role === "SP" ? "선발 첫 8등판" : "불펜 첫 15등판과 직구 120구 중 늦은 시점"}입니다.</p>
+          <div className="toolbar"><MultiplierControl value={mult} onChange={setMult} /></div>
+          <p className="caption">등판 {result.data.outings.length}개 중 시작 구간 {result.nStart}개, 감시 {result.monitored}개 · 경보 {result.alerts.length}건. 시작 구간은 {role === "SP" ? "선발 첫 8등판" : "불펜 첫 15등판과 직구 120구 중 늦은 시점"}입니다.{mult !== 1 && ` 한계 배수 ${mult.toFixed(2)} (설계점 1.0이 아닌 조정값).`}</p>
           <Pitcher data={result.data} shown={result.data.outings.length} alerts={result.alerts} setPicked={setPicked} features={["velo"]} signals={["velo"]} unit={unit} />
         </>
       )}

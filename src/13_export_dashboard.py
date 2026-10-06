@@ -107,7 +107,9 @@ def replay_file(entry, monitor: pd.DataFrame, outings: pd.DataFrame, windows: pd
                "phase": "monitor" if o.game_pk in monitored else "baseline", **{f: r3(getattr(o, f)) for f in core}}
         if o.game_pk in monitored:
             m = by_game.loc[o.game_pk]
+            # u(세 특징의 표준화 예측 오차)와 uv(구속 하나로 돌린 표준화 오차)는 화면에서 한계 배수를 바꿔 다시 계산할 때 쓴다
             row.update({"exp": {f: r3(m[f"expected_{f}"]) for f in core}, "sd": {f: r3(m[f"sd_{f}"]) for f in core},
+                        "u": {f: round(float(m[f"u_{f}"]), 4) for f in core}, "uv": round(float(m["uv"]), 4),
                         "velo_index": r3(m["velo_index"]), "change_index": r3(m["change_index"]),
                         "velo_alarm": bool(m["velo_alarm"]), "change_alarm": bool(m["change_alarm"])})
         rows.append(row)
@@ -118,7 +120,7 @@ def replay_file(entry, monitor: pd.DataFrame, outings: pd.DataFrame, windows: pd
             "group": entry.group, "case_id": int(entry.case_id) if has_case else None, "part": opt(entry.part), "il_date": opt(entry.il_date),
             "detected": opt(entry.detected), "window": window_games,
             "baseline_end": max((r["date"] for r in rows if r["phase"] == "baseline"), default=None),
-            "limits": {"velo_k": r3(velo.k), "change_t2": r3(change.t2), "change_h": r3(change.h)}, "outings": rows}
+            "limits": {"velo_k": round(float(velo.k), 4), "change_t2": round(float(change.t2), 4), "change_h": round(float(change.h), 4), "lam": velo.lam}, "outings": rows}
 
 
 def catalog(monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, windows: pd.DataFrame, labels: pd.DataFrame, split: str) -> pd.DataFrame:
