@@ -12,9 +12,10 @@ const SEASON_OPTIONS = ["all", 2025, 2024, 2023, 2022, 2021];
 const KIND = { all: "전체", case: "사례(팔 부상 IL)", alarm: "경보가 있던 투수", control: "대조군" };
 
 function who(p) {
+  if (p.manual) return "직접 입력 · 간이 분석(참고용)";
   const tail = p.split === "dev" || p.season <= 2023 ? " · 개발셋(한계를 맞춘 시즌)" : "";
   if (p.group === "case") return `사례 · ${PART[p.part]} · IL ${p.il_date}${p.detected ? " · 신호 있음" : " · 신호 없음"}${tail}`;
-  if (p.group === "control") return `대조군 · 가상 기준일 ${p.il_date}${tail}`;
+  if (p.group === "control") return `대조군 · 짝지은 사례의 IL 등재일 ${p.il_date}${tail}`;
   return (p.il_date ? `팔 부상 IL ${p.il_date} (사례 기준 미충족)` : "팔 부상 IL 없음") + tail;
 }
 
@@ -81,7 +82,7 @@ export default function Replay() {
       <p className="lead">
         2021~2025 시즌에서 시작 구간을 채워 감시가 돌아간 <b>투수-시즌 {index.length.toLocaleString()}개</b>를 모두 찾아볼 수 있습니다. 2024~2025는 계획을 고정한 뒤 한 번 계산한 검증셋이고,
         2021~2023은 경보 한계를 맞추는 데 쓴 개발셋입니다(표시해 둠). 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보), 빨간 점은 경보,
-        검은 세로선은 팔 부상 IL 등재(대조군은 짝지은 사례의 기준일)입니다. 경보 점이나 경보 칩을 누르면 카드가 열립니다.
+        검은 세로선은 팔 부상 IL 등재일(대조군은 짝지은 사례의 IL 등재일)입니다. 경보 점이나 경보 칩을 누르면 카드가 열립니다.
       </p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
@@ -137,8 +138,10 @@ export default function Replay() {
   );
 }
 
-function Pitcher({ data, shown, alerts, setPicked, compact }) {
+export function Pitcher({ data, shown, alerts, setPicked, compact, features = Object.keys(FEATURE), signals = ["velo", "change"], unit = "mph" }) {
   const n = data.outings.length;
+  const withChange = signals.includes("change");
+  const featureName = (f) => (f === "velo" && unit !== "mph" ? FEATURE[f].replace("mph", unit) : FEATURE[f]);
   // IL 등재(기준일) 위치: 그 날짜 전 등판 수 + 0.5. 시즌 마지막 등판 뒤라면 축을 한 칸 늘려 오른쪽에 그린다.
   const before = data.il_date ? data.outings.filter((o) => o.date < data.il_date).length : null;
   const ilAt = before == null ? null : before + 0.5;
@@ -172,7 +175,7 @@ function Pitcher({ data, shown, alerts, setPicked, compact }) {
     if (target) openAlert(target);
   };
   const yMax = Math.max(1.6, ...rows.flatMap((r) => [r.velo_index ?? 0, r.change_index ?? 0])) * 1.08;
-  const ilLabel = data.group === "control" ? "기준일" : `IL 등재 ${fmt.date(data.il_date)}`;
+  const ilLabel = data.group === "control" ? `짝지은 사례의 IL 등재일 ${fmt.date(data.il_date)}` : `IL 등재일 ${fmt.date(data.il_date)}`;
   const ticks = outingTicks(n);
   const monitored = data.outings.filter((o) => o.phase === "monitor").length;
   const gaps = data.outings.slice(1).map((o, i) => ({ from: data.outings[i].date, to: o.date, days: Math.round((new Date(o.date) - new Date(data.outings[i].date)) / 86400000) }))
@@ -188,7 +191,7 @@ function Pitcher({ data, shown, alerts, setPicked, compact }) {
       {baseline > 0 && <ReferenceArea x1={0.5} x2={baseline + 0.5} fill="var(--base)" fillOpacity={0.12}
         label={withText ? { value: `시작 구간 · 평소를 배우는 첫 ${baseline}등판`, position: "insideBottom", ...LABEL, fill: "var(--muted)", dy: -6 } : undefined} />}
       {afterIl && <ReferenceArea x1={ilAt} x2={xMax} fill="var(--alarm)" fillOpacity={0.045}
-        label={withText ? { value: data.group === "control" ? "기준일 뒤" : "IL 등재 뒤 (복귀 등판)", position: "insideBottom", ...LABEL, fill: "var(--alarm)", dy: -6 } : undefined} />}
+        label={withText ? { value: data.group === "control" ? "짝지은 사례의 IL 등재일 뒤" : "IL 등재일 뒤 (복귀 등판)", position: "insideBottom", ...LABEL, fill: "var(--alarm)", dy: -6 } : undefined} />}
       {ilAt != null && <ReferenceLine x={ilAt} stroke="var(--ink)" strokeWidth={1.2}
         label={withText ? { value: ilLabel, position: ilAt > n * 0.8 ? "insideTopRight" : "insideTopLeft", ...LABEL, dy: -2 } : undefined} />}
     </>
@@ -203,11 +206,11 @@ function Pitcher({ data, shown, alerts, setPicked, compact }) {
         <h2>{data.name} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {data.season} {ROLE[data.role]} · {who(data)}</span></h2>
         <div className="legend">
           <span><i style={{ background: "var(--velo)" }} />구속 하락 지수</span>
-          <span><i style={{ background: "var(--change)" }} />폼 변화 지수</span>
+          {withChange && <span><i style={{ background: "var(--change)" }} />폼 변화 지수</span>}
           <span><i className="dot" style={{ background: "var(--alarm)" }} />경보 (지수 &gt; 1)</span>
           <span><i className="dash" />경보 한계 1</span>
           <span><i className="band" style={{ background: "var(--base-bg)", border: "1px solid var(--line-2)" }} />시작 구간</span>
-          <span><i style={{ background: "var(--ink)" }} />IL 등재(기준일)</span>
+          {data.il_date && <span><i style={{ background: "var(--ink)" }} />IL 등재일 (대조군은 짝지은 사례의 날짜)</span>}
         </div>
       </div>
       {visibleAlerts.length > 0 ? (
@@ -235,14 +238,14 @@ function Pitcher({ data, shown, alerts, setPicked, compact }) {
           <ReferenceLine y={1} stroke="var(--alarm)" strokeDasharray="4 4" />
           <ReferenceLine y={0} stroke="var(--line-2)" />
           <Line type="monotone" dataKey="vidx_pre" stroke="var(--velo)" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)" }} strokeWidth={2.2} connectNulls name="구속 하락 지수" isAnimationActive={false} />
-          <Line type="monotone" dataKey="cidx_pre" stroke="var(--change)" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)" }} strokeWidth={1.8} connectNulls name="폼 변화 지수" isAnimationActive={false} />
-          {afterIl && <Line type="monotone" dataKey="vidx_post" stroke="var(--velo)" strokeOpacity={0.55} strokeDasharray="4 3" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)", fillOpacity: 0.55 }} strokeWidth={2} connectNulls name="구속 하락 지수 (IL 뒤)" isAnimationActive={false} />}
-          {afterIl && <Line type="monotone" dataKey="cidx_post" stroke="var(--change)" strokeOpacity={0.55} strokeDasharray="4 3" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)", fillOpacity: 0.55 }} strokeWidth={1.6} connectNulls name="폼 변화 지수 (IL 뒤)" isAnimationActive={false} />}
+          {withChange && <Line type="monotone" dataKey="cidx_pre" stroke="var(--change)" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)" }} strokeWidth={1.8} connectNulls name="폼 변화 지수" isAnimationActive={false} />}
+          {afterIl && <Line type="monotone" dataKey="vidx_post" stroke="var(--velo)" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)" }} strokeWidth={2.2} connectNulls name="구속 하락 지수 (IL 뒤)" isAnimationActive={false} />}
+          {afterIl && withChange && <Line type="monotone" dataKey="cidx_post" stroke="var(--change)" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)" }} strokeWidth={1.8} connectNulls name="폼 변화 지수 (IL 뒤)" isAnimationActive={false} />}
           <Scatter dataKey="velo_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.velo_alarm)} />
-          <Scatter dataKey="change_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.change_alarm)} />
+          {withChange && <Scatter dataKey="change_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.change_alarm)} />}
         </ComposedChart>
       </ResponsiveContainer>
-      {!compact && Object.entries(FEATURE).map(([f, name], k, arr) => (
+      {!compact && features.map((f) => [f, featureName(f)]).map(([f, name], k, arr) => (
         <div key={f}>
           <h3 className="chart-title">{name} <small>{FEATURE_HELP[f]} 파란 띠는 평소 범위(예상 ± 2σ, 투구 수 반영).</small></h3>
           <ResponsiveContainer width="100%" height={k === arr.length - 1 ? 230 : 210}>
@@ -253,7 +256,7 @@ function Pitcher({ data, shown, alerts, setPicked, compact }) {
               <Tooltip content={<ChartTip render={(payload, label) => <FeatureTip r={rows[Math.round(label) - 1] || payload[0].payload} f={f} name={name} />} />} cursor={{ stroke: "var(--line-2)" }} />
               <Area dataKey={`band_${f}`} stroke="none" fill="var(--velo)" fillOpacity={0.14} connectNulls isAnimationActive={false} name="평소 범위" />
               <Line type="monotone" dataKey={`${f}_pre`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={name} />
-              {afterIl && <Line type="monotone" dataKey={`${f}_post`} stroke="var(--ink-2)" strokeOpacity={0.5} strokeDasharray="4 3" strokeWidth={1.4} dot={{ r: 2.5, strokeWidth: 1, strokeOpacity: 0.6 }} connectNulls isAnimationActive={false} name={`${name} (IL 뒤)`} />}
+              {afterIl && <Line type="monotone" dataKey={`${f}_post`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={`${name} (IL 뒤)`} />}
               <Scatter dataKey={f} name={name} shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.alarm_here)} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -284,14 +287,15 @@ function IndexTip({ r }) {
     <>
       <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div>
       {r.phase !== "baseline" && (
-        <div>구속 하락 지수 {fmt.num(r.velo_index)} · 폼 변화 지수 {fmt.num(r.change_index)} {r.alarm_here && <span className="alarm">· 경보 — 빨간 점을 누르면 카드가 열립니다</span>}</div>
+        <div>구속 하락 지수 {fmt.num(r.velo_index)}{r.change_index != null && <> · 폼 변화 지수 {fmt.num(r.change_index)}</>} {r.alarm_here && <span className="alarm">· 경보 — 빨간 점을 누르면 카드가 열립니다</span>}</div>
       )}
     </>
   );
 }
 
-function AlertCard({ alert, onClose }) {
+export function AlertCard({ alert, onClose }) {
   const velo = alert.signal === "velo_drop";
+  const unit = alert.unit ?? "mph", delta = alert.velo_delta ?? alert.velo_mph;
   const feats = velo ? [] : Object.keys(FEATURE);
   const total = velo ? 0 : feats.reduce((s, f) => s + Math.max(0, alert.step[f]), 0);
   useEffect(() => {
@@ -308,7 +312,7 @@ function AlertCard({ alert, onClose }) {
       </div>
       <p className="headline">{alert.card}</p>
       {velo ? (
-        <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(alert.velo_mph).toFixed(1)} mph {alert.velo_mph < 0 ? "낮았습니다" : "높았습니다"}.
+        <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(delta).toFixed(1)} {unit} {delta < 0 ? "낮았습니다" : "높았습니다"}.
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>

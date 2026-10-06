@@ -208,20 +208,24 @@ def highschool_payload(daily: pd.DataFrame, violated: pd.DataFrame, rules: dict,
 
 
 def kbo_payload(cfg: dict) -> dict:
-    """세 투수의 '신호 → 말소 → 결정' 날짜는 config 그대로(실제), 구속 EWMA는 수집 전이라 가상."""
+    """세 투수의 '신호 → 말소 → 결정' 날짜(config, 공개 기록). 구속 그래프는 화면에서 직접 입력한 자료로 그린다 (가상 자료 없음)."""
     k = cfg["kbo_case"]
-    rng = np.random.default_rng(cfg["seed"])
-    pitchers = []
-    for p in k["pitchers"]:
-        removed = pd.Timestamp(p["removed"])
-        dates = pd.date_range(removed - pd.Timedelta(days=5 * 12), removed - pd.Timedelta(days=5), freq="5D")
-        velo = 150 + np.cumsum(rng.normal(0, 0.3, len(dates))) - np.linspace(0, 1.5, len(dates))
-        z, series = 0.0, []
-        for d, v in zip(dates, velo):
-            z = 0.2 * (v - 150) / 0.7 + 0.8 * z
-            series.append({"date": d, "velo": r3(v), "index": r3(-3 * z / 1.7)})
-        pitchers.append({**p, "series": series})
-    return {"synthetic": True, "pitchers": pitchers, "response_only": k["response_only"]}
+    return {"synthetic": False, "pitchers": list(k["pitchers"]), "response_only": k["response_only"]}
+
+
+def engine_params(cfg: dict) -> dict:
+    """브라우저용 간이 엔진(구속 하나)이 빌려 쓰는 값: 역할별 투구별 흔들림 σ_w(mph), 평소가 움직이는 크기 Q·등판 흔들림 Σ_e(단위 없앤 값),
+    λ, 실측 한계 k, 시작 구간 규칙. 모두 MLB 개발셋에서 추정·보정한 값이다."""
+    n_min = pd.read_csv(TABLES / "n_min.csv", encoding="utf-8-sig")
+    dyn, final = cfg["baseline"]["dynamics"], cfg["monitor"]["final"]
+    v = dyn["features"].index("velo")
+    roles = {}
+    for role in ("SP", "RP"):
+        sigma_w = float(n_min[(n_min["group"] == role) & (n_min["feature"] == "velo")]["sigma_w"].iloc[0])
+        roles[role] = {"sigma_w": round(sigma_w, 4), "q": dyn[role]["Q"][v][v], "se": dyn[role]["Se"][v][v],
+                       "lam": final["lam"], "k": final["velo"][role]["k"]}
+    rules = {key: cfg["baseline"][key] for key in ("starter_outings", "reliever_outings", "reliever_min_fastballs")}
+    return {"roles": roles, "rules": rules, "source": "MLB 개발셋 2021~2023 (config_calibrated.yaml, reports/tables/n_min.csv)"}
 
 
 def main() -> None:
@@ -282,7 +286,7 @@ def main() -> None:
         sizes["highschool.json"] = dump("highschool.json", synthetic_highschool(cfg))
         synthetic.append("highschool.json")
     sizes["kbo_case.json"] = dump("kbo_case.json", kbo_payload(cfg))
-    synthetic.append("kbo_case.json")
+    sizes["engine_params.json"] = dump("engine_params.json", engine_params(cfg))
 
     version = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
     meta = {"as_of": outings["game_date"].max(), "generated": datetime.now().strftime("%Y-%m-%d %H:%M"), "version": version,

@@ -35,13 +35,13 @@ export default function Bullpen() {
       {p && (
         <div className="card">
           <div className="card-head">
-            <h2>{p.name} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {p.season} · {p.group === "case" ? `사례 · IL ${p.il_date}` : `대조군 · 가상 기준일 ${p.il_date}`}</span></h2>
+            <h2>{p.name} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {p.season} · {p.group === "case" ? `사례 · IL 등재일 ${p.il_date}` : `대조군 · 짝지은 사례의 IL 등재일 ${p.il_date}`}</span></h2>
             <div className="legend">
               <span><i className="band" style={{ background: "var(--velo)" }} />등판 투구 수</span>
               <span><i style={{ background: "var(--warn)" }} />ACWR (오른쪽 축)</span>
               <span><i className="dot" style={{ background: "var(--alarm)" }} />품질 채널 경보</span>
               <span><i className="dash" />ACWR 표시 기준 {data.acwr_flag}</span>
-              <span><i style={{ background: "var(--ink)" }} />IL 등재(기준일)</span>
+              <span><i style={{ background: "var(--ink)" }} />IL 등재일 (대조군은 짝지은 사례의 날짜)</span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
@@ -55,7 +55,7 @@ export default function Bullpen() {
               <Line yAxisId="a" type="monotone" dataKey="acwr" name="ACWR" stroke="var(--warn)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               <Scatter yAxisId="p" dataKey="marker" name="품질 채널 경보" shape={<Mark />} isAnimationActive={false} tooltipType="none" />
               <ReferenceLine yAxisId="a" y={data.acwr_flag} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`ACWR ${data.acwr_flag}`)} />
-              <ReferenceLine yAxisId="p" x={ilX} stroke="var(--ink)" strokeWidth={1.2} label={{ value: p.group === "case" ? `IL 등재 ${fmt.date(p.il_date)}` : `기준일 ${fmt.date(p.il_date)}`, position: "insideTopRight", ...LABEL }} />
+              <ReferenceLine yAxisId="p" x={ilX} stroke="var(--ink)" strokeWidth={1.2} label={{ value: p.group === "case" ? `IL 등재일 ${fmt.date(p.il_date)}` : `짝지은 사례의 IL 등재일 ${fmt.date(p.il_date)}`, position: "insideTopRight", ...LABEL }} />
             </ComposedChart>
           </ResponsiveContainer>
           <h3>부하 표시가 켜진 등판 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {flagged.length}건</span></h3>
@@ -83,7 +83,7 @@ export default function Bullpen() {
 function LoadTip({ d, names }) {
   return (
     <>
-      {d.placeholder ? <div><b>{d.date}</b> · IL 등재(기준일)</div> : <div><b>{d.date}</b> · 투구 {d.pitches}구 {d.back_to_back ? "· 연투" : ""}</div>}
+      {d.placeholder ? <div><b>{d.date}</b> · IL 등재일</div> : <div><b>{d.date}</b> · 투구 {d.pitches}구 {d.back_to_back ? "· 연투" : ""}</div>}
       {!d.placeholder && <div>3일 등판 {d.apps_3d}회 · 7일 투구 {fmt.num(d.p7d, 0)}구 · ACWR {fmt.num(d.acwr)}</div>}
       {d.flags.length > 0 && <div>표시: {d.flags.map((f) => names[f] || f).join(", ")}</div>}
       {d.signals.length > 0 && <div className="alarm">품질 채널 경보: {d.signals.map((s) => (s === "velo" ? "구속 하락" : "폼 변화")).join(", ")}</div>}

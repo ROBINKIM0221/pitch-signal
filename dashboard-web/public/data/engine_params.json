@@ -1,0 +1,1 @@
+{"roles":{"SP":{"sigma_w":0.97,"q":0.084764,"se":0.276989,"lam":0.2,"k":1.6562},"RP":{"sigma_w":0.8001,"q":0.158537,"se":0.458566,"lam":0.2,"k":1.7031}},"rules":{"starter_outings":8,"reliever_outings":15,"reliever_min_fastballs":120},"source":"MLB 개발셋 2021~2023 (config_calibrated.yaml, reports/tables/n_min.csv)"}

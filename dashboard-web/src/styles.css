@@ -222,3 +222,13 @@ button.btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
 .modal-back { position: fixed; inset: 0; background: rgba(20, 20, 19, 0.35); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .card.modal { width: min(680px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; margin: 0; box-shadow: 0 24px 60px rgba(20, 20, 19, 0.25); animation: pop .16s ease-out; }
 @keyframes pop { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- 직접 입력 ---------- */
+textarea.paste { width: 100%; font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, "D2Coding", monospace; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--card); color: var(--ink); resize: vertical; min-height: 120px; }
+textarea.paste:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15); }
+input.text { height: 34px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--card); min-width: 0; }
+input.text:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.15); }
+.toolbar-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; }
+.problems { margin: 8px 0 0; padding: 8px 12px 8px 28px; background: var(--alarm-bg); color: #9b2a25; border-radius: 10px; font-size: 12.5px; }
+.problems li { margin: 2px 0; }
+button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
