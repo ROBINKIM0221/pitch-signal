@@ -8,11 +8,11 @@ import Kbo from "./pages/Kbo.jsx";
 import About from "./pages/About.jsx";
 
 const MENU = [
-  { to: "/", no: "1·2", label: "리플레이 · 경보 카드", file: "replay_index.json" },
-  { to: "/performance", no: "3", label: "성능 비교", file: "performance.json" },
-  { to: "/highschool", no: "4", label: "고교 현황판", file: "highschool.json" },
-  { to: "/bullpen", no: "5", label: "불펜 부하", file: "bullpen.json" },
-  { to: "/kbo", no: "6", label: "KBO 사례", file: "kbo_case.json" },
+  { to: "/", no: "1", label: "리플레이 · 경보 카드", file: "pitchers.json" },
+  { to: "/performance", no: "2", label: "성능 비교", file: "performance.json" },
+  { to: "/highschool", no: "3", label: "고교 현황판", file: "highschool.json" },
+  { to: "/bullpen", no: "4", label: "불펜 부하", file: "bullpen.json" },
+  { to: "/kbo", no: "5", label: "KBO 사례", file: "kbo_case.json" },
   { to: "/about", no: "ⓘ", label: "소개 · 방법", file: null },
 ];
 
@@ -30,7 +30,9 @@ export default function App() {
           <small>피치시그널 · 평소와 달라진 등판을 알리는 점검 신호</small>
         </Link>
         {synthetic && <span className="badge synthetic">가상 데이터</span>}
-        {meta && !synthetic && current.file && <span className="badge real">검증셋 {meta.seasons?.join("~")} 실제 결과</span>}
+        {meta && !synthetic && current.file && (
+          <span className="badge real">{current.to === "/" ? `${meta.dev_seasons?.[0] ?? 2021}~${meta.seasons?.at(-1)} 실제 결과 · ${meta.seasons?.join("~")}는 검증셋` : `검증셋 ${meta.seasons?.join("~")} 실제 결과`}</span>
+        )}
         <div className="meta">
           {meta && <span>데이터 기준일 <b>{meta.as_of}</b></span>}
           {meta && <span>버전 <b>{meta.version}</b></span>}

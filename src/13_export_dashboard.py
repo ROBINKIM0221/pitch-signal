@@ -103,8 +103,8 @@ def replay_file(entry, monitor: pd.DataFrame, outings: pd.DataFrame, windows: pd
     by_game = mine.set_index("game_pk")
     rows = []
     for o in mine_outings.itertuples():
-        row = {"date": o.game_date, "game_pk": o.game_pk, "n_fb": int(o.n_fb), "phase": "monitor" if o.game_pk in monitored else "baseline",
-               **{f: r3(getattr(o, f)) for f in core}}
+        row = {"date": o.game_date, "game_pk": o.game_pk, "n_fb": int(o.n_fb), "n_all": int(o.n_all), "fb": o.primary_fb,
+               "phase": "monitor" if o.game_pk in monitored else "baseline", **{f: r3(getattr(o, f)) for f in core}}
         if o.game_pk in monitored:
             m = by_game.loc[o.game_pk]
             row.update({"exp": {f: r3(m[f"expected_{f}"]) for f in core}, "sd": {f: r3(m[f"sd_{f}"]) for f in core},
@@ -121,8 +121,8 @@ def replay_file(entry, monitor: pd.DataFrame, outings: pd.DataFrame, windows: pd
             "limits": {"velo_k": r3(velo.k), "change_t2": r3(change.t2), "change_h": r3(change.h)}, "outings": rows}
 
 
-def catalog(monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, windows: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
-    """검색용 전체 목록: 검증셋에서 감시 등판이 있는 모든 투수-시즌. 사례·대조군이면 그 역할을, 아니면 'other'를 적는다.
+def catalog(monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, windows: pd.DataFrame, labels: pd.DataFrame, split: str) -> pd.DataFrame:
+    """검색용 전체 목록: 한 분할(dev/val)에서 감시 등판이 있는 모든 투수-시즌. 사례·대조군이면 그 역할을, 아니면 'other'를 적는다.
     사례가 아닌데 팔 부상 IL이 있던 투수-시즌(사례 기준 미충족)은 그 첫 IL 날짜만 표시용으로 남긴다."""
     hits = mt.window_results(windows, monitor, alarm="velo_alarm", index="velo_index")
     hits = hits[hits["group"] == "case"].set_index("case_id")["hit"]
@@ -148,6 +148,7 @@ def catalog(monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, 
                      "alarms_velo": int(c["alarms_velo"]), "alarms_change": int(c["alarms_change"]), **row})
     out = pd.DataFrame(rows)
     out["id"] = out["pitcher"].astype(str) + "_" + out["season"].astype(str)
+    out["split"] = split
     return out
 
 
@@ -241,18 +242,31 @@ def main() -> None:
 
     sizes, synthetic = {}, []
     labels = pd.read_csv(PROCESSED / "labels.csv", encoding="utf-8-sig", parse_dates=["il_date"])
-    everyone = catalog(monitor, cases, controls, windows, labels[labels["season"].isin(seasons)])
+    all_cases = pd.read_csv(PROCESSED / "cases.csv", encoding="utf-8-sig", parse_dates=["il_date"])
+    all_controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig", parse_dates=["index_date"])
+    all_windows = pd.read_csv(PROCESSED / "windows.csv", encoding="utf-8-sig")
+    # 검색·리플레이는 개발셋(2021~2023)과 검증셋(2024~2025)을 모두 내보낸다. 봉인 시즌(2026)은 내보내지 않는다.
+    catalogs, alert_rows = [], []
+    for split in ("dev", "val"):
+        split_seasons = cfg["data"]["split"][split]
+        mon = pd.read_parquet(PROCESSED / f"monitor_{split}.parquet")
+        al = pd.read_parquet(PROCESSED / f"alerts_{split}.parquet")
+        sel = lambda d: d[d["season"].isin(split_seasons)]  # noqa: E731
+        part = catalog(mon, sel(all_cases), sel(all_controls), sel(all_windows), sel(labels), split)
+        catalogs.append(part)
+        for e in part.itertuples():
+            sizes[f"replay/{e.id}.json"] = dump(f"replay/{e.id}.json", replay_file(e, mon, outings, sel(all_windows), names, rules, core))
+        alert_rows += [
+            {"id": f"{a.pitcher}_{a.season}", "date": a.game_date, "signal": a.signal, "rule": a.rule, "index": r3(a.index), "card": a.card,
+             **({"velo_mph": r3(a.velo_mph)} if a.signal == "velo_drop" else
+                {"z": {f: r3(getattr(a, f"z_{f}")) for f in core}, "step": {f: r3(getattr(a, f"step_{f}")) for f in core},
+                 "zc": {f: r3(getattr(a, f"zc_{f}")) for f in core}})} for a in al.itertuples()]
+    everyone = pd.concat(catalogs, ignore_index=True)
     sizes["pitchers.json"] = dump("pitchers.json", [
         {"id": e.id, "name": names.get(e.pitcher, str(e.pitcher)), "season": e.season, "role": e.role, "group": e.group, "case_id": opt(e.case_id),
-         "part": opt(e.part), "il_date": opt(e.il_date), "detected": opt(e.detected), "n_mon": e.n_mon, "alarms_velo": e.alarms_velo, "alarms_change": e.alarms_change}
-        for e in everyone.itertuples()])
-    for e in everyone.itertuples():
-        sizes[f"replay/{e.id}.json"] = dump(f"replay/{e.id}.json", replay_file(e, monitor, outings, windows, names, rules, core))
-    sizes["alerts.json"] = dump("alerts.json", [
-        {"id": f"{a.pitcher}_{a.season}", "date": a.game_date, "signal": a.signal, "rule": a.rule, "index": r3(a.index), "card": a.card,
-         **({"velo_mph": r3(a.velo_mph)} if a.signal == "velo_drop" else
-            {"z": {f: r3(getattr(a, f"z_{f}")) for f in core}, "step": {f: r3(getattr(a, f"step_{f}")) for f in core},
-             "zc": {f: r3(getattr(a, f"zc_{f}")) for f in core}})} for a in alerts.itertuples()])
+         "part": opt(e.part), "il_date": opt(e.il_date), "detected": opt(e.detected), "n_mon": e.n_mon, "alarms_velo": e.alarms_velo,
+         "alarms_change": e.alarms_change, "split": e.split} for e in everyone.itertuples()])
+    sizes["alerts.json"] = dump("alerts.json", alert_rows)
     replay = pick_replay(cfg, monitor, cases, controls, windows)                       # 불펜 부하 화면의 표본
     performance = {"split": SPLIT, "seasons": seasons, "design_far": 100 / cfg["monitor"]["arl0_target"],
                    "results": records(pd.read_csv(TABLES / f"{SPLIT}_results.csv", encoding="utf-8-sig"), 3),
@@ -272,7 +286,7 @@ def main() -> None:
 
     version = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
     meta = {"as_of": outings["game_date"].max(), "generated": datetime.now().strftime("%Y-%m-%d %H:%M"), "version": version,
-            "split": SPLIT, "seasons": seasons, "synthetic": synthetic, "signals": SIGNALS,
+            "split": SPLIT, "seasons": seasons, "dev_seasons": cfg["data"]["split"]["dev"], "synthetic": synthetic, "signals": SIGNALS,
             "config_sha256": {n: hashlib.sha256((ROOT / n).read_bytes()).hexdigest() for n in ("config.yaml", "config_calibrated.yaml")},
             "sources": "MLB Statcast(Baseball Savant), MLB Stats API; 고교·KBO는 가상 데이터 표시 참고"}
     sizes["meta.json"] = dump("meta.json", meta)

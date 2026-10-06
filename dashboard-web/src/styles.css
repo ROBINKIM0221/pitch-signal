@@ -215,3 +215,10 @@ button.btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
   .results li .tags { display: none; }
 }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0 8px; }
+
+.notice { margin: 4px 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: #7a4410; font-size: 12.5px; line-height: 1.5; }
+
+/* ---------- 경보 카드 대화창 ---------- */
+.modal-back { position: fixed; inset: 0; background: rgba(20, 20, 19, 0.35); backdrop-filter: blur(2px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.card.modal { width: min(680px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; margin: 0; box-shadow: 0 24px 60px rgba(20, 20, 19, 0.25); animation: pop .16s ease-out; }
+@keyframes pop { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }

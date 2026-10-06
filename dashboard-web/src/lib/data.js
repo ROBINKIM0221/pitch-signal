@@ -37,4 +37,10 @@ export const fmt = {
 
 export const ROLE = { SP: "선발", RP: "불펜" };
 export const PART = { elbow: "팔꿈치", shoulder: "어깨" };
-export const FEATURE = { velo: "구속 (mph)", rel_z: "수직 릴리스 (ft)", arm_angle: "팔 각도 (도)" };
+export const FEATURE = { velo: "평균 구속 (mph)", rel_z: "수직 릴리스 높이 (ft)", arm_angle: "팔 각도 (도)" };
+export const FEATURE_HELP = {
+  velo: "그 등판에서 던진 주력 패스트볼의 평균 구속. 최고 구속이 아닙니다 (최고 구속은 부상 전 변화가 없어 쓰지 않습니다).",
+  rel_z: "공을 놓는 높이의 등판 평균 (구장 보정 뒤).",
+  arm_angle: "릴리스 때 팔 각도의 등판 평균. 0도가 수평, 90도가 수직.",
+};
+export const PITCH_NAME = { FF: "포심", SI: "싱커", FC: "커터" };

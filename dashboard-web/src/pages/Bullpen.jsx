@@ -53,7 +53,7 @@ export default function Bullpen() {
               <Tooltip content={<ChartTip render={(payload) => <LoadTip d={payload[0].payload} names={data.flag_names} />} />} cursor={{ fill: "rgba(20,20,19,0.04)" }} />
               <Bar yAxisId="p" dataKey="pitches" name="등판 투구 수" fill="var(--velo)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
               <Line yAxisId="a" type="monotone" dataKey="acwr" name="ACWR" stroke="var(--warn)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              <Scatter yAxisId="p" dataKey="marker" name="품질 채널 경보" shape={<Mark />} isAnimationActive={false} />
+              <Scatter yAxisId="p" dataKey="marker" name="품질 채널 경보" shape={<Mark />} isAnimationActive={false} tooltipType="none" />
               <ReferenceLine yAxisId="a" y={data.acwr_flag} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`ACWR ${data.acwr_flag}`)} />
               <ReferenceLine yAxisId="p" x={ilX} stroke="var(--ink)" strokeWidth={1.2} label={{ value: p.group === "case" ? `IL 등재 ${fmt.date(p.il_date)}` : `기준일 ${fmt.date(p.il_date)}`, position: "insideTopRight", ...LABEL }} />
             </ComposedChart>
