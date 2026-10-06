@@ -8,7 +8,7 @@ FROZEN: true
 > ⑥ 이 파일을 본인 메일로 발송. 고정 전에는 2024~2026 데이터로 성능 지표를 계산하지 않는다.
 
 - 작성자: 김형준 (UNIST, robin1967@unist.ac.kr)
-- 고정 일시: 2026-10-06 13:50 KST / 커밋 해시: (다음 커밋에서 기입) / Release 링크: https://github.com/ROBINKIM0221/pitch-signal/releases/tag/eval-plan-v1
+- 고정 일시: 2026-10-06 13:50 KST / 커밋 해시: 141cf84 (고정 내용의 커밋. 태그 eval-plan-v1은 이 해시를 적어 넣은 바로 다음 커밋을 가리킴) / Release 링크: https://github.com/ROBINKIM0221/pitch-signal/releases/tag/eval-plan-v1
 - 설정 파일 해시 (`config.yaml` SHA-256): f972e1a8ffc7ee306fb302b7ff23583a0400897c44fa4e18bbf35fd36c6d0feb
 - 개발셋 확정값 파일 해시 (`config_calibrated.yaml` SHA-256): ed2d6a382b76d3fe35956f2106b70aefd09e9495654b8886b4aa7d93179c2129
 
@@ -105,4 +105,4 @@ FROZEN: true
 ## 10. 변경 기록 (고정 후)
 | 일시 | 바꾼 내용 | 사유 | 검증셋 결과를 보기 전인가 |
 |---|---|---|---|
-| | | | |
+| 2026-10-06 | 고정 커밋 해시를 머리글에 기입 (내용 변경 없음) | 기록용 | 예 |
