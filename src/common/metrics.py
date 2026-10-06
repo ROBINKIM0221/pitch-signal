@@ -106,3 +106,25 @@ def window_flags(windows: pd.DataFrame, dates: pd.DataFrame, load: pd.DataFrame,
         hit = {f: bool(inside[f].any()) for f in flags}
         rows.append({"case_id": r.case_id, "group": r.group, "pitcher": r.pitcher, "season": r.season, **hit, "any": any(hit.values())})
     return pd.DataFrame(rows)
+
+
+def alarm_followup(table: pd.DataFrame, labels: pd.DataFrame, days: int = 30, alarm: str = "velo_alarm") -> dict:
+    """사후 지표(사전 등록 아님): 경보가 울린 등판 뒤 days일 안에 팔 부상 IL이 있는 비율과, 경보 없는 등판의 같은 비율. lift = 둘의 비.
+
+    labels: pitcher, il_date(팔꿈치·어깨만 넘길 것). 같은 투수의 IL 중 등판 날짜보다 뒤이고 days일 이내인 것이 있으면 '뒤따름'으로 센다.
+    """
+    il = labels.groupby("pitcher")["il_date"].apply(lambda s: np.sort(pd.to_datetime(s).to_numpy()))
+    dates = pd.to_datetime(table["game_date"]).to_numpy()
+    followed = np.zeros(len(table), dtype=bool)
+    for i, (pitcher, d) in enumerate(zip(table["pitcher"].to_numpy(), dates)):
+        events = il.get(pitcher)
+        if events is None:
+            continue
+        nxt = events[events > d]
+        followed[i] = len(nxt) > 0 and (nxt[0] - d) <= np.timedelta64(days, "D")
+    flag = table[alarm].to_numpy().astype(bool)
+    a, o = followed[flag], followed[~flag]
+    alarm_rate, other_rate = (a.mean() if len(a) else np.nan), (o.mean() if len(o) else np.nan)
+    return {"days": days, "alarms": int(flag.sum()), "alarm_followed": int(a.sum()), "alarm_rate": float(alarm_rate),
+            "other": int((~flag).sum()), "other_followed": int(o.sum()), "other_rate": float(other_rate),
+            "lift": float(alarm_rate / other_rate) if other_rate else np.nan}

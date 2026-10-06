@@ -1,0 +1,8 @@
+실행 시각: 2026-10-07 02:24:16 ~ 02:24:43
+커밋: 95e99703b9c5f22d0d33368d49b8873a09ca3468
+커밋 안 한 변경: 있음
+config.yaml SHA-256: f972e1a8ffc7ee306fb302b7ff23583a0400897c44fa4e18bbf35fd36c6d0feb
+config_calibrated.yaml SHA-256: ed2d6a382b76d3fe35956f2106b70aefd09e9495654b8886b4aa7d93179c2129
+H3: 구속 하락 신호 0.775/100 (통과), 폼 변화 신호 0.678/100 (통과) → 지지
+커밋 안 한 변경의 내용: src/common/metrics.py에 사후 지표 함수 alarm_followup 추가(평가 계산과 무관), tests/test_metrics.py, reports/logs/*.log. 평가에 쓰인 코드(common/evaluation·calibration·monitoring·comparators·metrics의 기존 함수)와 설정 파일은 커밋 95e9970 그대로.
+주요 결과: 사례 54(선발 24·불펜 30, 팔꿈치 45·어깨 9), 대조군 108, 감시 등판 9,933. 구속 하락 신호 일치도 0.472(0.361~0.593) → H1 지지 안 됨, 탐지 11.1% vs 대조군 창 4.6%(차이 6.5, −1.9~16.7), 선행 중앙값 1.5 → H2 지지 안 됨, 실측 오경보 0.775/100(선발 0.41·불펜 0.95) → H3 지지.

@@ -100,3 +100,16 @@ def test_window_flags_mark_any_load_flag_inside_the_window_period():
     out = mt.window_flags(w, dates, load, ["flag_acwr", "flag_apps_3d"]).set_index("group")
     assert out.loc["case", "flag_acwr"] and out.loc["case", "flag_apps_3d"] and out.loc["case", "any"]   # 4/20 표시는 창 밖, 5/5·5/9는 안
     assert not out.loc["control", "any"]                                                                  # 5/11 표시는 창(5/2~5/10) 밖
+
+
+def test_alarm_followup_compares_arm_il_within_days_after_alarm_vs_other_outings():
+    table = pd.DataFrame({"pitcher": [1, 1, 1, 2, 2], "season": 2024, "role": ["SP"] * 5,
+                          "game_date": pd.to_datetime(["2024-05-01", "2024-05-06", "2024-05-11", "2024-05-01", "2024-05-06"]),
+                          "velo_alarm": [False, True, False, True, False]})
+    labels = pd.DataFrame({"pitcher": [1, 2], "season": 2024, "il_date": pd.to_datetime(["2024-05-20", "2024-07-30"]), "part": ["elbow", "shoulder"]})
+    out = mt.alarm_followup(table, labels, days=30, alarm="velo_alarm")
+    # 투수 1: 5/1·5/6·5/11 등판 모두 5/20 IL 30일 안 → 3개 다 '뒤따름'. 투수 2: IL이 7/30이라 30일 밖 → 0개
+    assert out["alarms"] == 2 and out["alarm_followed"] == 1          # 경보 등판 5/6(투수1) 뒤따름, 5/1(투수2) 아님
+    assert abs(out["alarm_rate"] - 0.5) < 1e-9
+    assert out["other"] == 3 and abs(out["other_rate"] - 2 / 3) < 1e-9
+    assert abs(out["lift"] - 0.75) < 1e-9
