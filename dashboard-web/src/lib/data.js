@@ -6,7 +6,8 @@ const cache = new Map();
 
 export async function loadJson(name) {
   if (!cache.has(name)) {
-    const request = fetch(`${BASE}data/${name}`).then((r) => {
+    // 빌드마다 바뀌는 번호를 붙여, 화면 코드는 새 것인데 JSON만 옛 캐시가 남는 일을 막는다 (GitHub Pages 캐시 10분)
+    const request = fetch(`${BASE}data/${name}?v=${typeof __BUILD__ === "undefined" ? "dev" : __BUILD__}`).then((r) => {
       if (!r.ok) throw new Error(`${name}: ${r.status}`);
       return r.json();
     });
