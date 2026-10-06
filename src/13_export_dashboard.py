@@ -215,6 +215,32 @@ def kbo_payload(cfg: dict) -> dict:
     return {"synthetic": False, "pitchers": list(k["pitchers"]), "response_only": k["response_only"]}
 
 
+def watchlist(cfg: dict, sealed_catalog: pd.DataFrame, names: pd.Series, outings: pd.DataFrame, labels: pd.DataFrame) -> dict:
+    """2026 시즌 감시 현황: 최근 N주(기본 4주) 안에 경보가 울린 투수-시즌과 그 뒤 팔 부상 IL 여부. 운영 화면 '이번 주 점검 대상'의 실제 자료판."""
+    mon = pd.read_parquet(PROCESSED / "monitor_sealed.parquet")
+    as_of = pd.Timestamp(outings["game_date"].max())
+    since = as_of - pd.Timedelta(weeks=4)
+    arm = labels[labels["part"].isin(["elbow", "shoulder"]) & labels["season"].isin(cfg["data"]["split"]["sealed"])]
+    rows = []
+    for (pitcher, season), g in mon.sort_values("game_date").groupby(["pitcher", "season"]):
+        recent = g[(g["game_date"] >= since) & (g["velo_alarm"] | g["change_alarm"])]
+        if recent.empty:
+            continue
+        last = g.iloc[-1]
+        il_after = arm[(arm["pitcher"] == pitcher) & (arm["il_date"] > recent["game_date"].min())]["il_date"].min()
+        rows.append({"id": f"{pitcher}_{season}", "name": names.get(pitcher, str(pitcher)), "role": last["role"],
+                     "alarm_dates": [d.strftime("%Y-%m-%d") for d in recent["game_date"]],
+                     "signals": sorted({s for s, flag in (("velo", recent["velo_alarm"].any()), ("change", recent["change_alarm"].any())) if flag}),
+                     "last_outing": last["game_date"], "velo_index": r3(last["velo_index"]), "change_index": r3(last["change_index"]),
+                     "il_after": None if pd.isna(il_after) else il_after.strftime("%Y-%m-%d"),
+                     "n_mon": int(len(g)), "alarms_velo": int(g["velo_alarm"].sum()), "alarms_change": int(g["change_alarm"].sum())})
+    rows.sort(key=lambda r: (r["alarm_dates"][-1], r["name"]), reverse=True)
+    season_alarms = {"velo": int(mon["velo_alarm"].sum()), "change": int(mon["change_alarm"].sum()), "pitcher_seasons": int(mon.groupby(["pitcher", "season"]).ngroups),
+                     "outings": int(len(mon))}
+    return {"as_of": as_of.strftime("%Y-%m-%d"), "since": since.strftime("%Y-%m-%d"), "weeks": 4, "season": cfg["data"]["split"]["sealed"][0],
+            "rows": rows, "season_totals": season_alarms}
+
+
 def engine_params(cfg: dict) -> dict:
     """브라우저용 간이 엔진(구속 하나)이 빌려 쓰는 값: 역할별 투구별 흔들림 σ_w(mph), 평소가 움직이는 크기 Q·등판 흔들림 Σ_e(단위 없앤 값),
     λ, 실측 한계 k, 시작 구간 규칙. 모두 MLB 개발셋에서 추정·보정한 값이다."""
@@ -237,7 +263,6 @@ def main() -> None:
     core, seasons = cfg["features"]["core"], cfg["data"]["split"][SPLIT]
     OUT.mkdir(parents=True, exist_ok=True)
     monitor = pd.read_parquet(PROCESSED / f"monitor_{SPLIT}.parquet")
-    alerts = pd.read_parquet(PROCESSED / f"alerts_{SPLIT}.parquet")
     outings = pd.read_parquet(PROCESSED / "outings.parquet")
     cases = pd.read_csv(PROCESSED / "cases.csv", encoding="utf-8-sig", parse_dates=["il_date"])
     controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig", parse_dates=["index_date"])
@@ -253,7 +278,8 @@ def main() -> None:
     all_windows = pd.read_csv(PROCESSED / "windows.csv", encoding="utf-8-sig")
     # 검색·리플레이는 개발셋(2021~2023)과 검증셋(2024~2025)을 모두 내보낸다. 봉인 시즌(2026)은 내보내지 않는다.
     catalogs, alert_rows = [], []
-    for split in ("dev", "val"):
+    splits = ["dev", "val"] + (["sealed"] if (PROCESSED / "monitor_sealed.parquet").exists() else [])   # 봉인 시즌은 봉인 평가(09) 뒤에만
+    for split in splits:
         split_seasons = cfg["data"]["split"][split]
         mon = pd.read_parquet(PROCESSED / f"monitor_{split}.parquet")
         al = pd.read_parquet(PROCESSED / f"alerts_{split}.parquet")
@@ -278,7 +304,18 @@ def main() -> None:
                    "results": records(pd.read_csv(TABLES / f"{SPLIT}_results.csv", encoding="utf-8-sig"), 3),
                    "opcurve": records(pd.read_csv(TABLES / f"{SPLIT}_opcurve.csv", encoding="utf-8-sig"), 3),
                    "tests": records(pd.read_csv(TABLES / f"{SPLIT}_tests.csv", encoding="utf-8-sig"), 4)}
+    sealed_dir = ROOT / "reports" / "sealed"
+    if (sealed_dir / "sealed_results.csv").exists():
+        performance["sealed"] = {"seasons": cfg["data"]["split"]["sealed"],
+                                 "results": records(pd.read_csv(sealed_dir / "sealed_results.csv", encoding="utf-8-sig"), 3),
+                                 "opcurve": records(pd.read_csv(sealed_dir / "sealed_opcurve.csv", encoding="utf-8-sig"), 3),
+                                 "tests": records(pd.read_csv(sealed_dir / "sealed_tests.csv", encoding="utf-8-sig"), 4),
+                                 "run_info": (sealed_dir / "run_info.txt").read_text(encoding="utf-8")}
+    if (TABLES / "alarm_followup.csv").exists():
+        performance["followup"] = records(pd.read_csv(TABLES / "alarm_followup.csv", encoding="utf-8-sig"), 4)
     sizes["performance.json"] = dump("performance.json", performance)
+    if "sealed" in splits:
+        sizes["watchlist.json"] = dump("watchlist.json", watchlist(cfg, everyone[everyone["split"] == "sealed"], names, outings, labels))
     sizes["bullpen.json"] = dump("bullpen.json", bullpen_file(replay, monitor, names, cfg["load"]["acwr_flag"]))
     if (PROCESSED / "hs_daily.parquet").exists():
         daily = pd.read_parquet(PROCESSED / "hs_daily.parquet")
@@ -292,7 +329,8 @@ def main() -> None:
 
     version = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
     meta = {"as_of": outings["game_date"].max(), "generated": datetime.now().strftime("%Y-%m-%d %H:%M"), "version": version,
-            "split": SPLIT, "seasons": seasons, "dev_seasons": cfg["data"]["split"]["dev"], "synthetic": synthetic, "signals": SIGNALS,
+            "split": SPLIT, "seasons": seasons, "dev_seasons": cfg["data"]["split"]["dev"], "sealed_seasons": cfg["data"]["split"]["sealed"] if "sealed" in splits else None,
+            "synthetic": synthetic, "signals": SIGNALS,
             "config_sha256": {n: hashlib.sha256((ROOT / n).read_bytes()).hexdigest() for n in ("config.yaml", "config_calibrated.yaml")},
             "sources": "MLB Statcast(Baseball Savant), MLB Stats API; 고교·KBO는 가상 데이터 표시 참고"}
     sizes["meta.json"] = dump("meta.json", meta)

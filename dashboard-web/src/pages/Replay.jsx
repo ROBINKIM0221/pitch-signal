@@ -9,12 +9,20 @@ import { recompute, syntheticAlert } from "../lib/signals.js";
 
 const SIGNAL = { velo: { name: "구속 하락 신호", color: "var(--velo)" }, change: { name: "폼 변화 신호", color: "var(--change)" } };
 const GROUP_NAME = { case: "사례", control: "대조군", other: "그 밖의 투수" };
-const SEASON_OPTIONS = ["all", 2025, 2024, 2023, 2022, 2021];
+const SEASON_OPTIONS = ["all", 2026, 2025, 2024, 2023, 2022, 2021];
 const KIND = { all: "전체", case: "사례(팔 부상 IL)", alarm: "경보가 있던 투수", control: "대조군" };
+
+function splitTail(p) {
+  if (p.league === "AAA" || p.split === "aaa") return " · 트리플A(구장 보정 없음 · 참고용)";
+  if (p.split === "dev" || p.season <= 2023) return " · 개발셋(한계를 맞춘 시즌)";
+  if (p.split === "sealed" || p.season >= 2026) return " · 봉인 2026(계획 고정 뒤 1회 평가)";
+  return "";
+}
 
 function who(p) {
   if (p.manual) return "직접 입력 · 간이 분석(참고용)";
-  const tail = p.split === "dev" || p.season <= 2023 ? " · 개발셋(한계를 맞춘 시즌)" : "";
+  if (p.league === "AAA" || p.split === "aaa") return "트리플A · 구장 보정 없음 · MLB 한계값 차용 (참고용) · IL 기록은 MLB만 수집";
+  const tail = splitTail(p);
   if (p.group === "case") return `사례 · ${PART[p.part]} · IL ${p.il_date}${p.detected ? " · 신호 있음" : " · 신호 없음"}${tail}`;
   if (p.group === "control") return `대조군 · 짝지은 사례의 IL 등재일 ${p.il_date}${tail}`;
   return (p.il_date ? `팔 부상 IL ${p.il_date} (사례 기준 미충족)` : "팔 부상 IL 없음") + tail;
@@ -117,8 +125,8 @@ export default function Replay() {
     <div className="page">
       <h1>리플레이 · 경보 카드</h1>
       <p className="lead">
-        2021~2025 시즌에서 시작 구간을 채워 감시가 돌아간 <b>투수-시즌 {index.length.toLocaleString()}개</b>를 모두 찾아볼 수 있습니다. 2024~2025는 계획을 고정한 뒤 한 번 계산한 검증셋이고,
-        2021~2023은 경보 한계를 맞추는 데 쓴 개발셋입니다(표시해 둠). 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보), 빨간 점은 경보,
+        2021~2026 시즌에서 시작 구간을 채워 감시가 돌아간 <b>투수-시즌 {index.length.toLocaleString()}개</b>를 모두 찾아볼 수 있습니다. 2024~2025는 계획을 고정한 뒤 한 번 계산한 검증셋,
+        2026은 봉인해 두었다가 10월 7일 한 번 평가한 시즌이고, 2021~2023은 경보 한계를 맞추는 데 쓴 개발셋입니다(각각 표시해 둠). 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보), 빨간 점은 경보,
         검은 세로선은 팔 부상 IL 등재일(대조군은 짝지은 사례의 IL 등재일)입니다. 경보 점이나 경보 칩을 누르면 카드가 열립니다.
       </p>
       <div className="toolbar search">
@@ -128,7 +136,7 @@ export default function Replay() {
         </label>
         <label><span>시즌</span>
           <select value={season} onChange={(e) => { setSeason(e.target.value); setOpen(true); }}>
-            {SEASON_OPTIONS.map((s) => <option key={s} value={s}>{s === "all" ? "2021~2025 전체" : `${s}${s <= 2023 ? " (개발셋)" : " (검증셋)"}`}</option>)}
+            {SEASON_OPTIONS.map((s) => <option key={s} value={s}>{s === "all" ? "2021~2026 전체" : `${s}${s <= 2023 ? " (개발셋)" : s >= 2026 ? " (봉인)" : " (검증셋)"}`}</option>)}
           </select>
         </label>
         <label><span>구분</span>
@@ -143,7 +151,7 @@ export default function Replay() {
             {matches.slice(0, 40).map((p) => (
               <li key={p.id} role="option" aria-selected={p.id === id} className={p.id === id ? "on" : ""}
                 onMouseDown={() => { setId(p.id); setQuery(""); setOpen(false); }}>
-                <span className="who">{p.name} <small>{p.season} {ROLE[p.role]}{p.split === "dev" ? " · 개발셋" : ""}</small></span>
+                <span className="who">{p.name} <small>{p.season} {ROLE[p.role]}{p.league === "AAA" ? " · 트리플A" : p.split === "dev" ? " · 개발셋" : p.split === "sealed" ? " · 봉인" : ""}</small></span>
                 <span className="tags">
                   {p.group === "case" && <span className={`light ${p.detected ? "alarm" : "base"}`}>{p.detected ? "사례 · 신호 있음" : "사례 · 신호 없음"}</span>}
                   {p.group === "control" && <span className="light base">대조군</span>}

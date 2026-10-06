@@ -5,6 +5,7 @@ import Performance from "./pages/Performance.jsx";
 import HighSchool from "./pages/HighSchool.jsx";
 import Bullpen from "./pages/Bullpen.jsx";
 import Kbo from "./pages/Kbo.jsx";
+import Watch from "./pages/Watch.jsx";
 import About from "./pages/About.jsx";
 
 const MENU = [
@@ -12,7 +13,8 @@ const MENU = [
   { to: "/performance", no: "2", label: "성능 비교", file: "performance.json" },
   { to: "/highschool", no: "3", label: "고교 현황판", file: "highschool.json" },
   { to: "/bullpen", no: "4", label: "불펜 부하", file: "bullpen.json" },
-  { to: "/kbo", no: "5", label: "KBO · 직접 입력", file: "kbo_case.json" },
+  { to: "/kbo", no: "5", label: "KBO · 영입 전 점검", file: "kbo_case.json" },
+  { to: "/watch", no: "6", label: "2026 시즌 현황", file: "watchlist.json" },
   { to: "/about", no: "ⓘ", label: "소개 · 방법", file: null },
 ];
 
@@ -30,9 +32,9 @@ export default function App() {
           <small>피치시그널 · 평소와 달라진 등판을 알리는 점검 신호</small>
         </Link>
         {synthetic && <span className="badge synthetic">가상 데이터</span>}
-        {current.to === "/kbo" && <span className="badge synthetic">직접 입력 자료 · 간이 분석(참고용)</span>}
+        {current.to === "/kbo" && <span className="badge real">MLB·트리플A 공개 기록 · 트리플A는 참고용</span>}
         {meta && !synthetic && current.file && current.to !== "/kbo" && (
-          <span className="badge real">{current.to === "/" ? `${meta.dev_seasons?.[0] ?? 2021}~${meta.seasons?.at(-1)} 실제 결과 · ${meta.seasons?.join("~")}는 검증셋` : `검증셋 ${meta.seasons?.join("~")} 실제 결과`}</span>
+          <span className="badge real">{current.to === "/" ? `${meta.dev_seasons?.[0] ?? 2021}~${meta.sealed_seasons?.[0] ?? meta.seasons?.at(-1)} 실제 결과` : current.to === "/watch" ? "2026 봉인 시즌 · 10/7 평가" : `검증셋 ${meta.seasons?.join("~")} 실제 결과`}</span>
         )}
         <div className="meta">
           {meta && <span>데이터 기준일 <b>{meta.as_of}</b></span>}
@@ -56,6 +58,7 @@ export default function App() {
             <Route path="/highschool" element={<HighSchool />} />
             <Route path="/bullpen" element={<Bullpen />} />
             <Route path="/kbo" element={<Kbo />} />
+            <Route path="/watch" element={<Watch />} />
             <Route path="/about" element={<About />} />
           </Routes>
           <footer className="foot">

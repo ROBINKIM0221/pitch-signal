@@ -232,3 +232,6 @@ input.text:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0
 .problems { margin: 8px 0 0; padding: 8px 12px 8px 28px; background: var(--alarm-bg); color: #9b2a25; border-radius: 10px; font-size: 12.5px; }
 .problems li { margin: 2px 0; }
 button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card.scout .legend { margin-top: 2px; }
+.card.scout table.tbl td, .card.scout table.tbl th { padding: 6px 10px; font-size: 12.5px; }
