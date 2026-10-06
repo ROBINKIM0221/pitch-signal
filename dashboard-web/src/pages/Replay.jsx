@@ -167,7 +167,7 @@ function AlertCard({ alert, onClose }) {
       </div>
       <p style={{ fontSize: 15, margin: "6px 0 10px" }}>{alert.card}</p>
       {velo ? (
-        <p className="note">구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {fmt.num(alert.velo_mph, 1)} mph 달랐습니다.
+        <p className="note">구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(alert.velo_mph).toFixed(1)} mph {alert.velo_mph < 0 ? "낮았습니다" : "높았습니다"}.
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>
