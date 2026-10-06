@@ -3,6 +3,7 @@
 내려받은 Statcast를 시즌별로 읽어
   data/processed/outings.parquet      투수 × 경기 한 줄 (역할, 주력 패스트볼, 투구 수, 특징 F1~F9, 피안타·볼넷·아웃)
   data/processed/pitches_fb.parquet   핵심 특징에 결측이 없는 주력 패스트볼 투구별 특징
+수직 릴리스(rel_z)는 두 표 모두 구장 효과를 뺀 값이고, 뺀 값은 등판 표의 park_rel_z에 있다 (SPEC 3.5).
 을 만든다. --nmin은 개발셋만으로 투구 수 분포와 특징별 n_min을 내어 적격 등판 하한을 정할 근거를 만든다 (단계 2.4).
 성능 지표는 계산하지 않는다.
 
@@ -22,12 +23,14 @@ import numpy as np
 import pandas as pd
 
 from src.common import outings as og
+from src.common import park
 from src.common import plots
 from src.common import statcast as st
 from src.common.config import ROOT, load_config
 from src.core import stats_core as sc
 
 RAW = ROOT / "data" / "raw" / "statcast"
+VENUES = ROOT / "data" / "raw" / "venues.parquet"
 PROCESSED = ROOT / "data" / "processed"
 TABLES = ROOT / "reports" / "tables"
 COLUMNS = ["game_pk", "game_date", "pitcher", "p_throws", "inning", "inning_topbot", "at_bat_number", "pitch_number",
@@ -43,6 +46,15 @@ def build(cfg: dict) -> None:
         outings.append(o)
         pitches_fb.append(f)
     outings, pitches_fb = pd.concat(outings, ignore_index=True), pd.concat(pitches_fb, ignore_index=True)
+    if not VENUES.exists():
+        raise SystemExit("data/raw/venues.parquet가 없습니다. python -m src.01_download --venues 를 먼저 실행하세요.")
+    venues = pd.read_parquet(VENUES).rename(columns={"venue_id": "venue"})
+    outings = outings.merge(venues[["game_pk", "venue"]], on="game_pk", how="left")
+    log.info("구장을 모르는 등판 %d개 (보정 없이 둠)", int(outings["venue"].isna().sum()))
+    outings, pitches_fb = park.adjust(outings, pitches_fb, cfg["features"]["park_adjust"])
+    for f in cfg["features"]["park_adjust"]["features"]:
+        log.info("%s 구장 보정: 보정값 표준편차 %.4f, 보정하지 않은 등판 %.1f%%", f, outings[f"park_{f}"].std(),
+                 100 * (outings[f"park_{f}"] == 0).mean())
     outings.to_parquet(PROCESSED / "outings.parquet", compression="zstd", index=False)
     pitches_fb.to_parquet(PROCESSED / "pitches_fb.parquet", compression="zstd", index=False)
 

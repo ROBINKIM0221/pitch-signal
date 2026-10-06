@@ -49,6 +49,10 @@ features:
     share_thresholds: [3, 5, 8, 10, 15]   # 주력 패스트볼 수가 이보다 적은 등판의 비율을 표로 냄
     floor_candidates: [3, 4, 5]           # 하한 후보
   flip_rel_x_for_lhp: true
+  park_adjust:                  # 구장 보정 (SPEC 3.5, 2026-10-05 결정). 구장마다 다른 측정 차이를 등판 평균에서 뺌
+    features: [rel_z]           # 수직 릴리스만. 등판 간 분산의 34~40%가 구장 몫 (구속·팔 각도는 1~2%)
+    min_prior_outings: 30       # 그 시즌 그 구장의 앞선 적격 등판이 이보다 적으면 직전 시즌 값(없으면 0)을 씀
+    iterations: 20              # 투수 평균과 구장 효과를 번갈아 맞추는 횟수
 
 role:
   rule: season_majority_starts   # 그 시즌 등판의 과반이 선발이면 선발 투수
@@ -68,13 +72,13 @@ baseline:
   min_outings_any: 3              # 이보다 적으면 기준선을 만들지 않음 (stats_core.phase1 조건)
 
 monitor:
-  variants: [multi, union]        # 제안 방식 후보. multi = T² + 3개 특징 MEWMA, union = multi + 구속 EWMA
-  variant_tie_break: multi        # 개발셋 탐지율이 같으면 multi (단계 4.5 규칙)
-  lambdas: [0.1, 0.2, 0.3]        # 개발셋에서 하나를 고름 (단계 4.5 규칙)
+  # 신호 둘 (SPEC 3.8, 2026-10-06 결정): velo_drop = 구속 하락 신호(주, 한 방향 EWMA), change = 폼 변화 신호(보조, T² + 3개 특징 MEWMA)
+  lam: 0.2                        # 두 신호 모두 고정. 개발셋에서 0.1·0.2·0.3 차이 없음
+  sensitivity_lambdas: [0.1, 0.3] # 민감도 분석용
   t2_alpha: 0.001
-  t2_max_far_per100: 0.5          # T² 단독 개발셋 실측 오경보가 이를 넘으면 한계를 실측 0.5/100이 되는 값으로 올림
-  lambda_tie_break: 0.2
-  arl0_target: 100                # 100등판당 오경보 1회
+  t2_max_far_per100: 0.5          # 폼 변화 신호: T² 단독 실측 오경보가 이를 넘으면 한계를 실측 0.5/100이 되는 값으로 올림
+  arl0_target: 100                # 신호마다 100등판당 오경보 1회
+  calibrate_by: role              # 관리한계는 선발·불펜 따로 (2026-10-06 결정)
   reset_after_alarm: true
   calib: {n_sim: 4000, max_len: 1500, seed: 0}
   calibration_plot: {n_bins: [3, 6, 10, 16], var_limit: 1.3, raise_min_to: 5}

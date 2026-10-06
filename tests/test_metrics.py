@@ -39,3 +39,31 @@ def test_detection_summary_counts_cases_only():
     s = mt.detection(results)
     assert s == {"cases": 3, "detected": 2, "detection_rate": 2 / 3, "median_lead": 2.5,
                  "controls": 2, "control_window_rate": 0.5}
+
+
+def test_window_results_can_read_named_alarm_and_index_columns():
+    table = pd.concat([monitored(1, [11, 12, 13], [False, True, False]), monitored(2, [21, 22, 23], [False] * 3)])
+    table = table.rename(columns={"alarm": "velo_alarm"}).assign(velo_index=[0.2, 1.4, 0.3, -0.5, 0.1, 0.0])
+    w = windows((1, "case", 1, [11, 12, 13]), (1, "control", 2, [21, 22, 23]))
+    out = mt.window_results(w, table, alarm="velo_alarm", index="velo_index").set_index("group")
+    assert out.loc["case", "hit"] and out.loc["case", "top"] == 1.4          # 창 지수 = 창 안 지수의 최댓값
+    assert not out.loc["control", "hit"] and out.loc["control", "top"] == 0.1
+
+
+def test_concordance_is_the_share_of_controls_the_case_beats():
+    results = pd.DataFrame({"case_id": [1, 1, 1, 2, 2, 2, 3, 3], "group": ["case", "control", "control"] * 2 + ["case", "control"],
+                            "top": [1.0, 0.5, 1.0, 0.2, 0.8, 0.9, 2.0, 0.1]})
+    per_case = mt.concordance(results)
+    assert per_case.to_dict() == {1: 0.75, 2: 0.0, 3: 1.0}      # 1번: 이김 1 + 비김 0.5 → 0.75
+
+
+def test_concordance_skips_cases_without_controls():
+    results = pd.DataFrame({"case_id": [1, 2, 2], "group": ["case", "case", "control"], "top": [1.0, 0.3, 0.1]})
+    assert mt.concordance(results).to_dict() == {2: 1.0}
+
+
+def test_bootstrap_ci_brackets_the_mean_and_is_reproducible():
+    values = pd.Series(np.random.default_rng(0).normal(0.6, 0.3, 150))
+    mean, lo, hi = mt.bootstrap_ci(values, reps=500, seed=1)
+    assert mean == pytest.approx(values.mean()) and lo < mean < hi and hi - lo < 0.15
+    assert (mean, lo, hi) == mt.bootstrap_ci(values, reps=500, seed=1)
