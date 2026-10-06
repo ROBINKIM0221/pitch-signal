@@ -1,6 +1,6 @@
 # 제안서 4장(검증) 숫자표와 출처
 
-제안서에 들어가는 모든 숫자는 이 표의 결과 파일에서 가져온다. 봉인 평가(2026)는 아직 실행하지 않았다.
+제안서에 들어가는 모든 숫자는 이 표의 결과 파일에서 가져온다. 봉인 평가(2026)는 2026-10-07 02:24에 한 번 실행했다(reports/sealed/run_info.txt).
 
 ## 분할과 사례·대조군
 
@@ -20,7 +20,7 @@
 |---|---|---|---|---|
 | H1 구속 하락 지수 창 일치도 | 95% 부트스트랩 구간 하한 > 0.5 | 0.612 (0.533~0.692) | 지지 | reports/tables/val_tests.csv |
 | H2 첫 경보 선행 등판 중앙값 | ≥ 2 | 2.0 | 지지 | 〃 |
-| H3 봉인 실측 오경보 ≤ 2×설계 | ≤ 2.0/100 | (검증셋 참고값 0.85/100) | 봉인 평가 뒤 판정 | val_false_alarms.csv; 봉인은 미실행 |
+| H3 봉인 실측 오경보 ≤ 2×설계 | ≤ 2.0/100 | 구속 0.775, 폼 변화 0.678 (/100) | 지지 | reports/sealed/sealed_false_alarms.csv, sealed_tests.csv |
 | H4 불펜 부하 표시가 사례에서 더 많음 | McNemar p < 0.05, 사례 > 가장 가까운 대조군 | 64.7% vs 75.0%, p = 0.23 | 기각 | reports/tables/val_h4_load.csv |
 
 개발셋 참고: H1 0.607 (0.544~0.671) 지지, H2 1.0 기각 — reports/tables/dev_tests.csv
@@ -107,3 +107,31 @@
 | 짧은 등판 시뮬레이션 (실제 σ) | 3구 오경보 2.11% vs 1.00%; 기용만 짧아짐 10.6% vs 7.0%; 탐지 52.0% vs 52.3% | reports/tables/sim_short_outings.csv |
 | 1 SD 이동 탐지 평균 등판 (p=1, λ 0.2) | 7.0등판 (0.5 SD 20.1, 1.5 SD 4.1) | reports/tables/arl1_design.csv |
 | ACWR 표시 기준 | 1.8 (개발셋 대조군 불펜 기준 1.5에서 조정) | config.yaml, docs/SPEC.md 3.11 |
+
+## 봉인 2026 (10월 7일 1회 실행)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 사례 / 대조군 | 54 (선발 24·불펜 30, 팔꿈치 45·어깨 9) / 108 | reports/tables/cases_summary.csv |
+| 대조군 감시 등판 | 3,097 (전체 감시 등판 9,933) | reports/sealed/sealed_false_alarms.csv, run_info.txt |
+| 구속 하락 신호 일치도 (95%) → H1 | 0.472 (0.361~0.593) → 지지 안 됨 | reports/sealed/sealed_tests.csv |
+| 탐지율 / 대조군 창 안 경보 / 차이 | 11.1% / 4.6% / 6.5 (−1.9~16.7) | reports/sealed/sealed_results.csv |
+| 선행 중앙값 → H2 | 1.5 → 지지 안 됨 | 〃 |
+| 실측 오경보 /100 (구속·폼) → H3 | 0.775 (선발 0.406·불펜 0.947), 0.678 → 지지 | reports/sealed/sealed_false_alarms.csv |
+| 비교: 폼 변화 0.519, B1 0.574(오경보 7.2), B2 0.625, B3 0.500, B4 0.630, 합의 0.565 | | reports/sealed/sealed_results.csv |
+
+## 사후 지표: 경보 뒤 30일 안 팔 부상 IL (사전 등록 아님)
+
+| 분할 | 구속 하락 경보 수 | 경보 뒤 30일 IL 비율 | 경보 없는 등판 | 배율 | 출처 |
+|---|---|---|---|---|---|
+| 개발셋 2021~2023 | 346 | 6.6% | 4.2% | 1.6 | reports/tables/alarm_followup.csv |
+| 검증셋 2024~2025 | 200 | 10.5% | 4.8% | 2.2 | 〃 |
+| 봉인 2026 | 102 | 9.8% | 4.9% | 2.0 | 〃 |
+
+## 영입 전 점검 (화면 5)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 2026 KBO 외국인 투수 목록 | 26명 (신규·대체·재계약) | config_scout.yaml (연합뉴스 2026-07-09 전반기 결산 기사 기준) |
+| 공개 추적 기록 있는 투수 | 19명 (MLB 54 투수-시즌 + 트리플A 32 투수-시즌) | dashboard-web/public/data/scout.json, reports/logs/scout.log |
+| 트리플A 자료 | Baseball Savant Minor League Statcast 2023~2025, 선수별 조회, 구장 보정 없음 | src/16_scout.py |

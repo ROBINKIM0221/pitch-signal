@@ -307,7 +307,11 @@ def to_pdf(docx_path: Path, pdf_path: Path) -> Path:
     script = (f"$w = New-Object -ComObject Word.Application; $w.Visible = $false; "
               f"$d = $w.Documents.Open('{Path(docx_path).resolve()}'); $d.ExportAsFixedFormat('{Path(pdf_path).resolve()}', 17); "
               f"$d.Close(0); $w.Quit()")
+    before = Path(pdf_path).stat().st_mtime if Path(pdf_path).exists() else None
     subprocess.run(["powershell", "-NoProfile", "-Command", script], check=True)
+    after = Path(pdf_path).stat().st_mtime if Path(pdf_path).exists() else None
+    if after is None or (before is not None and after <= before):
+        raise RuntimeError(f"PDF가 저장되지 않았습니다: {pdf_path} — 다른 프로그램(뷰어)에 열려 있으면 닫고 다시 실행하거나 --pdf-name으로 다른 이름을 지정하세요")
     return pdf_path
 
 
@@ -316,11 +320,12 @@ def main() -> None:
     ap.add_argument("--source", default=str(SOURCE))
     ap.add_argument("--out", required=True, help="만들 .docx 경로")
     ap.add_argument("--pdf", action="store_true", help="같은 이름의 PDF도 만든다 (Word 필요)")
+    ap.add_argument("--pdf-name", default=None, help="PDF 파일 이름을 따로 지정 (기본: docx와 같은 이름)")
     args = ap.parse_args()
     out = build(Path(args.source), Path(args.out))
     print(f"저장: {out}")
     if args.pdf:
-        pdf = to_pdf(out, out.with_suffix(".pdf"))
+        pdf = to_pdf(out, out.with_name(args.pdf_name) if args.pdf_name else out.with_suffix(".pdf"))
         print(f"저장: {pdf}")
 
 
