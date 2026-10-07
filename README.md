@@ -25,7 +25,8 @@ python -m pytest -q                 # 모두 통과해야 함
 ## 폴더
 | 경로 | 내용 |
 |---|---|
-| `config.yaml` | 모든 선택값과 숫자 설정 |
+| `config.yaml` | 모든 선택값과 숫자 설정 (평가 계획 고정 뒤 변경 없음) |
+| `config_scout.yaml`, `config_kbsa.yaml` | 화면 5 영입 전 점검 대상 목록, 2025 전국체전 기록 변환 설정 (평가 설정과 분리) |
 | `docs/SPEC.md` | 명세서 |
 | `src/core/` | 검증된 참조 구현 (수정 금지): 핵심 통계 함수, KBSA 규정 엔진 |
 | `tests/` | 참조 구현 테스트 |

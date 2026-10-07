@@ -135,3 +135,25 @@
 | 2026 KBO 외국인 투수 목록 | 26명 (신규·대체·재계약) | config_scout.yaml (연합뉴스 2026-07-09 전반기 결산 기사 기준) |
 | 공개 추적 기록 있는 투수 | 19명 (MLB 54 투수-시즌 + 트리플A 32 투수-시즌) | dashboard-web/public/data/scout.json, reports/logs/scout.log |
 | 트리플A 자료 | Baseball Savant Minor League Statcast 2023~2025, 선수별 조회, 구장 보정 없음 | src/16_scout.py |
+| 트리플A IL 등재 | 9건 (목록 투수 7명, 모두 부위 미상 — 거래 기록에 사유 문구 없음) | MLB Stats API transactions sportId=11, data/raw/transactions/aaa_<시즌>.parquet, reports/logs/scout.log |
+
+## 고교 현황판 (화면 3) — 2025 전국체전 18세 이하부
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 대회 | 제106회 전국체육대회 18세 이하부, 2025-10-17 ~ 10-23, 15개교 14경기 (16강 7·8강 4·준결승 2·결승 1) | config_kbsa.yaml (KBSA 기록실 lig_idx 1356) |
+| 자료 | KBSA 기록실 경기 기록(/game/record_detail) 14경기, 2026-10-07 1회 수집 | data/raw/kbsa/ (저장소 밖), src/common/kbsa_boxscore.py |
+| 투수 / 등판 | 70명 / 101회 (한 경기 두 번 등판 1건 합산), 투구 수 모르는 등판 2 (준결승 1경기 상세 기록 미공개) | reports/logs/tournament.log |
+| 규정 위반 | 0건 (판정 불가 2) | data/processed/hs_tournament_violations.csv, reports/tables/hs_tournament_summary.csv |
+| 연투 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 5 / 3 / 0 | dashboard-web/public/data/highschool.json (totals) |
+| 91구 이상 / 100구 이상 등판, 최다 | 5 / 3, 105구 | 〃 |
+| 3경기 이상 등판 투수 / 누적 최다 | 6명 / 188구 | 〃 |
+| 결승 진출 두 학교 팀 합계 | S01 557구(투수 6명), S07 356구(투수 6명) | reports/figures/final/06_highschool.png |
+
+## 팀 불펜 현황판 (화면 4)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 범위 | MLB 30개 팀 × 2021~2026 = 180 팀-시즌, 팀당 불펜 15~36명 | dashboard-web/public/data/teams.json |
+| 팀 배정 | 투구 원데이터의 홈·원정과 초·말 (초에 던지면 홈 팀) | src/common/teams.py, data/processed/pitcher_game_team.parquet |
+| 날짜별 계산 | 브라우저에서 등판 목록으로 다시 계산 (load.py와 같은 정의) — 실제 불펜 3시즌 등판일 178개에서 파이프라인 값과 전부 일치 | dashboard-web/src/lib/load.js, dashboard-web/tests/load.test.js |
