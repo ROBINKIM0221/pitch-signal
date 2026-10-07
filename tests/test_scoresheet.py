@@ -107,3 +107,62 @@ def test_usual_flag_needs_enough_pitches_and_history():
     assert not f.loc[[1, 2, 3], "ball_flag"].any()
     assert not bool(f.loc[5, "ball_flag"])                      # 40구 미만은 판정하지 않음 (볼이 많아도)
     assert abs(f.loc[4, "usual"] - (21 + 20 + 22 + 30) / (60 * 3 + 35)) < 1e-9   # 평소 = 그 등판을 뺀 나머지 합
+
+
+def two_blob_stack():
+    mk = np.zeros((40, 12), np.uint8)
+    yy, xx = np.ogrid[:40, :12]
+    mk[((yy - 8) ** 2 + (xx - 6) ** 2 <= 16)] = 1
+    mk[((yy - 17) ** 2 + (xx - 6) ** 2 <= 16)] = 1                 # 두 원이 맞닿음
+    ys, xs = np.nonzero(mk)
+    mk = mk[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    gray = np.where(mk > 0, 40, 235).astype(np.uint8)
+    gray[mk.shape[0] // 2, :] = np.where(mk[mk.shape[0] // 2] > 0, 150, 235)   # 맞닿은 줄은 잉크가 옅다
+    return mk, gray
+
+
+def test_split_marks_cuts_a_two_mark_stack_at_its_faint_row():
+    mk, gray = two_blob_stack()
+    pieces = ss.split_marks(mk, gray, 2)
+    assert len(pieces) == 2
+    assert sum(int(p["mask"].sum()) for p in pieces) == int(mk.sum())          # 잉크를 잃거나 겹치지 않는다
+    assert abs(pieces[1]["y"] - mk.shape[0] // 2) <= 2                        # 옅은 줄 근처에서 자름
+    assert ss.split_marks(mk, gray, 1)[0]["mask"].shape == mk.shape
+
+
+def test_count_features_are_fixed_length_and_see_the_valley():
+    mk, gray = two_blob_stack()
+    one = np.zeros((9, 9), np.uint8); one[1:8, 1:8] = 1
+    f2 = ss.count_features(mk, gray, h0=9, w0=9, a0=40)
+    f1 = ss.count_features(one, np.where(one > 0, 40, 235).astype(np.uint8), h0=9, w0=9, a0=40)
+    assert f1.shape == f2.shape == (ss.N_COUNT_FEATURES,)
+    assert f2[10] > 1.8 and f1[10] <= 1.0                                     # 높이 비율
+    assert f2[13] >= 1 and f1[13] == 0                                        # 회색 농도 골짜기 수
+
+
+def test_stack_marks_makes_one_touching_blob():
+    rng = np.random.default_rng(0)
+    a = {"mask": np.ones((6, 4), np.uint8), "gray": np.full((6, 4), 40, np.uint8)}
+    b = {"mask": np.ones((5, 4), np.uint8), "gray": np.full((5, 4), 40, np.uint8)}
+    mk, gray = ss.stack_marks([a, b], rng)
+    import cv2
+    assert cv2.connectedComponents(mk, connectivity=8)[0] == 2 and mk.shape[0] <= 11 and gray.shape == mk.shape
+
+
+def test_holdout_split_is_reproducible_and_keeps_pilot_out():
+    games = list(range(100, 140)); pilot = {100, 101}
+    a = ss.holdout_split(games, pilot, seed=2025); b = ss.holdout_split(games, pilot, seed=2025)
+    assert a == b and a[100] == "pilot" and a[101] == "pilot"
+    tests = [g for g, s in a.items() if s == "test"]; labels = [g for g, s in a.items() if s == "label"]
+    assert len(tests) == 19 and len(labels) == 19 and not set(tests) & set(labels)
+
+
+def test_stack_marks_handles_tiny_marks_without_overflow():
+    rng = np.random.default_rng(1)
+    a = np.zeros((3, 4), np.uint8); a[0, 0] = 1                    # 닿기 어려운 성긴 획: 겹침을 키워 가다 넘치던 경우
+    b = np.zeros((2, 5), np.uint8); b[1, 4] = 1
+    c = np.zeros((4, 3), np.uint8); c[3, 0] = 1
+    tiny = [{"mask": m, "gray": np.where(m > 0, 40, 235).astype(np.uint8)} for m in (a, b, c)]
+    for _ in range(50):
+        st = ss.stack_marks(tiny, rng)
+        assert st is None or (st[0].shape == st[1].shape and st[0].sum() > 0)

@@ -281,6 +281,11 @@ def match_team(occupied: set, team_pas: dict[str, list[dict]]) -> list[tuple[flo
 
 # ---------- 볼 판정 입력 ----------
 
+def shape_matrix(df: pd.DataFrame) -> np.ndarray:
+    """모양만 쓰는 볼 판정 입력 (2026-10-08, 2차 모형): 모양 특징 12개 + 12x12 모양. 자른 조각과 합성 조각에도 같은 뜻을 갖는다."""
+    return np.hstack([df[FEATURES].to_numpy(float), np.vstack(df["pix"].to_numpy()).astype(float)])
+
+
 def ball_matrix(df: pd.DataFrame) -> np.ndarray:
     """분류기 입력: 모양 특징 12개(hr·wr = 기록지 안 중앙값 대비) + 12x12 모양 + 가운데 12x12 회색."""
     pix = np.vstack(df["pix"].to_numpy()).astype(float)
@@ -319,3 +324,96 @@ def usual_flags(o: pd.DataFrame, min_pitches: int = 40, z: float = 2.0, min_hist
                 o.at[i, "z_ball"] = zz
                 o.at[i, "ball_flag"] = bool(zz >= z)
     return o
+
+
+# ---------- 맞닿은 표시: 개수 세기·자르기 (2026-10-08) ----------
+# 같은 기록지의 단독 표시를 위아래로 맞닿게 쌓은 합성 견본으로 '덩어리 = 표시 몇 개'를 가르친다(stack_marks).
+# 특징은 모양 + 기록지 보통 표시 대비 크기 + 잉크·회색 농도 세로 단면(맞닿은 줄은 잉크가 옅다).
+
+N_BINS = 16
+N_COUNT_FEATURES = 14 + 2 * N_BINS + 144
+
+
+def _resample(v, n: int = N_BINS) -> np.ndarray:
+    v = np.asarray(v, float)
+    return np.repeat(v, n) if len(v) == 1 else np.interp(np.linspace(0, len(v) - 1, n), np.arange(len(v)), v)
+
+
+def _dark_profile(gray: np.ndarray) -> np.ndarray:
+    d = (255.0 - gray.astype(float)).mean(1)
+    d = d - d.min()
+    return d / max(1.0, d.max())
+
+
+def count_features(mask: np.ndarray, gray: np.ndarray, h0: float, w0: float, a0: float) -> np.ndarray:
+    """덩어리 하나의 개수 판정 특징 (길이 N_COUNT_FEATURES). h0·w0·a0 = 그 기록지 표시의 높이·너비·면적 중앙값."""
+    f = shape_features(dict(mask=mask))
+    ink = mask.sum(1).astype(float); ink /= max(1.0, ink.max())
+    ds = np.convolve(_dark_profile(gray), np.ones(3) / 3, "same")
+    valleys = sum(1 for i in range(2, len(ds) - 2)
+                  if ds[i] < ds[i - 1] and ds[i] <= ds[i + 1] and ds[i] < 0.6 * min(ds[:i].max(), ds[i + 1:].max()))
+    h, w = mask.shape
+    base = [f["w"], f["h"], f["area"], f["fill"], f["elong"], f["ang"], f["holes"], f["enclosed"], f["solidity"], f["aspect"],
+            h / h0, w / w0, f["area"] / a0, valleys]
+    return np.r_[base, _resample(ink), _resample(_dark_profile(gray)), f["pix"]]
+
+
+def stack_marks(parts: list[dict], rng) -> tuple[np.ndarray, np.ndarray] | None:
+    """단독 표시들(mask·gray)을 위아래로 맞닿게 쌓은 합성 덩어리. 겹침 0~2px(+필요하면 더), 좌우 ±1px. 한 덩어리가 안 되면 None."""
+    hs = [p["mask"].shape[0] for p in parts]
+    for extra in range(4):
+        ov = [min(int(rng.integers(0, 3)) + extra, hs[j] - 1, hs[j + 1] - 1) for j in range(len(parts) - 1)]   # 겹침 < 두 표시의 높이 (넘치지 않게)
+        W = max(p["mask"].shape[1] for p in parts) + 2
+        H = sum(p["mask"].shape[0] for p in parts) - sum(ov)
+        mk = np.zeros((H, W), np.uint8); gp = np.full((H, W), 255, np.uint8)
+        y = 0
+        for j, p in enumerate(parts):
+            h, w = p["mask"].shape
+            x = min(max(0, (W - w) // 2 + int(rng.integers(-1, 2))), W - w)
+            mk[y:y + h, x:x + w] |= p["mask"]
+            gp[y:y + h, x:x + w] = np.minimum(gp[y:y + h, x:x + w], p["gray"])
+            if j < len(ov):
+                y += h - ov[j]
+        if cv2.connectedComponents(mk, connectivity=8)[0] == 2:
+            ys, xs = np.nonzero(mk)
+            sl = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
+            return mk[sl], gp[sl]
+    return None
+
+
+def split_marks(mask: np.ndarray, gray: np.ndarray, k: int) -> list[dict]:
+    """덩어리를 위아래 k조각으로 자른다: 잉크·회색 농도가 가장 옅은 줄을, 조각 높이가 고르게(평균의 절반 이상) 되도록 고른다.
+    조각마다 mask(잉크 있는 범위로 자름)와 덩어리 안 위치 y·x."""
+    H = mask.shape[0]
+    if k <= 1 or H < 2 * k:
+        return [dict(mask=mask, y=0, x=0)]
+    cost = _dark_profile(gray) + mask.sum(1) / max(1.0, mask.sum(1).max())
+    minh = max(2, int(0.5 * H / k))
+    best = None
+    if k == 2:
+        for r in range(minh, H - minh + 1):
+            c = cost[r] + 0.5 * abs(r - H / 2) / H
+            if best is None or c < best[0]:
+                best = (c, [r])
+    else:
+        for r1 in range(minh, H - 2 * minh + 1):
+            for r2 in range(r1 + minh, H - minh + 1):
+                c = cost[r1] + cost[r2] + 0.5 * (abs(r1 - H / 3) + abs(r2 - 2 * H / 3)) / H
+                if best is None or c < best[0]:
+                    best = (c, [r1, r2])
+    cuts = [0] + best[1] + [H]
+    pieces = []
+    for a, b in zip(cuts[:-1], cuts[1:]):
+        part = mask[a:b]
+        ys, xs = np.nonzero(part)
+        if len(ys) == 0:
+            continue
+        pieces.append(dict(mask=part[ys.min():ys.max() + 1, xs.min():xs.max() + 1], y=a + int(ys.min()), x=int(xs.min())))
+    return pieces
+
+
+def holdout_split(game_ids, pilot: set, seed: int = 2025) -> dict:
+    """경기 나누기: 시범 경기는 'pilot', 나머지는 시드로 섞어 절반 'test'(학습에 쓰지 않는 시험용), 절반 'label'(2차 학습용)."""
+    rest = np.array(sorted(set(int(g) for g in game_ids) - set(pilot)))
+    test = set(np.random.default_rng(seed).permutation(rest)[: len(rest) // 2].tolist())
+    return {int(g): ("pilot" if g in pilot else "test" if g in test else "label") for g in game_ids}

@@ -98,6 +98,42 @@ function FlowStrip({ flow }) {
   );
 }
 
+function BallTip({ d }) {
+  return (
+    <>
+      <div><b>{fmt.date(d.date)}</b> · {d.opponent}</div>
+      <div>볼 비율(추정) <b>{fmt.num(d.ball, 0)}%</b> · 읽은 표시 {d.marks}개 / 공식 {d.pitches ?? "?"}구</div>
+      {d.flag && <div style={{ color: "var(--warn)" }}>평소보다 볼이 많았던 등판</div>}
+    </>
+  );
+}
+
+/** 등판별 볼 비율(추정): 점 하나 = 검산을 통과한 등판, 점선 = 시즌 볼 비율, 주황 점 = '평소보다 볼 많음'. 원인은 해석하지 않는다. */
+function BallChart({ p }) {
+  const pts = p.games.filter((g) => g.ball_pct != null).map((g) => ({
+    date: g.date, x: g.date.slice(5).replace("-", "/"), ball: 100 * g.ball_pct, marks: g.ball_marks, flag: !!g.ball_flag, opponent: g.opponent, pitches: g.pitches,
+  }));
+  if (pts.length < 2) return null;
+  const Dot = ({ cx, cy, payload }) => (cx == null ? null : (
+    <circle cx={cx} cy={cy} r={payload.flag ? 6 : 4.5} fill={payload.flag ? "var(--warn)" : "var(--ink-2)"} stroke="var(--card)" strokeWidth={2} />
+  ));
+  return (
+    <>
+      <div className="chart-title">등판별 볼 비율(추정) <small>점 = 기록지에서 읽은 그 등판의 볼 비율, 점선 = 시즌 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"}, 주황 점 = 평소보다 볼이 많았던 등판</small></div>
+      <ResponsiveContainer width="100%" height={200}>
+        <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke={GRID} />
+          <XAxis dataKey="x" tick={TICK} interval="preserveStartEnd" />
+          <YAxis domain={[0, 80]} ticks={[0, 20, 40, 60, 80]} tick={TICK} unit="%" width={44} />
+          <Tooltip content={<ChartTip render={(payload) => <BallTip d={payload[0].payload} />} />} cursor={{ stroke: "var(--line-2)" }} />
+          {p.ball_season != null && <ReferenceLine y={100 * p.ball_season} stroke="var(--muted)" strokeDasharray="4 4" />}
+          <Line dataKey="ball" stroke="var(--line-2)" strokeWidth={1.5} dot={<Dot />} activeDot={{ r: 7 }} isAnimationActive={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </>
+  );
+}
+
 /** 기록지 판독 볼 비율(추정) 칸: 안 읽음 — / 읽었지만 검산 미달 / 비율과 '평소보다 볼 많음'. */
 function BallCell({ g }) {
   if (g.ball_marks == null) return <span style={{ color: "var(--muted)" }}>—</span>;
@@ -287,6 +323,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
               {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 읽은 표시 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
             </p>
           )}
+          <BallChart p={p} />
           <div className="chart-title">일별 투구 수와 7일 합 <small>막대 = 그날 투구 수, 검은 선 = 그날까지 7일 합, 점선 = 주의 {data.load_lights.sum7.caution}구·높음 {data.load_lights.sum7.high}구{rule && ` · 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={days} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} syncId="hs-season">
