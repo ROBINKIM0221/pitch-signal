@@ -33,7 +33,7 @@ export default function App() {
         </Link>
         {synthetic && <span className="badge synthetic">가상 데이터</span>}
         {current.to === "/kbo" && <span className="badge real">MLB·트리플A 공개 기록 · 트리플A는 참고용</span>}
-        {current.to === "/highschool" && !synthetic && <span className="badge real">KBSA 기록실 · 2025 경기도 시즌·전국체전 실제 기록</span>}
+        {current.to === "/highschool" && !synthetic && <span className="badge real">KBSA 기록실 · 2025 전국 고교 시즌·전국체전 실제 기록</span>}
         {current.to === "/bullpen" && <span className="badge real">MLB 30개 팀 · {meta?.dev_seasons?.[0] ?? 2021}~{meta?.sealed_seasons?.[0] ?? 2026} 실제 기록</span>}
         {meta && !synthetic && current.file && !["/kbo", "/highschool", "/bullpen"].includes(current.to) && (
           <span className="badge real">{current.to === "/" ? `${meta.dev_seasons?.[0] ?? 2021}~${meta.sealed_seasons?.[0] ?? meta.seasons?.at(-1)} 실제 결과` : current.to === "/watch" ? "2026 봉인 시즌 · 10/7 평가" : `검증셋 ${meta.seasons?.join("~")} 실제 결과`}</span>
@@ -64,7 +64,7 @@ export default function App() {
             <Route path="/about" element={<About />} />
           </Routes>
           <footer className="foot">
-            데이터 기준일 {meta?.as_of ?? "—"} · 출처: MLB Statcast(Baseball Savant), MLB Stats API, KBSA 기록실(2025 경기도 고교 시즌·전국체전, 선수는 등번호로만 표시). '가상 데이터' 배지가 있는 화면만 실제 기록이 아닙니다.
+            데이터 기준일 {meta?.as_of ?? "—"} · 출처: MLB Statcast(Baseball Savant), MLB Stats API, KBSA 기록실(2025 전국 고교 시즌 973경기·전국체전, 선수는 등번호로만 표시). '가상 데이터' 배지가 있는 화면만 실제 기록이 아닙니다.
             {" "}이 화면의 신호는 통계적 관리도가 낸 점검 시작 신호이며 부상을 예측하거나 진단하지 않습니다. 판단은 사람이 합니다.
           </footer>
         </main>

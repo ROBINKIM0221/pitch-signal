@@ -152,7 +152,7 @@ function ViolationsTable({ p }) {
   );
 }
 
-/* ---------- 시즌 모드: 2025 경기도 고교 공식 경기 (KBSA 규정 + ACWR) ---------- */
+/* ---------- 시즌 모드: 2025 전국 고교 공식 경기 (KBSA 규정 + 절대량 부하 신호등) ---------- */
 
 function SeasonBoard({ data, index, dataset, region, selector, params, setParams }) {
   const { schools, s, pitchers, p, setSchool, setCode, keep } = useSelection(data, params, setParams, region);
