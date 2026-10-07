@@ -2,6 +2,8 @@
 
 - 대상 목록: config_scout.yaml (평가 설정 파일과 분리. config.yaml 해시를 바꾸지 않기 위해)
 - 트리플A 투구: Baseball Savant 'Minor League Statcast'(minors=true) CSV를 선수별로 받아 data/raw/aaa/<mlbam>.parquet에 저장(있으면 재사용)
+- 트리플A IL: MLB Stats API 거래 기록(sportId=11)을 시즌별로 받아 data/raw/transactions/aaa_<season>.parquet에 저장(있으면 재사용).
+  사유 문구가 있는 등재만 부위(팔꿈치·어깨·기타)를 알 수 있고 나머지는 '부위 미상'. 수기 검토는 하지 않는다 (참고용)
 - 등판 표·감시: src/common의 outings·pipeline·myt를 MLB와 똑같이 적용. 단, 트리플A는 구장 자료가 없어 구장 보정을 하지 않고
   한계값은 MLB 개발셋 값을 그대로 쓴다 — 화면에 '참고용'으로 표시한다.
 - MLB 시즌: 이미 있는 monitor_dev/val/sealed.parquet와 outings.parquet에서 가져온다.
@@ -25,6 +27,7 @@ import yaml
 
 from src.common import baseline_window as bw
 from src.common import calibration as cal
+from src.common import mlb_api
 from src.common import myt
 from src.common import outings as og
 from src.common import pipeline
@@ -32,6 +35,8 @@ from src.common import scout
 from src.common.config import ROOT, load_config
 
 RAW_AAA = ROOT / "data" / "raw" / "aaa"
+RAW_TX = ROOT / "data" / "raw" / "transactions"
+AAA_SPORT_ID = 11
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "dashboard-web" / "public" / "data"
 SAVANT = "https://baseballsavant.mlb.com/statcast_search/csv"
@@ -74,6 +79,30 @@ def aaa_pitches(cfg_scout: dict, download: bool) -> pd.DataFrame:
         if len(df):
             parts.append(df)
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
+
+def aaa_transactions(cfg: dict, seasons: list[int], download: bool) -> pd.DataFrame:
+    """트리플A 거래 기록을 시즌별로 받아(한 달씩) 저장해 두고 한 표로 돌려준다."""
+    RAW_TX.mkdir(parents=True, exist_ok=True)
+    api = cfg["data"]["api"]
+    parts = []
+    for season in seasons:
+        path = RAW_TX / f"aaa_{season}.parquet"
+        if path.exists():
+            df = pd.read_parquet(path)
+        elif download:
+            rows = []
+            for first, last in mlb_api.month_ranges(pd.Timestamp(f"{season}-01-01").date(), pd.Timestamp(f"{season}-12-31").date()):
+                data = mlb_api.get_json(f"{mlb_api.BASE}/transactions", {"sportId": AAA_SPORT_ID, "startDate": str(first), "endDate": str(last)},
+                                        pause=api["pause_sec"], retries=api["retries"], timeout=api["timeout_sec"])
+                rows += [mlb_api.flatten_transaction(t) for t in data.get("transactions", [])]
+            df = pd.DataFrame(rows)
+            df.to_parquet(path, compression="zstd", index=False)
+            log.info("트리플A 거래 기록 받음: %d년 %d건", season, len(df))
+        else:
+            continue
+        parts.append(df)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["id", "person_id", "date", "effective_date", "description"])
 
 
 def aaa_tables(cfg: dict, pitches: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -173,6 +202,8 @@ def main() -> None:
     ids = [p["mlbam"] for p in cfg_scout["pitchers"] if p["mlbam"] is not None]
 
     pitches = aaa_pitches(cfg_scout, download=not a.no_download)
+    placements = scout.il_placements(aaa_transactions(cfg, cfg_scout["aaa_seasons"], download=not a.no_download), ids, cfg["labels"])
+    log.info("트리플A IL 등재(목록 투수): %d건, 부위별 %s", len(placements), placements["part"].value_counts().to_dict())
     if len(pitches):
         aaa_out, aaa_tab, aaa_alerts = aaa_tables(cfg, pitches)
         aaa_long = joined(aaa_out, aaa_tab, cfg, "AAA")
@@ -190,12 +221,12 @@ def main() -> None:
             for (season, league), g in mine.groupby(["season", "league"]):
                 monitored = g["phase"].eq("monitor").sum()
                 summary = scout.nan_to_none(scout.season_summary(g))
-                il = scout.arm_il(labels, p["mlbam"], int(season)) if league == "MLB" else None
+                il = scout.arm_il(labels, p["mlbam"], int(season)) if league == "MLB" else scout.season_il(placements, p["mlbam"], int(season))
                 replay_id = f"{p['mlbam']}_{season}" if league == "MLB" else f"aaa_{p['mlbam']}_{season}"
                 has_replay = (OUT / "replay" / f"{replay_id}.json").exists() if league == "MLB" else monitored > 0
                 entry["seasons"].append({"season": int(season), **summary, "il": il, "replay": replay_id if has_replay else None})
                 if il:
-                    entry["il"].append({"season": int(season), **il})
+                    entry["il"].append({"season": int(season), "league": league, **il})
                 if league == "AAA" and monitored > 0:
                     payload = replay_payload(g, p["name"], rules, core, "AAA")
                     _dump(f"replay/{replay_id}.json", payload)
@@ -213,6 +244,7 @@ def main() -> None:
                                        "zc": {f: _r3(getattr(al, f"zc_{f}")) for f in core}})})
 
     _dump("scout.json", {"season": 2026, "as_of_note": "트리플A 기록은 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 써서 참고용", "aaa_seasons": cfg_scout["aaa_seasons"],
+                         "aaa_il_note": "트리플A IL은 MLB Stats API 거래 기록(sportId=11)에서 자동 추출. 사유 문구가 있는 등재만 부위를 알 수 있음",
                          "pitchers": pitchers_out})
     # 검색 목록·경보 카드에 트리플A 항목을 더한다 (13_export가 만든 파일에 덧붙임, 같은 id는 교체)
     idx_path, alerts_path = OUT / "pitchers.json", OUT / "alerts.json"

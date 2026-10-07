@@ -6,7 +6,8 @@ import { ChartTip, GRID, LABEL, TICK } from "../lib/chart.jsx";
 import { analyze, parseInput } from "../lib/engine.js";
 import { AlertCard, MultiplierControl, Pitcher } from "./Replay.jsx";
 
-const PART = { elbow: "팔꿈치", shoulder: "어깨", hamstring: "햄스트링" };
+const PART = { elbow: "팔꿈치", shoulder: "어깨", hamstring: "햄스트링", other: "다른 부위", unknown: "부위 미상" };
+const ARM = new Set(["elbow", "shoulder"]);
 const STATUS = { new: "2026 신규", replacement: "2026 대체 영입", resigned: "재계약" };
 const LEAGUE_COLOR = { MLB: "var(--ink)", AAA: "#8e6bbf" };
 const EXAMPLE = `날짜,직구 평균구속(km/h),직구 수,전체 투구 수
@@ -49,7 +50,7 @@ function CareerChart({ pitcher }) {
         <YAxis domain={["auto", "auto"]} tickFormatter={(v) => v.toFixed(0)} tick={TICK} width={34} axisLine={false} tickLine={false} />
         <Tooltip content={<ChartTip render={(payload, label) => { const r = rows[Math.round(label) - 1]; return r ? <><div><b>{r.date}</b> · {r.league} {r.season} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div><div>평균 구속 {fmt.num(r.velo, 1)} mph{r.velo_index != null && <> · 구속 하락 지수 {fmt.num(r.velo_index)}</>}{r.alarm && <span className="alarm"> · 경보</span>}</div></> : null; }} />} cursor={{ stroke: "var(--line-2)" }} />
         {starts.slice(1).map((s) => <ReferenceLine key={s.i} x={s.i - 0.5} stroke="var(--line-2)" />)}
-        {ilMarks.map((il) => <ReferenceLine key={il.date} x={il.i} stroke="var(--alarm)" strokeWidth={1.2} label={{ value: `${PART[il.part] || il.part} IL ${fmt.date(il.date)}`, position: "insideTopLeft", ...LABEL, fill: "var(--alarm)" }} />)}
+        {ilMarks.map((il) => <ReferenceLine key={il.date} x={il.i} stroke={ARM.has(il.part) ? "var(--alarm)" : "var(--base)"} strokeWidth={1.2} strokeDasharray={ARM.has(il.part) ? undefined : "4 3"} label={{ value: `IL ${fmt.date(il.date)} ${PART[il.part] || il.part}`, position: "insideTopLeft", ...LABEL, fill: ARM.has(il.part) ? "var(--alarm)" : "var(--muted)" }} />)}
         {seriesKeys.map((k) => <Line key={k} type="monotone" dataKey={k} stroke={LEAGUE_COLOR[k.split("_")[1]]} strokeWidth={1.6} dot={{ r: 2, strokeWidth: 0, fill: LEAGUE_COLOR[k.split("_")[1]] }} connectNulls={false} isAnimationActive={false} />)}
         <Scatter dataKey="velo" shape={<AlarmDot />} data={rows.filter((r) => r.alarm)} isAnimationActive={false} legendType="none" tooltipType="none" />
       </ComposedChart>
@@ -72,12 +73,13 @@ function ScoutCard({ p }) {
             <span><i style={{ background: LEAGUE_COLOR.MLB }} />MLB 등판 평균 구속</span>
             <span><i style={{ background: LEAGUE_COLOR.AAA }} />트리플A (구장 보정 없음 · 참고용)</span>
             <span><i className="dot" style={{ background: "var(--alarm)" }} />경보</span>
-            <span><i style={{ background: "var(--alarm)" }} />팔 부상 IL (MLB 공개 거래 기록)</span>
+            <span><i style={{ background: "var(--alarm)" }} />팔 부상 IL (MLB 거래 기록, 수기 검토)</span>
+            <span><i className="dash" style={{ borderColor: "var(--base)" }} />IL 등재 · 부위 미상 (트리플A 거래 기록)</span>
           </div>
           <CareerChart pitcher={p} />
           <div className="tbl-wrap" style={{ marginTop: 6 }}>
             <table className="tbl">
-              <thead><tr><th>시즌</th><th>역할 · 주력</th><th className="num">등판 / 감시</th><th className="num">시작 구간 구속</th><th className="num">마지막 5등판</th><th className="num">변화</th><th className="num">경보 (구속/폼)</th><th>팔 부상 IL</th><th></th></tr></thead>
+              <thead><tr><th>시즌</th><th>역할 · 주력</th><th className="num">등판 / 감시</th><th className="num">시작 구간 구속</th><th className="num">마지막 5등판</th><th className="num">변화</th><th className="num">경보 (구속/폼)</th><th>IL 등재</th><th></th></tr></thead>
               <tbody>
                 {p.seasons.map((s) => (
                   <tr key={`${s.league}${s.season}`}>
@@ -88,7 +90,7 @@ function ScoutCard({ p }) {
                     <td className="num">{fmt.num(s.velo_last5, 1)}</td>
                     <td className="num" style={{ color: s.velo_change != null && s.velo_change <= -1 ? "var(--alarm)" : "inherit" }}>{s.velo_change == null ? "—" : `${s.velo_change > 0 ? "+" : ""}${fmt.num(s.velo_change, 1)}`}</td>
                     <td className="num">{s.alarms_velo} / {s.alarms_change}</td>
-                    <td>{s.il ? <span className="light alarm">{PART[s.il.part] || s.il.part} {fmt.date(s.il.date)}</span> : s.league === "AAA" ? <span style={{ color: "var(--muted)" }}>기록 없음</span> : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
+                    <td>{s.il ? <span className={`light ${ARM.has(s.il.part) ? "alarm" : "base"}`} title={s.il.reason || undefined}>{fmt.date(s.il.date)} {PART[s.il.part] || s.il.part}{s.il.count > 1 && ` · ${s.il.count}회`}</span> : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
                     <td>{s.replay && <Link to={`/?p=${s.replay}`}>리플레이 →</Link>}</td>
                   </tr>
                 ))}
@@ -146,7 +148,7 @@ export default function Kbo() {
       <p className="lead">
         KBO 구단은 해마다 외국인 투수를 MLB·트리플A에서 데려옵니다. 그 선수들의 지난 시즌은 공개 추적 기록(MLB 2021~2026, 트리플A 2023~2025)에 남아 있어, 영입 전에 같은 엔진으로
         '평소와 달라진 흐름이 있었는지'를 볼 수 있습니다. 2026년 KBO 외국인 투수 {scout.pitchers.length}명 중 <b>{withData}명</b>의 기록을 돌렸습니다.
-        트리플A는 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 쓴 <b>참고용</b>입니다. 팔 부상 IL은 MLB 공개 거래 기록에만 있습니다(트리플A·KBO 부상은 표시되지 않음).
+        트리플A는 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 쓴 <b>참고용</b>입니다. IL 등재는 MLB(거래 기록 + 수기 검토로 팔꿈치·어깨만)와 트리플A(거래 기록 자동 추출, 사유 문구가 거의 없어 대부분 '부위 미상') 공개 기록에서 가져왔고, KBO 시즌의 부상은 표시되지 않습니다.
       </p>
       <div className="toolbar">
         <label><span>구단</span>

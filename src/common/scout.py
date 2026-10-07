@@ -4,6 +4,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from src.common import labels as lb
+
 
 def season_summary(table: pd.DataFrame) -> dict:
     """한 투수-시즌(등판 순)의 요약: 등판 수, 감시 등판 수, 시작 구간 평균 구속, 마지막 5등판 평균 구속, 그 차이, 경보 수, 첫 경보 날짜."""
@@ -41,3 +43,43 @@ def timeline(table: pd.DataFrame) -> list[dict]:
 
 def nan_to_none(d: dict) -> dict:
     return {k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in d.items()}
+
+
+def _part(reason: str, rules: dict) -> str:
+    """IL 사유 문구의 부위: shoulder / elbow / other(다른 부위) / unknown(사유 없음). 좌우·투구 팔 대조는 하지 않는다 (참고용)."""
+    if not reason:
+        return "unknown"
+    if lb._has(rules["shoulder_keywords"], reason):
+        return "shoulder"
+    if lb._has([w for w in rules["arm_keywords"] if w not in rules["shoulder_keywords"]], reason):
+        return "elbow"
+    return "other"
+
+
+def il_placements(transactions: pd.DataFrame, ids: list[int], rules: dict) -> pd.DataFrame:
+    """트리플A 거래 기록에서 목록 투수들의 새 IL 등재를 뽑는다: pitcher, season, il_date, days, part, reason.
+    MLB 라벨(02_labels, 수기 검토)과 달리 자동 분류만 하고, 사유 문구가 없으면 부위를 unknown으로 둔다."""
+    wanted = set(int(i) for i in ids)
+    rows = []
+    for t in transactions.itertuples(index=False):
+        if t.person_id not in wanted:
+            continue
+        p = lb.parse_placement(t.description, rules["il_days"])
+        if p is None:
+            continue
+        effective = t.effective_date if isinstance(t.effective_date, str) else None
+        when, _ = lb.il_date(p["retro"], effective, t.date, rules["max_retro_days"])
+        rows.append({"pitcher": int(t.person_id), "season": when.year, "il_date": pd.Timestamp(when), "days": p["days"],
+                     "part": _part(p["reason"], rules), "reason": p["reason"] or None, "description": t.description})
+    out = pd.DataFrame(rows, columns=["pitcher", "season", "il_date", "days", "part", "reason", "description"])
+    return out.drop_duplicates(["pitcher", "il_date", "description"]).drop(columns="description").reset_index(drop=True)
+
+
+def season_il(placements: pd.DataFrame, pitcher: int, season: int) -> dict | None:
+    """그 투수-시즌의 IL 요약: 팔꿈치·어깨 등재가 있으면 그중 첫 번째, 없으면 첫 등재. count는 그 시즌 등재 횟수. 없으면 None."""
+    mine = placements[(placements["pitcher"] == pitcher) & (placements["season"] == season)].sort_values("il_date")
+    if mine.empty:
+        return None
+    arm = mine[mine["part"].isin(["elbow", "shoulder"])]
+    first = (arm if len(arm) else mine).iloc[0]
+    return {"date": first["il_date"].strftime("%Y-%m-%d"), "part": first["part"], "reason": first["reason"] if isinstance(first["reason"], str) else None, "count": int(len(mine))}
