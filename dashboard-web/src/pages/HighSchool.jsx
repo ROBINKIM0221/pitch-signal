@@ -98,13 +98,28 @@ function FlowStrip({ flow }) {
   );
 }
 
+/** 기록지 판독 볼 비율(추정) 칸: 안 읽음 — / 읽었지만 검산 미달 / 비율과 '평소보다 볼 많음'. */
+function BallCell({ g }) {
+  if (g.ball_marks == null) return <span style={{ color: "var(--muted)" }}>—</span>;
+  if (g.ball_pct == null) {
+    return <span className="light base" title={`기록지에서 읽은 표시 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span>;
+  }
+  return (
+    <>
+      {fmt.num(100 * g.ball_pct, 0)}%
+      {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(읽은 투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">평소보다 볼 많음</span>}
+    </>
+  );
+}
+
 function GamesTable({ p, withCompetition }) {
   const [open, setOpen] = useState(null);
   const hasResults = p.games.some((g) => g.batters != null);
+  const hasBall = p.games.some((g) => g.ball_marks != null);
   return (
     <div className="tbl-wrap">
       <table className="tbl">
-        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasResults && <th>흐름</th>}</tr></thead>
+        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}{hasBall && <th className="num" title="협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 추정값">볼 비율(추정)</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasResults && <th>흐름</th>}</tr></thead>
         <tbody>
           {p.games.map((g) => {
             const sum = g.flow ? flowSummary(g.flow) : null;
@@ -120,13 +135,14 @@ function GamesTable({ p, withCompetition }) {
                   <td className="num">{g.hits ?? "—"}{g.hr > 0 && <span style={{ color: "var(--muted)" }}> (홈런 {g.hr})</span>}</td>
                   <td className="num">{g.pitches != null && g.batters ? fmt.num(g.pitches / g.batters, 1) : "—"}</td>
                 </>}
+                {hasBall && <td className="num"><BallCell g={g} /></td>}
                 <td>{restText(g)}</td>
                 <td className="num">{g.cum_pitches == null ? "—" : g.cum_pitches}</td>
                 {hasResults && <td>{g.flow ? <button className="pill" onClick={() => setOpen(open === g.game_no ? null : g.game_no)}>{open === g.game_no ? "닫기" : "타석별 보기"}</button> : <span style={{ color: "var(--muted)" }}>—</span>}</td>}
               </tr>,
               open === g.game_no && g.flow && (
                 <tr key={`${g.game_no}-flow`} className="flow-row">
-                  <td colSpan={14} style={{ whiteSpace: "normal" }}>
+                  <td colSpan={16} style={{ whiteSpace: "normal" }}>
                     <FlowStrip flow={g.flow} />
                     <div className="caption" style={{ marginTop: 6 }}>타석 {sum.pa} · 삼진 {sum.k} · 4구+사구 {sum.bb} · 안타 {sum.h}{sum.wild > 0 && ` · 폭투·보크·포일 ${sum.wild}`}{sum.walkInnings.length > 0 && ` · 4사구가 몰린 이닝 ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`} — 상대 타격표의 타석을 투수 타자 수대로 배정해 복원한 순서입니다(합이 맞는 경기만).</div>
                   </td>
@@ -263,6 +279,12 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           {p.batters != null && p.batters > 0 && (
             <p className="caption" style={{ marginTop: 0 }}>
               <b>시즌 등판 결과</b> (맥락 정보 — 신호가 아닙니다): 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 투구/타자 ${fmt.num(p.p_per_pa, 2)}`} · 타석별 흐름이 복원된 등판 {p.flow_games}/{p.outings}
+            </p>
+          )}
+          {p.games.some((g) => g.ball_marks != null) && (
+            <p className="caption" style={{ marginTop: 0 }}>
+              <b>제구 (기록지 판독, 추정)</b>: 볼 비율 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · 볼 비율을 보여 주는 등판 {p.ball_outings}/{p.outings}{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
+              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 읽은 표시 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
             </p>
           )}
           <div className="chart-title">일별 투구 수와 7일 합 <small>막대 = 그날 투구 수, 검은 선 = 그날까지 7일 합, 점선 = 주의 {data.load_lights.sum7.caution}구·높음 {data.load_lights.sum7.high}구{rule && ` · 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>

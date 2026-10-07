@@ -190,6 +190,9 @@ def highschool_files(cfg: dict) -> dict:
         names["name"] = names["pitcher"]                                                   # 실명 없이도 payload가 기대하는 열 모양을 맞춘다
         rules = {**rules, "schools": int(names["school"].nunique())}
         outings = pd.read_parquet(rows_path)
+        sheet = PROCESSED / "hs_scoresheet_outings.parquet"
+        if d.get("mode") == "season" and sheet.exists():                                   # 기록지 판독 볼 비율(추정)과 '평소보다 볼이 많았던 등판' (src/18_scoresheets.py)
+            outings = hr.attach_scoresheet(outings, pd.read_parquet(sheet), names)
         daily = pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet")
         violated = pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
         whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, kcfg["source"], kcfg["load_lights"])

@@ -19,7 +19,8 @@ from src.core import kbsa_rules as kr
 
 GAME_KEY = ["game_idx", "team", "name", "number"]
 GAME_COLUMNS = ["date", "game_no", "competition", "round", "opponent", "role", "result", "outs", "pitches", "detail", "gap_days", "required_rest", "rest_ok", "min_rest_exact", "cum_pitches",
-                "batters", "k", "bb_hbp", "hits", "hr", "runs", "er"]
+                "batters", "k", "bb_hbp", "hits", "hr", "runs", "er", "ball_pct", "ball_marks", "ball_flag"]
+BALL_COLUMNS = ["ball_marks", "ball_balls", "ball_pct", "ball_flag", "ball_usual"]
 
 
 def datasets_config(root: Path = ROOT) -> tuple[dict, dict[str, tuple[dict, dict]]]:
@@ -164,6 +165,27 @@ def annotate_outings(rows: pd.DataFrame, kbsa: dict) -> pd.DataFrame:
     return out.sort_values(["game_no", "school", "row"], ignore_index=True)
 
 
+def attach_scoresheet(rows: pd.DataFrame, sheet: pd.DataFrame, names: pd.DataFrame) -> pd.DataFrame:
+    """기록지 판독 결과(18_scoresheets score: 경기·던진 팀·등번호별 읽은 표시·볼·검산·평소 비교)를 등판표에 붙인다.
+    ball_marks가 비면 기록지를 안 읽은 등판, ball_marks는 있고 ball_pct가 비면 읽었지만 검산(공식 투구 수와 비교) 미달.
+    한 경기에 같은 팀·등번호로 이어지는 등판이 둘이면(등번호가 같은 다른 선수) 어느 쪽인지 알 수 없어 붙이지 않는다."""
+    key = names[["pitcher", "team", "number"]].drop_duplicates("pitcher").rename(columns={"team": "_team", "number": "_number"})
+    r = rows.merge(key, on="pitcher", how="left")
+    s = sheet.rename(columns={"team": "_team", "number": "_number", "marks": "ball_marks", "balls": "ball_balls", "usual": "ball_usual"})
+    out = r.merge(s[["game_idx", "_team", "_number", *BALL_COLUMNS]], on=["game_idx", "_team", "_number"], how="left")
+    ambiguous = out.duplicated(["game_idx", "_team", "_number"], keep=False).to_numpy() & out["_team"].notna().to_numpy()
+    out.loc[ambiguous, BALL_COLUMNS] = np.nan
+    return out.drop(columns=["_team", "_number"])
+
+
+def _ball_fields(g: pd.DataFrame) -> dict:
+    """투수 시즌 볼 비율(추정): 검산 통과 등판의 볼 합 ÷ 읽은 표시 합. 등판 비율의 평균이 아니라 합친 비율."""
+    ok = g[g["ball_pct"].notna()]
+    marks = ok["ball_marks"].sum()
+    return {"ball_season": _clean(ok["ball_balls"].sum() / marks) if marks > 0 else None, "ball_outings": int(len(ok)),
+            "ball_flags": int((g["ball_flag"] == True).sum())}
+
+
 def _clean(value):
     """JSON으로 내보낼 값: 결측은 None, numpy 수는 파이썬 수."""
     if value is None or (isinstance(value, float) and np.isnan(value)) or value is pd.NA or value is pd.NaT:
@@ -244,6 +266,7 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                              "batters": _clean(batters), **season_results,
                              "p_per_pa": _clean(g["pitches"].sum() / batters) if known and pd.notna(batters) and batters > 0 else None,
                              "flow_games": int(g["flow"].notna().sum()) if "flow" in g else 0,
+                             **(_ball_fields(g) if "ball_marks" in g else {}),
                              "violations": _rec(v, ["date", "rule", "detail"]), "games": games_out})
         pitchers.sort(key=lambda p: (-(p["pitches_total"] if p["pitches_total"] is not None else -1), p["label"]))
         span = daily.loc[daily["school"] == school, "date"]
@@ -278,7 +301,9 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
               "pairs3": int(len(pairs)), "pairs3_70": int((pairs >= lights["pair3"]["caution"]).sum()), "pairs3_100": int((pairs >= lights["pair3"]["high"]).sum()),
               "pitchers_7d_120": int((max7 >= lights["sum7"]["caution"]).sum()), "pitchers_7d_150": int((max7 >= lights["sum7"]["high"]).sum()),
               "pitchers_season_500": int((outings.groupby("pitcher")["pitches"].sum(min_count=1) >= 500).sum()),
-              "flow_outings": int(outings["flow"].notna().sum()) if "flow" in outings else 0}
+              "flow_outings": int(outings["flow"].notna().sum()) if "flow" in outings else 0,
+              **({"ball_read": int(outings["ball_marks"].notna().sum()), "ball_outings": int(outings["ball_pct"].notna().sum()),
+                  "ball_flags": int((outings["ball_flag"] == True).sum())} if "ball_marks" in outings else {})}
     no_detail = sorted(int(g) for g in outings.loc[~outings["detail"], "game_no"].unique())
     first, last = outings["date"].min(), outings["date"].max()
     dataset = {"key": info.get("key"), "mode": info["mode"], "name": info["name"], "short": info["short"], "season": info["season"], "region": info.get("region"),

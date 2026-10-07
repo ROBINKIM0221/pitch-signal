@@ -203,3 +203,36 @@ def test_flow_summary_counts_categories_and_walk_heavy_innings():
     flow = [{"inn": 1, "res": "4구", "cat": "BB", "ev": []}, {"inn": 1, "res": "사구", "cat": "HBP", "ev": []}, {"inn": 1, "res": "삼진", "cat": "K", "ev": []},
             {"inn": 2, "res": "중안", "cat": "H", "ev": ["폭투"]}, {"inn": 2, "res": "좌월홈", "cat": "HR", "ev": []}, {"inn": 2, "res": "2땅", "cat": "OUT", "ev": []}]
     assert hr.flow_summary(flow) == {"pa": 6, "k": 1, "bb": 1, "hbp": 1, "h": 2, "hr": 1, "walk_innings": [1], "wild": 1}
+
+
+def sheet_outings():
+    """기록지 판독 결과(경기·던진 팀·등번호): 1경기 다라고 #54 읽음·통과, 가나고 #17 읽었지만 검산 미달, 2경기 다라고 #13 통과·'평소보다 볼 많음'."""
+    return pd.DataFrame({"game_idx": [1, 1, 2], "team": ["다라고", "가나고", "다라고"], "number": [54, 17, 13], "pitches": [88, 105, 65],
+                         "marks": [80, 70, 60], "balls": [30, 25, 27], "gate": [True, False, True], "ball_pct": [0.375, np.nan, 0.45],
+                         "usual": [np.nan, np.nan, 0.35], "z_ball": [np.nan, np.nan, 2.4], "ball_flag": [False, False, True]})
+
+
+def test_attach_scoresheet_keeps_read_failed_and_unread_apart():
+    t, names, rows = prepared()
+    out = hr.attach_scoresheet(rows, sheet_outings(), names).set_index(["game_idx", "pitcher"])
+    assert out.loc[(1, "S02-P02"), "ball_pct"] == 0.375 and out.loc[(1, "S02-P02"), "ball_marks"] == 80
+    assert np.isnan(out.loc[(1, "S01-P01"), "ball_pct"]) and out.loc[(1, "S01-P01"), "ball_marks"] == 70     # 읽었지만 검산 미달 → 비율 없음
+    assert bool(out.loc[(2, "S02-P01"), "ball_flag"]) and out.loc[(2, "S02-P01"), "ball_balls"] == 27
+    assert np.isnan(out.loc[(2, "S03-P01"), "ball_marks"])                                               # 기록지를 안 읽은 등판
+    assert len(out) == len(rows)
+
+
+def test_payload_carries_ball_rates_per_game_and_pooled_per_pitcher():
+    t, names, rows = prepared()
+    outings = hr.annotate_outings(hr.attach_scoresheet(rows, sheet_outings(), names), RULES["kbsa"])
+    daily = hs.daily_table(rows, RULES); violated = hs.violations(rows, daily, RULES)
+    pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "-"}, "시험", LIGHTS)
+    school = next(s for s in pay["schools"] if s["name"] == "다라고")
+    ace = next(p for p in school["pitchers"] if p["label"] == "#54")
+    reliever = next(p for p in school["pitchers"] if p["label"] == "#13")
+    assert ace["games"][0]["ball_pct"] == 0.375 and ace["games"][0]["ball_marks"] == 80 and ace["games"][1]["ball_marks"] is None
+    assert ace["ball_season"] == 0.375 and ace["ball_outings"] == 1 and ace["ball_flags"] == 0
+    assert reliever["games"][0]["ball_flag"] is True and reliever["ball_flags"] == 1 and abs(reliever["ball_season"] - 0.45) < 1e-9
+    hong = next(p for s in pay["schools"] for p in s["pitchers"] if s["name"] == "가나고")
+    assert hong["ball_season"] is None and hong["ball_outings"] == 0 and hong["games"][0]["ball_marks"] == 70
+    assert pay["totals"]["ball_outings"] == 2 and pay["totals"]["ball_flags"] == 1
