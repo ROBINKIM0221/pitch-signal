@@ -21,6 +21,7 @@ import pandas as pd
 from src.common import calibration as cal
 from src.common import highschool as hs
 from src.common import metrics as mt
+from src.common import tournament as tn
 from src.common.config import ROOT, load_config
 
 PROCESSED = ROOT / "data" / "processed"
@@ -317,7 +318,12 @@ def main() -> None:
     if "sealed" in splits:
         sizes["watchlist.json"] = dump("watchlist.json", watchlist(cfg, everyone[everyone["split"] == "sealed"], names, outings, labels))
     sizes["bullpen.json"] = dump("bullpen.json", bullpen_file(replay, monitor, names, cfg["load"]["acwr_flag"]))
-    if (PROCESSED / "hs_daily.parquet").exists():
+    if (PROCESSED / "hs_tournament_rows.parquet").exists():                                   # 2025 전국체전 실제 기록 (src/17)
+        info, hs_rules = tn.tournament_config()
+        sizes["highschool.json"] = dump("highschool.json", tn.payload(
+            pd.read_parquet(PROCESSED / "hs_tournament_rows.parquet"), pd.read_parquet(PROCESSED / "hs_tournament_daily.parquet"),
+            pd.read_csv(PROCESSED / "hs_tournament_violations.csv", encoding="utf-8-sig", parse_dates=["date"]), hs_rules, info))
+    elif (PROCESSED / "hs_daily.parquet").exists():
         daily = pd.read_parquet(PROCESSED / "hs_daily.parquet")
         violated = pd.read_csv(PROCESSED / "hs_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
         sizes["highschool.json"] = dump("highschool.json", highschool_payload(daily, violated, cfg["highschool"], synthetic=False))
@@ -332,7 +338,7 @@ def main() -> None:
             "split": SPLIT, "seasons": seasons, "dev_seasons": cfg["data"]["split"]["dev"], "sealed_seasons": cfg["data"]["split"]["sealed"] if "sealed" in splits else None,
             "synthetic": synthetic, "signals": SIGNALS,
             "config_sha256": {n: hashlib.sha256((ROOT / n).read_bytes()).hexdigest() for n in ("config.yaml", "config_calibrated.yaml")},
-            "sources": "MLB Statcast(Baseball Savant), MLB Stats API; 고교·KBO는 가상 데이터 표시 참고"}
+            "sources": "MLB Statcast(Baseball Savant), MLB Stats API, KBSA 기록실(전국체전); 가상 데이터는 synthetic 목록 참고"}
     sizes["meta.json"] = dump("meta.json", meta)
 
     replays = {k: v for k, v in sizes.items() if k.startswith("replay/")}

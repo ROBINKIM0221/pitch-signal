@@ -49,7 +49,7 @@ def test_draw_all_writes_every_figure_it_has_real_data_for(tmp_path):
     written = fg.draw_all(tmp_path)
     names = sorted(p.name for p in tmp_path.glob("*.png"))
     assert names == ["01_system.png", "02_short_outings.png", "03_opcurve_val.png", "04_case_detected.png",
-                     "05_case_missed.png", "07_kbo_timeline.png"]                   # ⑥ 고교는 실제 기록이 들어오기 전까지 뺀다
+                     "05_case_missed.png", "06_highschool.png", "07_kbo_timeline.png"]   # ⑥ 고교는 2025 전국체전 실제 기록(가명)
     assert set(written) == set(names)
     captions = (tmp_path / "captions.md").read_text(encoding="utf-8")
     for name in names:
@@ -58,3 +58,4 @@ def test_draw_all_writes_every_figure_it_has_real_data_for(tmp_path):
     velo = results[(results["method"] == "구속 하락 신호") & (results["group"] == "all")].iloc[0]
     assert f"{velo['detection']:.1f}%" in captions and f"{velo['control_window']:.1f}%" in captions    # 캡션 숫자는 결과 파일에서 온다
     assert "가상" not in captions.replace("가상 데이터는 쓰지 않", "")
+    assert "전국체전" in captions and "S0" in captions and "가명" in captions                # ⑥ 캡션은 대회 자료(가명 코드)로 쓴다

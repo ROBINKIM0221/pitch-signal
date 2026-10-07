@@ -1,0 +1,18 @@
+# 화면 3 '고교 투구수 현황판'의 실제 입력: 2025 전국체전 18세 이하부 기록 변환 설정.
+# 평가 설정(config.yaml·config_calibrated.yaml)과 분리해 두어 고정한 설정 파일의 해시가 바뀌지 않게 한다.
+tournament:
+  name: 제106회 전국체육대회 18세 이하부
+  short: 전국체전
+  season: 2025
+  dates: 2025-10-17 ~ 2025-10-23          # 부산(기장 현대차드림볼파크), 15팀 단판 토너먼트 14경기
+  lig_idx: 1356                           # KBSA 기록실 대회 번호 (kind_cd=31)
+  source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail). 2026-10-07 1회 수집, data/raw/kbsa/
+  games: [36651, 36652, 36653, 36654, 36655, 36656, 36657, 36692, 36693, 36696, 36698, 36700, 36702, 36712]
+  rounds: {16강: 7, 8강: 4, 준결승: 2, 결승: 1}  # 경기 순서(날짜·번호)대로 배정
+  name_map: C:/work/private/pitchsignal/kbsa_2025_tournament_names.csv   # 실명 ↔ 가명 대응표 (저장소 밖에만 둔다)
+  seed: 2025
+  overrides:                              # config.yaml highschool 블록 위에 덮어쓰는 값 (규정 수치는 그대로 둔다)
+    season: 2025
+    schools: 15
+    competitions: [전국체전]
+    input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}   # 13회 경기·상세 기록 없는 경기 허용

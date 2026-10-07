@@ -182,7 +182,7 @@ button.btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
   select { flex: 1; }
   input[type="range"] { width: 100%; flex: 1; }
   .topbar { padding: 0 14px; }
-  .topbar .meta { display: none; }
+  .topbar .meta, .topbar .badge { display: none; }   /* 좁은 화면에서는 제목 옆 배지만 남긴다 (긴 배지가 가로 폭을 넘기지 않게) */
   .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi .v { font-size: 20px; }
   .seg { display: flex; flex-wrap: wrap; gap: 6px; border: 0; border-radius: 0; overflow: visible; }
@@ -235,3 +235,28 @@ button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .card.scout .legend { margin-top: 2px; }
 .card.scout table.tbl td, .card.scout table.tbl th { padding: 6px 10px; font-size: 12.5px; }
+
+/* ---------- 고교 현황판(대회 모드): 등판 달력 ---------- */
+.kpi .v .sub { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.list .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+.list .tags .pill { margin: 0; }
+table.heat { border-collapse: separate; border-spacing: 3px; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+table.heat th { color: var(--muted); font-weight: 600; font-size: 12px; text-align: center; padding: 2px 4px; white-space: nowrap; }
+table.heat th small { display: block; font-weight: 500; font-size: 10.5px; color: var(--muted); min-height: 14px; }
+table.heat tbody th { text-align: left; color: var(--ink-2); padding-right: 8px; }
+table.heat tbody tr { cursor: pointer; }
+table.heat tbody tr.hl th { color: var(--ink); font-weight: 700; }
+table.heat td { height: 34px; min-width: 40px; text-align: center; border-radius: 7px; background: var(--panel); color: var(--ink-2); }
+table.heat td.rest { background: repeating-linear-gradient(135deg, #f3f2ec 0 4px, #e6e5df 4px 8px); color: var(--muted); font-size: 11px; }
+table.heat td.game { font-weight: 650; }
+table.heat td.game.h1 { background: var(--velo-bg); color: #1f5aa6; }
+table.heat td.game.h2 { background: #9dc1ec; color: #0f2e5c; }
+table.heat td.game.h3 { background: #4f8fdc; color: #fff; }
+table.heat td.game.h4 { background: #1d4f8f; color: #fff; }
+table.heat td.game.unknown { background: var(--base-bg); border: 1px dashed var(--base); color: var(--ink-2); }
+.legend i.band.rest { background: repeating-linear-gradient(135deg, #f3f2ec 0 3px, #d6d5ce 3px 6px); }
+.hs-detail { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+@media (max-width: 860px) {
+  .hs-detail { grid-template-columns: 1fr; }
+  .list .tags { display: none; }
+}
