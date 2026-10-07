@@ -40,11 +40,14 @@ def parse_games(game_ids: list[int]) -> pd.DataFrame:
     return kb.games_to_rows(games)
 
 
-def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, set[str]]:
-    """시즌 모드: 경기 목록(games_csv)에서 지역 리그 참가팀을 고르고, 그 팀이 나온 모든 경기를 대회 이름과 함께 돌려준다."""
+def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, dict[str, str]]:
+    """시즌 모드(전국): 경기 목록(games_csv)의 모든 경기와 대회 이름, 팀 → 권역(주말리그 참가 리그 기준, 없으면 '기타')."""
     games = pd.read_csv(ROOT / cfg["games_csv"], encoding="utf-8-sig")
-    teams = set(games.loc[games["lig_idx"].isin(d["region_leagues"]), ["team1", "team2"]].stack())
-    pick = games[games["team1"].isin(teams) | games["team2"].isin(teams)].copy()
+    region_of: dict[str, str] = {}
+    for region, leagues in d["region_leagues"].items():
+        for team in set(games.loc[games["lig_idx"].isin(leagues), ["team1", "team2"]].stack()):
+            region_of.setdefault(team, region)
+    pick = games.copy()
 
     def competition(league: str) -> str:
         for needle, name in d["competitions"].items():
@@ -53,22 +56,22 @@ def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, set[str]]:
         raise ValueError(f"대회 이름을 모르는 리그: {league}")
 
     comp = pd.Series([competition(x) for x in pick["league"]], index=pick["game_idx"].to_numpy())
-    return pick["game_idx"].tolist(), comp, teams
+    return pick["game_idx"].tolist(), comp, region_of
 
 
 def convert(key: str, cfg: dict, d: dict, rules: dict) -> dict:
     if d["mode"] == "tournament":
-        ids, teams = list(d["games"]), None
+        ids, region_of = list(d["games"]), None
         comp = pd.Series(d["overrides"]["competitions"][0], index=ids)
     else:
-        ids, comp, teams = season_games(cfg, d)
+        ids, comp, region_of = season_games(cfg, d)
     raw = hr.combine_stints(hr.mark_missing_detail(parse_games(ids)))
-    if teams is not None:
-        unknown = set(raw["team"]) - teams - set(raw["opponent"])
-        if unknown:
-            log.warning("리그 목록에 없는 팀 이름: %s", sorted(unknown))
-        raw = raw[raw["team"].isin(teams)].reset_index(drop=True)          # 지역 밖 상대 팀 투수는 기록이 일부뿐이라 뺀다
     names = hr.name_map(raw)
+    if region_of is not None:
+        names["region"] = names["team"].map(region_of).fillna("기타")
+        others = sorted(names.loc[names["region"] == "기타", "team"].unique())
+        if others:
+            log.info("주말리그에 없어 '기타' 권역으로 둔 팀 %d: %s", len(others), others)
     rules = {**rules, "schools": int(raw["team"].nunique())}
     rows = hr.input_rows(raw, names, comp, d.get("rounds"))
     problems = hs.problems(rows, rules)
@@ -84,7 +87,7 @@ def convert(key: str, cfg: dict, d: dict, rules: dict) -> dict:
     outings.to_parquet(PROCESSED / f"hs_{key}_rows.parquet", compression="zstd", index=False)
     daily.to_parquet(PROCESSED / f"hs_{key}_daily.parquet", compression="zstd", index=False)
     violated.to_csv(PROCESSED / f"hs_{key}_violations.csv", index=False, encoding="utf-8-sig")
-    names.drop(columns="name").to_csv(PROCESSED / f"hs_{key}_names.csv", index=False, encoding="utf-8-sig")
+    names.drop(columns="name").to_csv(PROCESSED / f"hs_{key}_names.csv", index=False, encoding="utf-8-sig")   # 학교 실명·권역·등번호 표기 (선수 실명 없음)
     summary.assign(학교명=summary["학교"].map(school_name)).to_csv(TABLES / f"hs_{key}_summary.csv", index=False, encoding="utf-8-sig")
 
     no_detail = sorted(int(g) for g in rows.loc[~rows["detail"], "game_no"].unique())
@@ -97,7 +100,8 @@ def convert(key: str, cfg: dict, d: dict, rules: dict) -> dict:
              int((second["min_rest_exact"] == True).sum()), int((second["rest_ok"] == False).sum()))
     if d["mode"] == "season":
         per = daily.groupby("pitcher").agg(ok=("acwr_ok", "any"), flag=("acwr_flag", "any"))
-        log.info("ACWR 계산 가능 투수 %d, 기준(%.1f) 초과 경험 %d", int(per["ok"].sum()), rules["acwr"]["flag"], int(per["flag"].sum()))
+        log.info("ACWR 계산 가능 투수 %d, 기준(%.1f) 초과 경험 %d (만성 하한 %s구/주), 권역별 팀 수 %s", int(per["ok"].sum()), rules["acwr"]["flag"], int(per["flag"].sum()),
+                 rules["acwr"].get("min_chronic", 0), names.drop_duplicates("team")["region"].value_counts().to_dict())
     return {"names": names, "summary": summary.assign(학교명=summary["학교"].map(school_name))}
 
 

@@ -88,7 +88,8 @@ export function dateRange(from, to) {
  * 고교 현황판(시즌 모드)의 날짜별 값. 정의는 src/common/highschool.daily_table과 같다:
  *   start~end(그 학교의 첫 경기일~마지막 경기일) 모든 날에 대해 pitches(등판 없는 날 0, 투구 수 모르는 등판은 null),
  *   sum_7d = 오늘 포함 7일 합(창 안에 모르는 날이 있으면 null),
- *   acwr = 7일 합 ÷ (그 앞 21일 합 ÷ 3) — start부터 28일이 쌓인 뒤부터, 두 창에 모르는 날이 없고 앞 21일 합이 0보다 클 때만.
+ *   acwr = 7일 합 ÷ (그 앞 21일 합 ÷ 3) — start부터 28일이 쌓인 뒤부터, 두 창에 모르는 날이 없고 앞 21일 합이 0보다 클 때만,
+ *   rules.min_chronic이 있으면 앞 3주 주평균이 그 값 이상일 때만(아니면 null = 판정 보류).
  * outings: [{date, pitches}] (pitches null = 모름).
  */
 export function dailySeries(outings, start, end, rules) {
@@ -113,7 +114,7 @@ export function dailySeries(outings, start, end, rules) {
     if (d - first + 1 >= a + c && acute != null) {
       const prior = windowSum(d - a - c + 1, d - a);
       const chronic = prior == null ? null : prior / (c / 7);
-      acwr = chronic != null && chronic > 0 ? acute / chronic : null;
+      acwr = chronic != null && chronic > 0 && chronic >= (rules.min_chronic || 0) ? acute / chronic : null;
     }
     out.push({ date: str(d), pitches: today, sum_7d: acute, acwr });
   }

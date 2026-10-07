@@ -141,17 +141,32 @@ def _rec(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
     return [{c: _clean(v) for c, v in zip(columns, row)} for row in frame[columns].itertuples(index=False)]
 
 
-def _chronic_at_flags(daily: pd.DataFrame) -> pd.Series:
-    """ACWR 표시가 켜진 날의 직전 3주 주평균 투구 수(= 7일 합 ÷ ACWR). ACWR이 저활동 뒤에 튀는 성질을 보여 주는 맥락 값."""
-    f = daily[daily["acwr_flag"] & (daily["acwr"] > 0)]
-    return f["sum_7d"] / f["acwr"]
+def pair3_max(g: pd.DataFrame) -> float:
+    """한 투수의 등판(날짜순)에서 '3일 안 두 등판'의 합 중 최댓값. 그런 쌍이 없거나 투구 수를 모르면 NaN."""
+    g = g.sort_values(["date", "game_no"])
+    gaps = g["date"].diff().dt.days
+    sums = g["pitches"] + g["pitches"].shift(1)
+    close = sums[(gaps <= 2) & sums.notna()]
+    return float(close.max()) if len(close) else np.nan
 
 
-def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, names: pd.DataFrame, rules: dict, info: dict, source: str) -> dict:
+def load_light(max_7d, max_pair3, lights: dict) -> tuple[str, list[str]]:
+    """누적 부하 신호등: 7일 합과 3일 안 두 등판 합을 절대량 기준(load_lights)에 대 본다. 어느 하나라도 '높음'이면 높음, '주의'만 있으면 주의."""
+    reasons, level = [], 0
+    for value, key, name in ((max_7d, "sum7", "7일 합"), (max_pair3, "pair3", "3일 안 두 등판 합")):
+        if value is None or (isinstance(value, float) and np.isnan(value)):
+            continue
+        if value >= lights[key]["high"]:
+            level = max(level, 2); reasons.append(f"{name} {value:.0f}구 (높음 기준 {lights[key]['high']})")
+        elif value >= lights[key]["caution"]:
+            level = max(level, 1); reasons.append(f"{name} {value:.0f}구 (주의 기준 {lights[key]['caution']})")
+    return ["보통", "주의", "높음"][level], reasons
+
+
+def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, names: pd.DataFrame, rules: dict, info: dict, source: str, lights: dict) -> dict:
     """대시보드 highschool/<key>.json. 학교는 실명(names의 team), 투수는 등번호 표기(label)만 들어간다.
-    mode == 'tournament'면 대회 누적·휴식 간격 중심, 'season'이면 ACWR(누적 부하) 중심의 값을 더한다."""
+    누적 부하 신호등은 절대량(load_lights: 7일 합, 3일 안 두 등판 합)으로 매기고, ACWR은 고교 화면에서 쓰지 않는다(2026-10-07 결정)."""
     kbsa_rules = set(hs.KBSA_RULES)
-    flag = rules["acwr"]["flag"]
     school_name = names.drop_duplicates("school").set_index("school")["team"]
     label_of = names.set_index("pitcher")["label"]
     games = (outings.sort_values("game_no").groupby("game_no").agg(date=("date", "first"), competition=("competition", "first"), round=("round", "first"),
@@ -160,35 +175,43 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
              .reset_index())
     game_list = [{"no": int(g.game_no), "date": _clean(g.date), "competition": g.competition, "round": _clean(g.round), "detail": bool(g.detail),
                   "teams": sorted(set(g.teams) | set(g.opponents))} for g in games.itertuples()]
-    schools = []
+    violations_of = violated[violated["rule"].isin(kbsa_rules)].groupby("pitcher").size()
+    schools, per_rows = [], []
     for school, mine in outings.groupby("school"):
         pitchers = []
         for code, g in mine.groupby("pitcher"):
             g = g.sort_values(["date", "game_no"])
             v = violated[violated["pitcher"] == code]
-            real = v[v["rule"].isin(kbsa_rules)]
-            status = "위반" if len(real) else ("판정 불가" if (v["rule"] == "unknown").any() else "준수")
+            status = "위반" if violations_of.get(code, 0) else ("판정 불가" if (v["rule"] == "unknown").any() else "준수")
             known = g["pitches"].notna().all()
             d = daily[daily["pitcher"] == code]
-            peak = d.loc[d["acwr_ok"], "acwr"].max()
-            load_status = ("경보" if d["acwr_flag"].any() else "주의" if peak >= 1.0 else "보통") if np.isfinite(peak) else "계산 불가"
-            pitchers.append({"code": code, "label": label_of[code], "rule_status": status, "load_status": load_status, "acwr_peak": _clean(peak),
-                             "max_7d": _clean(d["sum_7d"].max()), "outings": int(len(g)), "pitches_total": int(g["pitches"].sum()) if known else None, "max_pitches": _clean(g["pitches"].max()),
+            max_7d, max_pair3 = _clean(d["sum_7d"].max()), _clean(pair3_max(g))
+            load_status, reasons = load_light(max_7d, max_pair3, lights)
+            per_rows.append({"school": school, "pitcher": code, "violations": int(violations_of.get(code, 0)), "load": load_status})
+            pitchers.append({"code": code, "label": label_of[code], "rule_status": status, "load_status": load_status, "load_reasons": reasons,
+                             "max_7d": max_7d, "max_pair3": max_pair3, "outings": int(len(g)),
+                             "pitches_total": int(g["pitches"].sum()) if known else None, "max_pitches": _clean(g["pitches"].max()),
                              "back_to_back": int((g["gap_days"] == 0).sum()), "min_rest_exact": int((g["min_rest_exact"] == True).sum()),
                              "violations": _rec(v, ["date", "rule", "detail"]), "games": _rec(g, GAME_COLUMNS)})
         pitchers.sort(key=lambda p: (-(p["pitches_total"] if p["pitches_total"] is not None else -1), p["label"]))
         span = daily.loc[daily["school"] == school, "date"]
+        mine_rows = [r for r in per_rows if r["school"] == school]
         schools.append({"code": school, "name": school_name[school], "games": int(mine["game_no"].nunique()), "outings": int(len(mine)),
                         "pitches_total": int(mine["pitches"].sum()) if mine["pitches"].notna().all() else None,
-                        "start": _clean(span.min()), "end": _clean(span.max()),                  # 수집 기간: 화면이 날짜별 7일 합·ACWR을 다시 계산하는 범위
+                        "start": _clean(span.min()), "end": _clean(span.max()),                  # 수집 기간: 화면이 날짜별 7일 합을 다시 계산하는 범위
+                        "violations": int(sum(r["violations"] for r in mine_rows)), "violating_pitchers": int(sum(r["violations"] > 0 for r in mine_rows)),
+                        "load_high": int(sum(r["load"] == "높음" for r in mine_rows)), "load_caution": int(sum(r["load"] == "주의" for r in mine_rows)),
+                        "compliant_with_load": int(sum(r["violations"] == 0 and r["load"] != "보통" for r in mine_rows)),
                         "pitchers": pitchers})
     schools.sort(key=lambda s: (-s["games"], s["name"]))
+    per = pd.DataFrame(per_rows)
     second = outings[outings["gap_days"].notna()]
     ordered = outings.sort_values(["pitcher", "date", "game_no"])
-    two_day = ordered["pitches"] + ordered.groupby("pitcher")["pitches"].shift(1)                 # 연투 이틀 합 (직전 등판이 어제일 때만 뜻이 있음)
-    heavy_b2b = int(((ordered["gap_days"] == 0) & (two_day >= 70)).sum())
-    per = daily.groupby("pitcher").agg(ok=("acwr_ok", "any"), flag=("acwr_flag", "any"))
-    per["violations"] = per.index.map(violated[violated["rule"].isin(kbsa_rules)].groupby("pitcher").size()).fillna(0).astype(int)
+    gaps = ordered.groupby("pitcher")["date"].diff().dt.days
+    pair_sum = ordered["pitches"] + ordered.groupby("pitcher")["pitches"].shift(1)
+    pairs = pair_sum[(gaps <= 2) & pair_sum.notna()]                                           # 3일 안 두 등판의 합
+    heavy_b2b = int(((ordered["gap_days"] == 0) & (pair_sum >= 70)).sum())
+    max7 = daily.groupby("pitcher")["sum_7d"].max()
     totals = {"schools": int(outings["school"].nunique()), "pitchers": int(outings["pitcher"].nunique()), "outings": int(len(outings)),
               "games": int(outings["game_no"].nunique()), "unknown_outings": int(outings["pitches"].isna().sum()),
               "violations": int(violated["rule"].isin(kbsa_rules).sum()), "violating_pitchers": int((per["violations"] > 0).sum()),
@@ -198,10 +221,10 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
               "games_100plus": int((outings["pitches"] >= 100).sum()), "games_91plus": int((outings["pitches"] >= 91).sum()),
               "pitchers_3plus_games": int((outings.groupby("pitcher").size() >= 3).sum()),
               "max_total": _clean(outings.groupby("pitcher")["pitches"].sum(min_count=1).max()),
-              "acwr_ok_pitchers": int(per["ok"].sum()), "acwr_flag_pitchers": int(per["flag"].sum()),
-              "compliant_with_flag": int(((per["violations"] == 0) & per["flag"]).sum()),
-              "acwr_flag_chronic_median": _clean(_chronic_at_flags(daily).median()) if daily["acwr_flag"].any() else None,
-              "pitchers_7d_150": int((daily.groupby("pitcher")["sum_7d"].max() >= 150).sum()),
+              "pitchers_load_high": int((per["load"] == "높음").sum()), "pitchers_load_caution": int((per["load"] == "주의").sum()),
+              "compliant_with_load": int(((per["violations"] == 0) & (per["load"] != "보통")).sum()),
+              "pairs3": int(len(pairs)), "pairs3_70": int((pairs >= lights["pair3"]["caution"]).sum()), "pairs3_100": int((pairs >= lights["pair3"]["high"]).sum()),
+              "pitchers_7d_120": int((max7 >= lights["sum7"]["caution"]).sum()), "pitchers_7d_150": int((max7 >= lights["sum7"]["high"]).sum()),
               "pitchers_season_500": int((outings.groupby("pitcher")["pitches"].sum(min_count=1) >= 500).sum())}
     no_detail = sorted(int(g) for g in outings.loc[~outings["detail"], "game_no"].unique())
     first, last = outings["date"].min(), outings["date"].max()
@@ -209,7 +232,6 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                "dates": info.get("dates") or f"{first:%Y-%m-%d} ~ {last:%Y-%m-%d}", "source": source,
                "games": int(outings["game_no"].nunique()), "no_detail_games": no_detail,
                "competitions": {k: int(v) for k, v in outings.drop_duplicates("game_no")["competition"].value_counts().items()}}
-    return {"synthetic": False, "mode": info["mode"], "season": rules["season"], "acwr_flag": flag, "acwr": rules["acwr"], "kbsa": rules["kbsa"],
+    return {"synthetic": False, "mode": info["mode"], "season": rules["season"], "kbsa": rules["kbsa"], "load_lights": lights,
             "foreign_rules": {k: v for k, v in rules["foreign_rules"].items() if v},
-            "dataset": dataset, "games": game_list, "schools": schools, "totals": totals,
-            "summary": [{k: _clean(v) for k, v in r.items()} for r in hs.summary(daily, violated).assign(**{"학교명": lambda d: d["학교"].map(school_name)}).to_dict("records")]}
+            "dataset": dataset, "games": game_list, "schools": schools, "totals": totals}

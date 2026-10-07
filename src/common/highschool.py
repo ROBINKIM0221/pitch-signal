@@ -15,7 +15,7 @@ from src.core import kbsa_rules as kr
 SHEET = "입력"
 COLUMNS = {"날짜": "date", "대회": "competition", "경기 번호": "game_no", "학교 코드": "school", "투수 코드": "pitcher",
            "투구수": "pitches", "아웃 수 (이닝×3)": "outs"}
-PITCHER_CODE = re.compile(r"^S\d{2}-P\d{2}$")
+PITCHER_CODE = re.compile(r"^S\d{2,3}-P\d{2}$")       # 학교 코드는 두 자리, 학교가 100곳을 넘으면 세 자리 (2026-10-07 전국 자료)
 GAME = ["date", "game_no", "school"]
 KBSA_RULES = ["daily_max", "rest", "three_days"]        # kbsa_rules.check_violations가 내는 위반 종류 (unknown은 판정 불가)
 
@@ -41,7 +41,7 @@ def problems(rows: pd.DataFrame, rules: dict) -> pd.DataFrame:
     """입력 오류 목록: row, school, kind, detail. 형식 오류, 같은 날짜·경기·투수 중복, 한 경기 팀 아웃 수 합 이상."""
     ranges = rules["input_ranges"]
     schools = [f"S{i:02d}" for i in range(1, rules["schools"] + 1)]
-    code_ok = rows["pitcher"].astype(str).str.match(PITCHER_CODE) & (rows["pitcher"].astype(str).str[:3] == rows["school"])
+    code_ok = rows["pitcher"].astype(str).str.match(PITCHER_CODE) & (rows["pitcher"].astype(str).str.split("-").str[0] == rows["school"])
     checks = {
         "날짜": (rows["date"].dt.year != rules["season"], f"{rules['season']}년 날짜가 아님"),
         "대회": (~rows["competition"].isin(rules["competitions"]), "대회 목록에 없음"),
@@ -82,9 +82,12 @@ def daily_table(rows: pd.DataFrame, rules: dict) -> pd.DataFrame:
     """투수마다 하루 한 줄: 투구 수, 최근 며칠 누적, ACWR.
 
     수집 기간은 그 학교의 첫 경기일부터 마지막 경기일까지다. 같은 날 두 경기는 합산하고 등판 없는 날은 0,
-    등판했지만 투구 수를 모르는 날은 NaN(unknown)이다. ACWR은 직전 3주가 모두 수집 기간일 때만 계산한다(acwr_ok).
+    등판했지만 투구 수를 모르는 날은 NaN(unknown)이다. ACWR은 직전 3주가 모두 수집 기간일 때만 계산하고(acwr_ok),
+    acwr.min_chronic이 있으면 직전 3주 주평균(chronic)이 그 값 이상일 때만 판정한다 (2026-10-07 추가: 띄엄띄엄 던지는
+    일정에서 분모가 작아 튀는 값을 보류하기 위함. 값 자체는 남기고 acwr_ok만 끈다).
     """
     a = rules["acwr"]
+    floor = a.get("min_chronic", 0)
     parts = []
     for school, team in rows.groupby("school"):
         days = pd.date_range(team["date"].min(), team["date"].max(), freq="D")
@@ -96,7 +99,8 @@ def daily_table(rows: pd.DataFrame, rules: dict) -> pd.DataFrame:
                                  "unknown": daily.isna().to_numpy()})
             for window in rules["window_days"]:
                 part[f"sum_{window}d"] = _recent_sum(daily, window).to_numpy()
-            part["acwr"], part["acwr_ok"] = load["acwr"].to_numpy(), load["eligible"].to_numpy()
+            part["acwr"], part["chronic"] = load["acwr"].to_numpy(), load["chronic"].to_numpy()
+            part["acwr_ok"] = (load["eligible"] & (load["chronic"].fillna(0) >= floor)).to_numpy()
             part["acwr_flag"] = part["acwr_ok"] & (part["acwr"] > a["flag"])
             parts.append(part)
     return pd.concat(parts, ignore_index=True)

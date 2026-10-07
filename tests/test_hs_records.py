@@ -118,7 +118,7 @@ def test_tournament_payload_summarises_each_pitcher_and_the_whole_tournament_wit
     outings = hr.annotate_outings(rows, RULES["kbsa"])
     daily = hs.daily_table(rows, RULES)
     violated = hs.violations(rows, daily, RULES)
-    pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "2025-10-17 ~ 2025-10-22"}, "시험")
+    pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "2025-10-17 ~ 2025-10-22"}, "시험", LIGHTS)
     assert pay["synthetic"] is False and pay["mode"] == "tournament" and pay["dataset"]["games"] == 3 and pay["dataset"]["no_detail_games"] == [3]
     assert [g["no"] for g in pay["games"]] == [1, 2, 3] and pay["games"][2]["detail"] is False and pay["games"][0]["round"] == "16강"
     school = next(s for s in pay["schools"] if s["name"] == "다라고")
@@ -148,7 +148,10 @@ def season_rows():
     return t
 
 
-def test_season_payload_reports_acwr_status_and_the_rule_versus_load_split():
+LIGHTS = {"sum7": {"caution": 120, "high": 150}, "pair3": {"caution": 70, "high": 100}}
+
+
+def test_season_payload_reports_absolute_load_lights_and_the_rule_versus_load_split():
     t = hr.combine_stints(hr.mark_missing_detail(season_rows()))
     names = hr.name_map(t)
     comp = pd.Series("주말리그 전반기", index=sorted(t["game_idx"].unique()))
@@ -157,16 +160,19 @@ def test_season_payload_reports_acwr_status_and_the_rule_versus_load_split():
     outings = hr.annotate_outings(rows, rules["kbsa"])
     daily = hs.daily_table(rows, rules)
     violated = hs.violations(rows, daily, rules)
-    pay = hr.payload(outings, daily, violated, names, rules, {"mode": "season", "name": "가상 시즌", "short": "시즌", "season": 2025, "region": "경기도"}, "시험")
-    assert pay["mode"] == "season" and pay["dataset"]["dates"] == "2025-03-08 ~ 2025-04-13"
+    pay = hr.payload(outings, daily, violated, names, rules, {"mode": "season", "name": "가상 시즌", "short": "시즌", "season": 2025, "region": "경기도"}, "시험", LIGHTS)
+    assert pay["mode"] == "season" and pay["dataset"]["dates"] == "2025-03-08 ~ 2025-04-13" and pay["load_lights"] == LIGHTS
     school = pay["schools"][0]
     hong = next(p for p in school["pitchers"] if p["label"] == "#17")
     kim = next(p for p in school["pitchers"] if p["label"] == "#23")
-    assert hong["load_status"] == "경보" and hong["acwr_peak"] > 1.5 and kim["load_status"] in ("보통", "주의")
+    # #17: 4주차부터 토 90 + 일 35 → 7일 합 최대 125(주의), 3일 안 두 등판 합 125(높음) → 높음; #23: 주 40 → 보통
+    assert hong["max_7d"] == 125 and hong["max_pair3"] == 125 and hong["load_status"] == "높음" and "3일 안 두 등판 합 125구" in " ".join(hong["load_reasons"])
+    assert kim["max_7d"] == 40 and kim["max_pair3"] is None and kim["load_status"] == "보통" and kim["load_reasons"] == []
     assert hong["rule_status"] == "위반"                                           # 90구 뒤 이튿날 등판 → 의무 휴식 미준수
-    assert school["start"] == "2025-03-08" and school["end"] == "2025-04-13" and pay["acwr"]["chronic_days"] == 21   # 화면이 날짜별 값을 다시 계산할 범위·설정
-    assert pay["totals"]["acwr_ok_pitchers"] == 2 and pay["totals"]["acwr_flag_pitchers"] == 1
-    assert pay["totals"]["compliant_with_flag"] == 0                                  # #17은 위반도 있어서 '규정 지켰지만 부하' 아님
+    assert "acwr_peak" not in hong and "acwr_flag_pitchers" not in pay["totals"]      # ACWR은 고교 화면에서 쓰지 않는다
+    assert pay["totals"]["pitchers_load_high"] == 1 and pay["totals"]["pitchers_load_caution"] == 0 and pay["totals"]["compliant_with_load"] == 0
+    assert pay["totals"]["pairs3"] == 3 and pay["totals"]["pairs3_70"] == 3 and pay["totals"]["pairs3_100"] == 3
+    assert school["load_high"] == 1 and school["load_caution"] == 0 and school["violations"] == 3 and school["violating_pitchers"] == 1 and school["compliant_with_load"] == 0   # #17이 매주 휴식 위반
+    assert school["start"] == "2025-03-08" and school["end"] == "2025-04-13"
     assert pay["dataset"]["competitions"] == {"주말리그 전반기": 15}
-    assert hong["max_7d"] == 125 and kim["max_7d"] == 40                              # 7일 합 최대
-    assert pay["totals"]["pitchers_7d_150"] == 0 and pay["totals"]["pitchers_season_500"] == 0 and pay["totals"]["acwr_flag_chronic_median"] > 0
+    assert pay["totals"]["pitchers_7d_150"] == 0 and pay["totals"]["pitchers_season_500"] == 0

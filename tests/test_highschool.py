@@ -91,6 +91,17 @@ def test_acwr_is_flagged_once_four_weeks_of_records_exist():
     assert one.loc["2026-05-02", "acwr_flag"] and not one.loc["2026-04-22", "acwr_flag"]
 
 
+def test_acwr_is_held_back_when_the_chronic_weekly_average_is_below_the_floor():
+    # 2026-04-29: 직전 3주(4/8~4/28) 90구 → 주평균 30. 하한 30이면 판정, 하한 31이면 보류(계산 불가), 값 자체는 그대로 둔다
+    rules = {**RULES, "acwr": {**RULES["acwr"], "min_chronic": 30}}
+    one = hs.daily_table(loaded_pitcher(), rules).set_index("date")
+    assert one.loc["2026-04-29", "acwr_ok"] and one.loc["2026-04-29", "acwr"] == 2.0
+    rules = {**RULES, "acwr": {**RULES["acwr"], "min_chronic": 31}}
+    one = hs.daily_table(loaded_pitcher(), rules).set_index("date")
+    assert not one.loc["2026-04-29", "acwr_ok"] and not one.loc["2026-04-29", "acwr_flag"] and one.loc["2026-04-29", "acwr"] == 2.0
+    assert "chronic" in one.columns and one.loc["2026-04-29", "chronic"] == 30.0
+
+
 def test_violations_come_from_the_rule_engine_and_configured_foreign_rules():
     rows = entries(("2026-04-01", "S02-P01", 110), ("2026-04-02", "S02-P01", 20), ("2026-04-03", "S02-P01", 10),
                    ("2026-04-10", "S02-P02", np.nan),
@@ -135,3 +146,12 @@ def test_read_input_takes_the_filled_rows_of_the_entry_form(tmp_path):
     assert list(rows["row"]) == [2, 3] and list(rows["pitcher"]) == ["S01-P01", "S01-P02"]     # 빈 줄(4행~)은 버림
     assert rows["date"].iloc[0] == pd.Timestamp("2026-04-01") and rows["pitches"].iloc[0] == 60
     assert np.isnan(rows["pitches"].iloc[1]) and hs.problems(rows, RULES).empty
+
+
+def test_input_check_accepts_three_digit_school_codes_when_there_are_more_than_99_schools():
+    rules = {**RULES, "schools": 120}
+    rows = entries(("2026-04-01", "S105-P01", 30), ("2026-04-02", "S105-P02", 20))
+    rows["school"] = "S105"
+    assert hs.problems(rows, rules).empty
+    bad = entries(("2026-04-01", "S105-P01", 30)); bad["school"] = "S104"              # 학교 코드와 투수 코드가 다르면 여전히 오류
+    assert (hs.problems(bad, rules)["kind"] == "투수 코드").any()

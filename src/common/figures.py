@@ -84,13 +84,25 @@ def kbo_timeline(rows: list[dict]) -> pd.DataFrame:
     return out
 
 
-HS_SEASON = DASH / "highschool" / "gyeonggi_2025.json"
 HS_TOURNAMENT = DASH / "highschool" / "tournament_2025.json"
+
+
+def highschool_season_file(region: str = "경기") -> Path | None:
+    """시즌(전국) 데이터셋에서 한 권역의 payload 파일. 목록(highschool.json)에서 찾는다."""
+    index_path = DASH / "highschool.json"
+    if not index_path.exists():
+        return None
+    for d in json.loads(index_path.read_text(encoding="utf-8")).get("datasets", []):
+        for r in d.get("regions", []):
+            if r["name"] == region:
+                return DASH / r["file"]
+    return None
 
 
 def highschool_is_real() -> bool:
     meta = json.loads((DASH / "meta.json").read_text(encoding="utf-8"))
-    return "highschool.json" not in meta.get("synthetic", []) and HS_SEASON.exists() and HS_TOURNAMENT.exists()
+    season = highschool_season_file()
+    return "highschool.json" not in meta.get("synthetic", []) and season is not None and season.exists() and HS_TOURNAMENT.exists()
 
 
 # ---------- 그림 ----------
@@ -271,7 +283,7 @@ def draw_highschool_season(payload: dict, path: Path) -> None:
     ax.set_xlim(-0.7, len(schools) - 0.3)
     ax.set_ylabel("시즌 투구 수 (공식 경기)")
     k = payload["totals"]
-    ax.set_title(f"2025 경기도 고교 {k['schools']}팀 투수 {k['pitchers']}명의 시즌 투구 수 — 점 하나가 투수 한 명(크기는 등판 수), 빨간 테두리는 규정 위반 투수. "
+    ax.set_title(f"2025 {payload['dataset'].get('region') or ''} 고교 {k['schools']}팀 투수 {k['pitchers']}명의 시즌 투구 수 — 점 하나가 투수 한 명(크기는 등판 수), 빨간 테두리는 규정 위반 투수. "
                  f"규정 위반 {k['violations']}건, 시즌 500구 이상 {k['pitchers_season_500']}명", fontsize=10, loc="left")
     fig.tight_layout()
     fig.savefig(path)
@@ -349,12 +361,12 @@ def draw_kbo(timeline: pd.DataFrame, path: Path) -> None:
 def highschool_season_caption(payload: dict) -> str:
     t, k = payload["dataset"], payload["totals"]
     worst = sorted((p for s in payload["schools"] for p in s["pitchers"] if p["pitches_total"] is not None), key=lambda p: -p["pitches_total"])[:3]
-    return (f"그림 6. {t['name']}({t['dates']}, {k['schools']}팀 {k['games']}경기)의 투수 {k['pitchers']}명이 던진 시즌 투구 수. 점 하나가 투수 한 명이고 크기는 등판 수, "
+    return (f"그림 6. {t['name']} 중 {t['region']} 권역 {k['schools']}팀({t['dates']}, {k['games']}경기)의 투수 {k['pitchers']}명이 던진 시즌 투구 수. 점 하나가 투수 한 명이고 크기는 등판 수, "
             f"팀은 팀 투구 수가 많은 순이다. 투수는 등번호로만 표시했다. 등판 {k['outings']}회에서 KBSA 규정 위반은 {k['violations']}건(하루 105구 초과 1, 의무 휴식일 미준수 1)뿐이지만 "
             f"시즌 500구 이상이 {k['pitchers_season_500']}명, 7일 합 150구 이상을 경험한 투수가 {k['pitchers_7d_150']}명, 100구 이상 등판이 {k['games_100plus']}회였고 "
             f"가장 많이 던진 세 투수는 {', '.join(f'{p['pitches_total']:,}구({p['outings']}등판)' for p in worst)}였다. 연투 {k['back_to_back']}건은 모두 45구 이하 뒤라 규정상 허용이다. "
-            f"ACWR 1.5 초과를 경험한 투수는 {k['acwr_flag_pitchers']}/{k['acwr_ok_pitchers']}명인데 초과 시점의 직전 3주 주평균은 중앙값 {k['acwr_flag_chronic_median']:.0f}구로, "
-            f"띄엄띄엄 던지는 고교 일정에서는 ACWR이 저활동 뒤 등판에 쉽게 켜져 단독 지표로는 변별력이 약하다.")
+            f"누적 부하 신호등(7일 합 120/150구, 3일 안 두 등판 합 70/100구)은 높음 {k['pitchers_load_high']}명·주의 {k['pitchers_load_caution']}명이고, "
+            f"규정 위반 없이 높음·주의가 켜진 투수가 {k['compliant_with_load']}명이다.")
 
 
 def highschool_caption(payload: dict) -> str:
@@ -394,7 +406,7 @@ def captions(results: pd.DataFrame, tests: pd.DataFrame, sim: dict, stories: dic
         "05_case_missed.png": (f"그림 5. 놓친 사례 — {mis['name']}({ROLE[mis['role']]}, {PART[mis['part']]}, {mis['season']}). 관찰 창 다섯 등판의 구속이 평소 범위 안에 머물러 "
                                f"구속 하락 지수가 1에 이르지 못했다(창 안 최댓값 {mis['index'][mis['in_window']].max():.2f}). 구속이 떨어지지 않는 부상은 이 신호로 잡히지 않는다.",
                                f"dashboard-web/public/data/replay/{CASES["missed"]}.json"),
-        "06_highschool.png": (hs_season_caption, "dashboard-web/public/data/highschool/gyeonggi_2025.json (src/17_kbsa_records.py가 KBSA 기록실 경기 기록 265경기를 변환, 2026-10-07 1회 수집)"),
+        "06_highschool.png": (hs_season_caption, "dashboard-web/public/data/highschool/korea_2025/ 경기 권역 파일 (src/17_kbsa_records.py가 KBSA 기록실 2025 고교 경기 기록 976경기를 변환, 2026-10-07 1회 수집)"),
         "06b_tournament.png": (hs_caption, "dashboard-web/public/data/highschool/tournament_2025.json (src/17_kbsa_records.py가 KBSA 기록실 경기 기록 14경기를 변환, 2026-10-07 1회 수집)"),
         "07_kbo_timeline.png": (f"그림 7. 2026 KBO 외국인 투수 부상 이후 결정까지. 완전 교체 두 건은 {timeline[timeline['kind'] == '완전 교체']['days'].min()}~"
                                 f"{timeline[timeline['kind'] == '완전 교체']['days'].max()}일, 6주 대체 두 건은 {timeline[timeline['kind'] == '6주 대체']['days'].min()}~"
@@ -425,7 +437,7 @@ def draw_all(out: Path | str = FINAL) -> list[str]:
     draw_case(stories["detected"], out / "04_case_detected.png"); names.append("04_case_detected.png")
     draw_case(stories["missed"], out / "05_case_missed.png"); names.append("05_case_missed.png")
     if highschool_is_real():
-        season = json.loads(HS_SEASON.read_text(encoding="utf-8"))
+        season = json.loads(highschool_season_file().read_text(encoding="utf-8"))
         draw_highschool_season(season, out / "06_highschool.png"); names.append("06_highschool.png"); hs_season_caption = highschool_season_caption(season)
         payload = json.loads(HS_TOURNAMENT.read_text(encoding="utf-8"))
         draw_highschool(payload, out / "06b_tournament.png"); names.append("06b_tournament.png"); hs_caption = highschool_caption(payload)

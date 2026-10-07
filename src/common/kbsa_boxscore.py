@@ -47,7 +47,7 @@ def parse_record_detail(text: str, game_idx: int) -> dict:
     for team, body in _SECTION.findall(text):
         for cls, row in _ROW.findall(body):
             cells = [_text(c) for c in _CELL.findall(row)]
-            if cls == "sum" or len(cells) < 8 or cells[0] == "선수명":
+            if cls == "sum" or len(cells) < 8 or cells[0] == "선수명" or not cells[5]:     # 합계·머리글·빈 자리표시('()' 줄)는 건너뛴다
                 continue
             who = _NAME.match(cells[0])
             name, number = (who.group(1), int(who.group(2))) if who else (cells[0], None)

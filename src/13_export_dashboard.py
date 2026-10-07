@@ -178,7 +178,8 @@ def team_files(cfg: dict, outings: pd.DataFrame, splits: list[str], names: pd.Se
 
 
 def highschool_files(cfg: dict) -> dict:
-    """화면 3: config_kbsa.yaml의 데이터셋마다 highschool/<key>.json, 목록은 highschool.json. 변환 결과가 하나도 없으면 빈 dict."""
+    """화면 3: config_kbsa.yaml의 데이터셋마다 payload 파일과 목록(highschool.json). 시즌(전국) 데이터셋은 권역별 파일
+    highschool/<key>/<r01…>.json로 나누고 목록에 전국 요약·권역 목록·학교 목록(검색용)을 적는다. 변환 결과가 없으면 빈 dict."""
     kcfg, datasets = hr.datasets_config()
     sizes, index = {}, []
     for key, (d, rules) in datasets.items():
@@ -188,14 +189,31 @@ def highschool_files(cfg: dict) -> dict:
         names = pd.read_csv(PROCESSED / f"hs_{key}_names.csv", encoding="utf-8-sig")
         names["name"] = names["pitcher"]                                                   # 실명 없이도 payload가 기대하는 열 모양을 맞춘다
         rules = {**rules, "schools": int(names["school"].nunique())}
-        pay = hr.payload(pd.read_parquet(rows_path), pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet"),
-                         pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"]), names, rules,
-                         {**d, "key": key}, kcfg["source"])
-        sizes[f"highschool/{key}.json"] = dump(f"highschool/{key}.json", pay)
-        index.append({"key": key, **{k: pay["dataset"][k] for k in ("mode", "name", "short", "season", "region", "dates", "games")},
-                      "schools": pay["totals"]["schools"], "pitchers": pay["totals"]["pitchers"], "outings": pay["totals"]["outings"]})
+        outings = pd.read_parquet(rows_path)
+        daily = pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet")
+        violated = pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
+        whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, kcfg["source"], kcfg["load_lights"])
+        entry = {"key": key, **{k: whole["dataset"][k] for k in ("mode", "name", "short", "season", "dates", "games", "competitions")}, "totals": whole["totals"]}
+        if "region" in names.columns:                                                      # 시즌(전국): 권역별 파일
+            order = list(d["region_leagues"]) + ["기타"]
+            regions = [r for r in order if r in set(names["region"])]
+            entry["regions"], entry["schools"] = [], []
+            for i, region in enumerate(regions, start=1):
+                rkey = f"r{i:02d}"
+                codes = set(names.loc[names["region"] == region, "school"])
+                sub = hr.payload(outings[outings["school"].isin(codes)], daily[daily["school"].isin(codes)], violated[violated["school"].isin(codes)],
+                                 names[names["region"] == region], rules, {**d, "key": key, "region": region}, kcfg["source"], kcfg["load_lights"])
+                sizes[f"highschool/{key}/{rkey}.json"] = dump(f"highschool/{key}/{rkey}.json", sub)
+                entry["regions"].append({"key": rkey, "name": region, "file": f"highschool/{key}/{rkey}.json", "schools": sub["totals"]["schools"],
+                                         "pitchers": sub["totals"]["pitchers"], "outings": sub["totals"]["outings"], "violations": sub["totals"]["violations"],
+                                         "load_high": sub["totals"]["pitchers_load_high"], "load_caution": sub["totals"]["pitchers_load_caution"]})
+                entry["schools"] += [{"code": s["code"], "name": s["name"], "region": rkey, "games": s["games"], "pitchers": len(s["pitchers"])} for s in sub["schools"]]
+        else:
+            sizes[f"highschool/{key}.json"] = dump(f"highschool/{key}.json", whole)
+            entry["file"] = f"highschool/{key}.json"
+        index.append(entry)
     if index:
-        sizes["highschool.json"] = dump("highschool.json", {"synthetic": False, "labels": kcfg["labels"], "datasets": index})
+        sizes["highschool.json"] = dump("highschool.json", {"synthetic": False, "labels": kcfg["labels"], "load_lights": kcfg["load_lights"], "datasets": index})
     return sizes
 
 

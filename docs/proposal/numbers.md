@@ -137,19 +137,22 @@
 | 트리플A 자료 | Baseball Savant Minor League Statcast 2023~2025, 선수별 조회, 구장 보정 없음 | src/16_scout.py |
 | 트리플A IL 등재 | 9건 (목록 투수 7명, 모두 부위 미상 — 거래 기록에 사유 문구 없음) | MLB Stats API transactions sportId=11, data/raw/transactions/aaa_<시즌>.parquet, reports/logs/scout.log |
 
-## 고교 현황판 (화면 3) — 2025 경기도 시즌 (시즌 모드)
+## 고교 현황판 (화면 3) — 2025 전국 시즌 (시즌 모드, 권역·학교 선택)
 
-| 항목 | 값 | 출처 |
-|---|---|---|
-| 범위 | 경기도 소재 23개 팀(주말리그 경기권 A·B·C 전·후반기 참가팀, U-18 클럽 포함)의 2025-03-08 ~ 10-23 공식 경기 265경기 (주말리그 전반기 69·후반기 69, 이마트배 34, 황금사자기 18, 청룡기 25, 봉황대기 35, 대통령배 11, 전국체전 4) | config_kbsa.yaml datasets.gyeonggi_2025, data/raw/kbsa/games_2025.csv (2025 고교 37개 리그 976경기 목록) |
-| 자료 | KBSA 기록실 경기 기록(/game/record_detail) 265경기, 2026-10-07 1회 수집(저장소 밖 스크립트) | data/raw/kbsa/ (저장소 밖), src/common/kbsa_boxscore.py, src/17_kbsa_records.py |
-| 투수 / 등판 | 208명 / 1,500회 (한 경기 두 번 등판 18건 합산), 투구 수 모르는 등판 2 (상세 기록 미공개 1경기 + 아웃 있는데 0구로 적힌 1줄) | reports/logs/hs_records.log |
-| 규정 위반 | 2건 (2명): 하루 105구 초과 1 (120구), 의무 휴식일 미준수 1 (77구 → 3일 필요, 2일 휴식) | data/processed/hs_gyeonggi_2025_violations.csv, reports/tables/hs_gyeonggi_2025_summary.csv |
-| 100구 이상 / 91구 이상 등판 | 53 / 102 | dashboard-web/public/data/highschool/gyeonggi_2025.json (totals) |
-| 시즌 500구 이상 / 7일 합 150구 이상 경험 투수 | 41명 / 20명, 시즌 최다 1,134구(20등판)·1,045구(14등판)·986구(16등판) | 〃 |
-| 연투 / 이틀 합 70구 이상 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 125 / 56 / 24 / 1 | 〃 |
-| ACWR 1.5 초과 경험 / 계산 가능 투수, 초과 시점 직전 3주 주평균 중앙값 | 143 / 206, 14구 | 〃 (acwr_flag_chronic_median) |
-| 규정은 지켰지만 ACWR 초과 표시가 있던 투수 | 141 | 〃 (compliant_with_flag) |
+| 항목 | 전국 | 경기 권역 | 출처 |
+|---|---|---|---|
+| 범위 | 2025 고교 37개 리그 973경기 전부 (주말리그 전반기 303, 주말리그 후반기 303, 봉황대기 102, 신세계 이마트배 101, 황금사자기 57, 청룡기 57, 대통령배 36, 전국체전 14); 팀 105 (권역: 서울 25, 서울·인천 4, 경기 23, 강원 5, 충청 6, 대전·전북 6, 광주·전남 7, 경상 20, 부산 6, 기타 3) | 23팀, 265경기 | config_kbsa.yaml datasets.korea_2025, data/raw/kbsa/games_2025.csv |
+| 자료 | KBSA 기록실 경기 기록(/game/record_detail) 976쪽, 2026-10-07 1회 수집(저장소 밖 스크립트); 투수 표가 빈 3경기(노브랜드배) 제외 | 〃 | data/raw/kbsa/ (저장소 밖), src/common/kbsa_boxscore.py, src/17_kbsa_records.py |
+| 투수 / 등판 / 투구 수 모르는 등판 | 1,024 / 7,162 / 5 | 208 / 1,500 / 2 | reports/logs/hs_records.log |
+| 규정 위반 (투수 수) | 9 (9): daily_max 5, rest 4 | 2 (2) | data/processed/hs_korea_2025_violations.csv, reports/tables/hs_korea_2025_summary.csv |
+| 100구 이상 / 91구 이상 등판 | 210 / 391 | 53 / 102 | dashboard-web/public/data/highschool.json (datasets.totals), highschool/korea_2025/r03.json (totals) |
+| 시즌 500구 이상 투수, 시즌 최다 | 191, 1,175구 | 41, 1,134구 | 〃 |
+| 7일 합 120 / 150구 이상 경험 투수 | 187 / 88 | 41 / 20 | 〃 |
+| 3일 안 두 등판 쌍 / 합 70구 이상 / 100구 이상 | 595 / 285 / 133 | 155 / 68 / 28 | 〃 |
+| 연투 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 436 / 138 / 4 | 125 / 24 / 1 | 〃 |
+| 누적 부하 신호등 높음 / 주의 / 규정은 지켰지만 표시 | 146 / 128 / 265 | 32 / 35 / 65 | 〃 (pitchers_load_high, pitchers_load_caution, compliant_with_load) |
+| 신호등 기준 근거 | 등판일 7일 합 분위수: 중앙값 40, 90% 100, 95% 120, 97.5% 140, 99% 169 → 120/150; 3일 안 두 등판 합 ≥70·≥100 경험 투수 206(20%)·107(10%) | — | 2026-10-07 분석 (hs_korea_2025_daily·rows) |
+| ACWR (설계값, 교체 전 참고) | 하한 없음: 989명 중 699명 1.5 초과 | 하한 없음 143/206 (초과 시점 주평균 중앙값 14구), 기준 3.0이어도 133, 만성 하한 30구면 55 | 2026-10-07 분석 — 고교 지표에서 제외 (제안서 6.1, SPEC 변경 기록) |
 
 ## 고교 현황판 (화면 3) — 2025 전국체전 18세 이하부 (대회 모드)
 

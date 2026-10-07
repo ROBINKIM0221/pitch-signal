@@ -58,4 +58,4 @@ def test_draw_all_writes_every_figure_it_has_real_data_for(tmp_path):
     velo = results[(results["method"] == "구속 하락 신호") & (results["group"] == "all")].iloc[0]
     assert f"{velo['detection']:.1f}%" in captions and f"{velo['control_window']:.1f}%" in captions    # 캡션 숫자는 결과 파일에서 온다
     assert "가상" not in captions.replace("가상 데이터는 쓰지 않", "")
-    assert "전국체전" in captions and "등번호" in captions and "경기도" in captions          # ⑥ 캡션은 시즌·대회 자료(학교 실명·등번호)로 쓴다
+    assert "전국체전" in captions and "등번호" in captions and "경기 권역" in captions        # ⑥ 캡션은 시즌(경기 권역)·대회 자료(학교 실명·등번호)로 쓴다

@@ -63,3 +63,12 @@ def test_games_to_rows_puts_both_teams_outings_in_one_table_with_opponent():
     assert table.loc[table["team"] == "가나고", "opponent"].unique().tolist() == ["다라고"]
     assert table.loc[table["team"] == "다라고", "opponent"].unique().tolist() == ["가나고"]
     assert pd.api.types.is_integer_dtype(table["outs"]) and table["pitches"].sum() == 29 + 38 + 24 + 101 + 27
+
+
+def test_empty_placeholder_rows_are_skipped():
+    page = PAGE.replace(pitcher_table("다라고", [("사아자", 54, "선발", "승", "7", 25, 101), ("차카타", 11, "교체", "-", "2", 5, 27)]),
+                        '<div class="section_sumrec"><h4>다라고 투수기록</h4><div class="sum_table"><table class="record_table" summary="투수기록"><tbody>'
+                        '<tr><th>()</th><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>-</td></tr>'
+                        '</tbody></table></div></div>')
+    rows = kb.parse_record_detail(page, game_idx=1)["pitchers"]
+    assert [r["team"] for r in rows] == ["가나고"] * 3                               # 빈 자리표시 줄은 투수가 아니다
