@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { fmt, useJson } from "../lib/data.js";
-import { GRID, LABEL, LEGEND_STYLE, TICK, TIP_STYLE, limitLabel } from "../lib/chart.jsx";
-import { addDays, dateRange } from "../lib/load.js";
+import { ChartTip, GRID, LABEL, LEGEND_STYLE, TICK, TIP_STYLE, limitLabel } from "../lib/chart.jsx";
+import { addDays, dailySeries, dateRange } from "../lib/load.js";
 
 const RULE_NAME = { daily_max: "하루 105구 초과", rest: "의무 휴식일 미준수", three_days: "3일 연속 등판", unknown: "투구 수 기록 없음(판정 불가)" };
 const LOAD_CLASS = { "보통": "ok", "주의": "warn", "경보": "alarm", "계산 불가": "base" };
@@ -59,6 +59,15 @@ function restText(g) {
 
 function innings(outs) { return `${Math.floor(outs / 3)}${outs % 3 ? `.${outs % 3}` : ""}`; }
 
+function DayTip({ d }) {
+  return (
+    <>
+      <div><b>{d.date}</b> · {d.pitches ? `투구 ${d.pitches}구` : "등판 없음"}</div>
+      <div>7일 합 {fmt.num(d.sum_7d, 0)}구{d.acwr != null ? ` · ACWR ${fmt.num(d.acwr)}` : " · ACWR 계산 불가"}</div>
+    </>
+  );
+}
+
 function GamesTable({ p, withCompetition }) {
   return (
     <div className="tbl-wrap">
@@ -100,7 +109,9 @@ function SeasonBoard({ data, index, selector, params, setParams }) {
   const { dataset: ds, totals, kbsa } = data;
   const foreign = params.get("f") && data.foreign_rules[params.get("f")] ? params.get("f") : "none";
   const rule = foreign !== "none" ? data.foreign_rules[foreign] : null;
-  const days = (p?.days || []).map((d) => ({ ...d, over: rule ? (d.sum_7d != null && d.sum_7d > rule.max_pitches) : false }));
+  const days = useMemo(() => (p && s ? dailySeries(p.games.map((g) => ({ date: g.date, pitches: g.pitches })), s.start, s.end, data.acwr) : [])
+    .map((d) => ({ ...d, over: rule ? (d.sum_7d != null && d.sum_7d > rule.max_pitches) : false })), [p, s, data, rule]);
+  const monthTicks = useMemo(() => days.filter((d) => d.date.endsWith("-01")).map((d) => d.date), [days]);   // 두 패널의 눈금을 매달 1일로 맞춘다
   const summary = data.summary.find((r) => r["학교"] === s?.code);
   const ruleCounts = Object.entries(totals.violations_by_rule).filter(([k]) => k !== "unknown").map(([k, v]) => `${RULE_NAME[k] || k} ${v}`).join(" · ");
   return (
@@ -158,32 +169,51 @@ function SeasonBoard({ data, index, selector, params, setParams }) {
           </div>
         </div>
         <div className="card">
-          <h2>{s?.name} {p?.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 일별 투구 수와 ACWR</span></h2>
-          <ResponsiveContainer width="100%" height={270}>
-            <ComposedChart data={days} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke={GRID} />
-              <XAxis dataKey="date" tickFormatter={fmt.date} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} minTickGap={28} />
-              <YAxis yAxisId="p" tick={TICK} width={34} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="a" orientation="right" domain={[0, 4]} allowDataOverflow tick={TICK} width={34} axisLine={false} tickLine={false} />
-              <Tooltip {...TIP_STYLE} labelFormatter={(d) => d} formatter={(v, n) => [v == null ? "계산 불가" : fmt.num(v, n === "ACWR" ? 2 : 0), n]} />
-              <Legend wrapperStyle={LEGEND_STYLE} verticalAlign="top" iconType="plainline" />
-              <Bar yAxisId="p" dataKey="pitches" name="투구 수" fill="var(--velo)" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              <Line yAxisId="p" type="stepAfter" dataKey="sum_7d" name="7일 합" stroke="var(--ink)" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-              <Line yAxisId="a" type="monotone" dataKey="acwr" name="ACWR" stroke="var(--warn)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              <ReferenceLine yAxisId="a" y={data.acwr_flag} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`ACWR ${data.acwr_flag}`)} />
-              {p?.violations.filter((v) => v.rule !== "unknown").map((v) => <ReferenceLine key={v.date + v.rule} yAxisId="p" x={v.date} stroke="var(--alarm)" label={{ value: "위반", position: "insideTop", ...LABEL, fill: "var(--alarm)" }} />)}
+          <h2>{s?.name} 시즌 투구 수 분배 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 투수별 합계</span></h2>
+          <ResponsiveContainer width="100%" height={Math.max(220, 24 * pitchers.length + 40)}>
+            <ComposedChart layout="vertical" data={pitchers.map((x) => ({ label: x.label, total: x.pitches_total ?? 0, unknown: x.pitches_total == null, on: x.code === p?.code }))} margin={{ top: 4, right: 48, left: 4, bottom: 0 }}>
+              <CartesianGrid horizontal={false} stroke={GRID} />
+              <XAxis type="number" tick={TICK} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="label" width={44} tick={TICK} axisLine={false} tickLine={false} interval={0} />
+              <Tooltip {...TIP_STYLE} formatter={(v, n, item) => [item.payload.unknown ? "일부 미공개" : `${fmt.num(v, 0)}구`, "시즌 투구 수"]} />
+              <Bar dataKey="total" name="시즌 투구 수" fill="var(--velo)" radius={[0, 3, 3, 0]} isAnimationActive={false} label={{ position: "right", fontSize: 11, fill: "var(--ink-2)", formatter: (v) => (v ? fmt.num(v, 0) : "") }} />
+              <ReferenceLine x={500} stroke="var(--alarm)" strokeDasharray="4 4" label={{ value: "500구", position: "insideTopRight", ...LABEL, fill: "var(--alarm)" }} />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">검은 선은 그날까지 7일 투구 수 합(왼쪽 축), 주황 선은 ACWR(오른쪽 축, 4에서 잘림 — 값은 마우스를 올리면 보임). ACWR은 첫 경기부터 4주가 쌓인 뒤부터 계산하며, 3주 동안 거의 던지지 않다가 등판하면 분모가 작아 크게 튑니다 — 그래서 고교처럼 띄엄띄엄 던지는 일정에서는 7일 합·연투·의무 휴식일을 함께 봐야 합니다.
-            {rule && ` 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일.`}</p>
+          <p className="caption">팀 합계 {s?.pitches_total ?? "—"}구 · {s?.games}경기. 한두 명에게 몰리는지 한눈에 봅니다.</p>
         </div>
       </div>
       {p && (
         <div className="card">
           <div className="card-head">
-            <h2>{s.name} {p.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 등판 {p.outings}회{p.pitches_total != null && ` · 시즌 ${p.pitches_total}구`}{p.max_pitches != null && ` · 한 경기 최다 ${p.max_pitches}구`}</span></h2>
-            <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`}>부하 {p.load_status}</span></span>
+            <h2>{s.name} {p.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 등판 {p.outings}회{p.pitches_total != null && ` · 시즌 ${p.pitches_total}구`}{p.max_pitches != null && ` · 한 경기 최다 ${p.max_pitches}구`}{p.max_7d != null && ` · 7일 최대 ${fmt.num(p.max_7d, 0)}구`}</span></h2>
+            <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`}>ACWR {p.load_status}</span></span>
           </div>
+          <div className="chart-title">일별 투구 수와 7일 합 <small>막대 = 그날 투구 수, 검은 선 = 그날까지 7일 합{rule && ` · 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={days} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} syncId="hs-season">
+              <CartesianGrid vertical={false} stroke={GRID} />
+              <XAxis dataKey="date" ticks={monthTicks} tickFormatter={fmt.date} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
+              <YAxis tick={TICK} width={36} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTip render={(payload) => <DayTip d={payload[0].payload} />} />} cursor={{ fill: "rgba(20,20,19,0.04)" }} />
+              <Bar dataKey="pitches" name="투구 수" fill="var(--velo)" barSize={5} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+              <Line type="stepAfter" dataKey="sum_7d" name="7일 합" stroke="var(--ink)" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
+              {rule && <ReferenceLine y={rule.max_pitches} stroke="var(--warn)" strokeDasharray="4 4" label={limitLabel(`7일 ${rule.max_pitches}구`)} />}
+              {p.violations.filter((v) => v.rule !== "unknown").map((v) => <ReferenceLine key={v.date + v.rule} x={v.date} stroke="var(--alarm)" label={{ value: "위반", position: "insideTop", ...LABEL, fill: "var(--alarm)" }} />)}
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="chart-title">ACWR <small>최근 7일 합 ÷ 그 앞 3주 주평균 · 점선 {data.acwr_flag} · 4 이상은 잘림(값은 마우스를 올리면 보임)</small></div>
+          <ResponsiveContainer width="100%" height={150}>
+            <ComposedChart data={days} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} syncId="hs-season">
+              <CartesianGrid vertical={false} stroke={GRID} />
+              <XAxis dataKey="date" ticks={monthTicks} tickFormatter={fmt.date} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
+              <YAxis domain={[0, 4]} allowDataOverflow ticks={[0, 1, 2, 3, 4]} tick={TICK} width={36} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTip render={(payload) => <DayTip d={payload[0].payload} />} />} cursor={{ stroke: "var(--line-2)" }} />
+              <Line type="monotone" dataKey="acwr" name="ACWR" stroke="var(--warn)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <ReferenceLine y={data.acwr_flag} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`ACWR ${data.acwr_flag}`)} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="caption">ACWR은 첫 경기부터 4주가 쌓인 뒤부터 계산하며, 3주 동안 거의 던지지 않다가 등판하면 분모가 작아 크게 튑니다 — 그래서 고교처럼 띄엄띄엄 던지는 일정에서는 7일 합·연투·의무 휴식일을 함께 봐야 합니다.</p>
           <GamesTable p={p} withCompetition />
           <ViolationsTable p={p} />
         </div>

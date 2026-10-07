@@ -17,7 +17,6 @@ from src.core import kbsa_rules as kr
 
 GAME_KEY = ["game_idx", "team", "name", "number"]
 GAME_COLUMNS = ["date", "game_no", "competition", "round", "opponent", "role", "result", "outs", "pitches", "detail", "gap_days", "required_rest", "rest_ok", "min_rest_exact", "cum_pitches"]
-DAY_COLUMNS = ["date", "pitches", "sum_3d", "sum_7d", "acwr", "acwr_flag"]
 
 
 def datasets_config(root: Path = ROOT) -> tuple[dict, dict[str, tuple[dict, dict]]]:
@@ -173,15 +172,16 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
             d = daily[daily["pitcher"] == code]
             peak = d.loc[d["acwr_ok"], "acwr"].max()
             load_status = ("경보" if d["acwr_flag"].any() else "주의" if peak >= 1.0 else "보통") if np.isfinite(peak) else "계산 불가"
-            shown = d[(d["pitches"].fillna(0) != 0) | d["unknown"] | d["acwr_ok"]]
             pitchers.append({"code": code, "label": label_of[code], "rule_status": status, "load_status": load_status, "acwr_peak": _clean(peak),
                              "max_7d": _clean(d["sum_7d"].max()), "outings": int(len(g)), "pitches_total": int(g["pitches"].sum()) if known else None, "max_pitches": _clean(g["pitches"].max()),
                              "back_to_back": int((g["gap_days"] == 0).sum()), "min_rest_exact": int((g["min_rest_exact"] == True).sum()),
-                             "violations": _rec(v, ["date", "rule", "detail"]), "games": _rec(g, GAME_COLUMNS),
-                             "days": [{**r, "acwr": r["acwr"] if ok else None} for r, ok in zip(_rec(shown, DAY_COLUMNS), shown["acwr_ok"])]})
+                             "violations": _rec(v, ["date", "rule", "detail"]), "games": _rec(g, GAME_COLUMNS)})
         pitchers.sort(key=lambda p: (-(p["pitches_total"] if p["pitches_total"] is not None else -1), p["label"]))
+        span = daily.loc[daily["school"] == school, "date"]
         schools.append({"code": school, "name": school_name[school], "games": int(mine["game_no"].nunique()), "outings": int(len(mine)),
-                        "pitches_total": int(mine["pitches"].sum()) if mine["pitches"].notna().all() else None, "pitchers": pitchers})
+                        "pitches_total": int(mine["pitches"].sum()) if mine["pitches"].notna().all() else None,
+                        "start": _clean(span.min()), "end": _clean(span.max()),                  # 수집 기간: 화면이 날짜별 7일 합·ACWR을 다시 계산하는 범위
+                        "pitchers": pitchers})
     schools.sort(key=lambda s: (-s["games"], s["name"]))
     second = outings[outings["gap_days"].notna()]
     ordered = outings.sort_values(["pitcher", "date", "game_no"])
@@ -209,7 +209,7 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                "dates": info.get("dates") or f"{first:%Y-%m-%d} ~ {last:%Y-%m-%d}", "source": source,
                "games": int(outings["game_no"].nunique()), "no_detail_games": no_detail,
                "competitions": {k: int(v) for k, v in outings.drop_duplicates("game_no")["competition"].value_counts().items()}}
-    return {"synthetic": False, "mode": info["mode"], "season": rules["season"], "acwr_flag": flag, "kbsa": rules["kbsa"],
+    return {"synthetic": False, "mode": info["mode"], "season": rules["season"], "acwr_flag": flag, "acwr": rules["acwr"], "kbsa": rules["kbsa"],
             "foreign_rules": {k: v for k, v in rules["foreign_rules"].items() if v},
             "dataset": dataset, "games": game_list, "schools": schools, "totals": totals,
             "summary": [{k: _clean(v) for k, v in r.items()} for r in hs.summary(daily, violated).assign(**{"학교명": lambda d: d["학교"].map(school_name)}).to_dict("records")]}

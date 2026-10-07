@@ -164,7 +164,7 @@ def test_season_payload_reports_acwr_status_and_the_rule_versus_load_split():
     kim = next(p for p in school["pitchers"] if p["label"] == "#23")
     assert hong["load_status"] == "경보" and hong["acwr_peak"] > 1.5 and kim["load_status"] in ("보통", "주의")
     assert hong["rule_status"] == "위반"                                           # 90구 뒤 이튿날 등판 → 의무 휴식 미준수
-    assert any(d["acwr"] is not None for d in hong["days"])
+    assert school["start"] == "2025-03-08" and school["end"] == "2025-04-13" and pay["acwr"]["chronic_days"] == 21   # 화면이 날짜별 값을 다시 계산할 범위·설정
     assert pay["totals"]["acwr_ok_pitchers"] == 2 and pay["totals"]["acwr_flag_pitchers"] == 1
     assert pay["totals"]["compliant_with_flag"] == 0                                  # #17은 위반도 있어서 '규정 지켰지만 부하' 아님
     assert pay["dataset"]["competitions"] == {"주말리그 전반기": 15}

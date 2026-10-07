@@ -54,3 +54,25 @@ test("status: any flag → 표시; back-to-back today or acwr above 1.5 → 주�
   assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, acwr: 1.6 }), "주의");
   assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, acwr: 1.2 }), "평소");
 });
+
+// 고교 현황판(시즌 모드)의 날짜별 7일 합·ACWR 재계산: 파이프라인(src/common/highschool.daily_table → kbsa_rules.acwr)과 같아야 한다.
+import { dailySeries } from "../src/lib/load.js";
+const hs = JSON.parse(readFileSync(new URL("./fixtures/hs_daily_sample.json", import.meta.url), "utf-8"));
+
+test("the browser reproduces the pipeline's daily 7-day sums and ACWR for high-school pitchers, including unknown pitch counts", () => {
+  let checked = 0;
+  for (const s of hs.sample) {
+    const series = dailySeries(s.outings, s.start, s.end, hs.rules);
+    assert.equal(series.length, s.expected.length, `${s.pitcher} days`);
+    for (const [i, e] of s.expected.entries()) {
+      const d = series[i];
+      assert.equal(d.date, e.date);
+      if (e.sum_7d == null) assert.equal(d.sum_7d, null, `${s.pitcher} ${e.date} sum_7d should be null`);
+      else assert.ok(Math.abs(d.sum_7d - e.sum_7d) < 1e-9, `${s.pitcher} ${e.date} sum_7d ${d.sum_7d} vs ${e.sum_7d}`);
+      if (e.acwr == null) assert.equal(d.acwr, null, `${s.pitcher} ${e.date} acwr should be null (got ${d.acwr})`);
+      else assert.ok(Math.abs(d.acwr - e.acwr) < 1e-9, `${s.pitcher} ${e.date} acwr ${d.acwr} vs ${e.acwr}`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 500, `checked ${checked}`);
+});
