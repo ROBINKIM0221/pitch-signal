@@ -332,6 +332,8 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     sc = cfg["scoresheets"]
     cm_path = PROCESSED / "scoresheet_count_model.pkl"
     count_model = pickle.load(open(cm_path, "rb")) if cm_path.exists() else None
+    if count_model and sc.get("count_beta"):                                # 설정의 보정값이 학습 때 고른 값보다 우선 (근거는 config_kbsa.yaml)
+        count_model = {**count_model, "beta": float(sc["count_beta"])}
     log.info("개수 모형 %s", f"사용 (beta {count_model['beta']})" if count_model else "없음 — 덩어리 하나 = 표시 하나")
     parts = []
     for f in sorted(SHEET_OUT.glob("*.parquet")):
