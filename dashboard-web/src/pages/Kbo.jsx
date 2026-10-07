@@ -30,13 +30,13 @@ function load() {
 }
 
 function AlarmDot({ cx, cy, payload }) {
-  if (!payload?.alarm || cx == null) return null;
+  if (!payload?.alarm || cx == null || cy == null) return null;
   return <circle cx={cx} cy={cy} r={4.5} fill="var(--alarm)" stroke="#fff" strokeWidth={1.2} />;
 }
 
 // 여러 시즌의 등판 구속을 한 줄로: 시즌 사이는 끊고, 리그별 색, 경보 점, IL 세로선
 function CareerChart({ pitcher }) {
-  const rows = pitcher.timeline.map((t, i) => ({ ...t, i: i + 1, [`velo_${t.league}_${t.season}`]: t.velo }));
+  const rows = pitcher.timeline.map((t, i) => ({ ...t, i: i + 1, [`velo_${t.league}_${t.season}`]: t.velo, alarm_y: t.alarm ? t.velo : null }));   // 경보 점은 별도 data 없이 열로 (툴팁이 모든 등판에 뜨게)
   const seriesKeys = [...new Set(pitcher.timeline.map((t) => `velo_${t.league}_${t.season}`))];
   const starts = [];
   pitcher.timeline.forEach((t, i) => { if (i === 0 || t.season !== pitcher.timeline[i - 1].season || t.league !== pitcher.timeline[i - 1].league) starts.push({ i: i + 1, label: `${t.league} ${t.season}` }); });
@@ -52,7 +52,7 @@ function CareerChart({ pitcher }) {
         {starts.slice(1).map((s) => <ReferenceLine key={s.i} x={s.i - 0.5} stroke="var(--line-2)" />)}
         {ilMarks.map((il) => <ReferenceLine key={il.date} x={il.i} stroke={ARM.has(il.part) ? "var(--alarm)" : "var(--base)"} strokeWidth={1.2} strokeDasharray={ARM.has(il.part) ? undefined : "4 3"} label={{ value: `IL ${fmt.date(il.date)} ${PART[il.part] || il.part}`, position: "insideTopLeft", ...LABEL, fill: ARM.has(il.part) ? "var(--alarm)" : "var(--muted)" }} />)}
         {seriesKeys.map((k) => <Line key={k} type="monotone" dataKey={k} stroke={LEAGUE_COLOR[k.split("_")[1]]} strokeWidth={1.6} dot={{ r: 2, strokeWidth: 0, fill: LEAGUE_COLOR[k.split("_")[1]] }} connectNulls={false} isAnimationActive={false} />)}
-        <Scatter dataKey="velo" shape={<AlarmDot />} data={rows.filter((r) => r.alarm)} isAnimationActive={false} legendType="none" tooltipType="none" />
+        <Scatter dataKey="alarm_y" shape={<AlarmDot />} isAnimationActive={false} legendType="none" tooltipType="none" />
       </ComposedChart>
     </ResponsiveContainer>
   );

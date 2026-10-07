@@ -29,7 +29,7 @@ function who(p) {
 }
 
 function AlarmDot({ cx, cy, payload, onPick }) {
-  if (!payload?.alarm_here || cx == null) return null;
+  if (!payload?.alarm_here || cx == null || cy == null) return null;
   return (
     <g style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); onPick?.(payload); }}>
       <circle cx={cx} cy={cy} r={12} fill="transparent" />
@@ -202,6 +202,9 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
     const [vp, vq] = split(o.velo_index, i), [cp, cq] = split(o.change_index, i);
     return {
       ...o, i: i + 1, alarm_here: o.velo_alarm || o.change_alarm,
+      // 경보 점은 별도 data가 아니라 '경보일 때만 값이 있는 열'로 그린다 — 시리즈가 자기 data를 가지면 Recharts가 툴팁 활성 지점을 그 데이터로만 잡는다
+      alarm_vidx: o.velo_alarm ? o.velo_index : null, alarm_cidx: o.change_alarm ? o.change_index : null,
+      ...Object.fromEntries(Object.keys(FEATURE).map((f) => [`alarm_${f}`, (o.velo_alarm || o.change_alarm) ? o[f] : null])),
       vidx_pre: vp, vidx_post: vq, cidx_pre: cp, cidx_post: cq,          // 지수 (특징 velo_pre와 이름이 겹치지 않게)
       ...Object.fromEntries(Object.keys(FEATURE).flatMap((f) => {
         const [a, b] = split(o[f], i);
@@ -286,15 +289,15 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
           {xAxis(!compact)}
           <YAxis domain={[Math.floor(Math.min(-0.5, ...rows.map((r) => r.velo_index ?? 0)) * 2) / 2, Math.ceil(yMax * 2) / 2]} tickFormatter={(v) => v.toFixed(1)}
             tickCount={6} tick={TICK} width={40} axisLine={false} tickLine={false} />
-          <Tooltip content={<ChartTip render={(payload, label) => <IndexTip r={rows[Math.round(label) - 1] || payload[0].payload} />} />} cursor={{ stroke: "var(--line-2)" }} />
+          <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} unit={unit} />} />} cursor={{ stroke: "var(--line-2)" }} />
           <ReferenceLine y={1} stroke="var(--alarm)" strokeDasharray="4 4" />
           <ReferenceLine y={0} stroke="var(--line-2)" />
           <Line type="monotone" dataKey="vidx_pre" stroke="var(--velo)" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)" }} strokeWidth={2.2} connectNulls name="구속 하락 지수" isAnimationActive={false} />
           {withChange && <Line type="monotone" dataKey="cidx_pre" stroke="var(--change)" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)" }} strokeWidth={1.8} connectNulls name="폼 변화 지수" isAnimationActive={false} />}
           {afterIl && <Line type="monotone" dataKey="vidx_post" stroke="var(--velo)" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)" }} strokeWidth={2.2} connectNulls name="구속 하락 지수 (IL 뒤)" isAnimationActive={false} />}
           {afterIl && withChange && <Line type="monotone" dataKey="cidx_post" stroke="var(--change)" dot={{ r: 2, strokeWidth: 0, fill: "var(--change)" }} strokeWidth={1.8} connectNulls name="폼 변화 지수 (IL 뒤)" isAnimationActive={false} />}
-          <Scatter dataKey="velo_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.velo_alarm)} />
-          {withChange && <Scatter dataKey="change_index" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.change_alarm)} />}
+          <Scatter dataKey="alarm_vidx" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" />
+          {withChange && <Scatter dataKey="alarm_cidx" shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" />}
         </ComposedChart>
       </ResponsiveContainer>
       {!compact && features.map((f) => [f, featureName(f)]).map(([f, name], k, arr) => (
@@ -305,11 +308,11 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
               {common(false)}
               {xAxis(k !== arr.length - 1)}
               <YAxis domain={["auto", "auto"]} tick={TICK} width={40} axisLine={false} tickLine={false} tickFormatter={(v) => fmt.num(v, f === "rel_z" ? 2 : 1)} />
-              <Tooltip content={<ChartTip render={(payload, label) => <FeatureTip r={rows[Math.round(label) - 1] || payload[0].payload} f={f} name={name} />} />} cursor={{ stroke: "var(--line-2)" }} />
+              <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} focus={f} unit={unit} />} />} cursor={{ stroke: "var(--line-2)" }} />
               <Area dataKey={`band_${f}`} stroke="none" fill="var(--velo)" fillOpacity={0.14} connectNulls isAnimationActive={false} name="평소 범위" />
               <Line type="monotone" dataKey={`${f}_pre`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={name} />
               {afterIl && <Line type="monotone" dataKey={`${f}_post`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={`${name} (IL 뒤)`} />}
-              <Scatter dataKey={f} name={name} shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" data={rows.filter((r) => r.alarm_here)} />
+              <Scatter dataKey={`alarm_${f}`} name={name} shape={<AlarmDot onPick={openAlert} />} isAnimationActive={false} legendType="none" tooltipType="none" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -322,25 +325,28 @@ function pitches(r) {
   return `${PITCH_NAME[r.fb] || r.fb || "패스트볼"} ${r.n_fb}구 / 전체 ${r.n_all ?? "—"}구`;
 }
 
-function FeatureTip({ r, f, name }) {
-  const band = r[`band_${f}`];
-  const digits = f === "rel_z" ? 2 : 1;
-  return (
-    <>
-      <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div>
-      <div>{name}: <b>{fmt.num(r[f], digits)}</b>{band && <> · 평소 범위 {fmt.num(band[0], digits)} ~ {fmt.num(band[1], digits)} (예상 {fmt.num(r.exp[f], digits)})</>}</div>
-      {r.alarm_here && <div className="alarm">이 등판에서 경보 — 빨간 점을 누르면 카드가 열립니다</div>}
-    </>
-  );
-}
+const DIGITS = { velo: 1, rel_z: 2, arm_angle: 1 };
 
-function IndexTip({ r }) {
+/** 모든 그래프에서 같은 툴팁: 어떤 등판이든(경보가 없어도, 시작 구간이어도) 날짜·투구 수·세 특징·예상 범위·지수를 보여 준다. focus는 지금 그래프의 특징(굵게). */
+function OutingTip({ r, focus, unit }) {
+  const feats = Object.keys(FEATURE).filter((f) => r[f] != null);
   return (
     <>
-      <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div>
-      {r.phase !== "baseline" && (
-        <div>구속 하락 지수 {fmt.num(r.velo_index)}{r.change_index != null && <> · 폼 변화 지수 {fmt.num(r.change_index)}</>} {r.alarm_here && <span className="alarm">· 경보 — 빨간 점을 누르면 카드가 열립니다</span>}</div>
+      <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)} · {r.phase === "baseline" ? "시작 구간(평소 배우는 중)" : "감시"}</div>
+      {feats.map((f) => {
+        const band = r[`band_${f}`];
+        const d = DIGITS[f];
+        const label = f === "velo" && unit && unit !== "mph" ? `평균 구속 (${unit})` : FEATURE[f];
+        return (
+          <div key={f} style={f === focus ? { color: "var(--ink)", fontWeight: 650 } : undefined}>
+            {label}: {fmt.num(r[f], d)}{band && <span style={{ fontWeight: 400 }}> · 평소 범위 {fmt.num(band[0], d)}~{fmt.num(band[1], d)} (예상 {fmt.num(r.exp[f], d)})</span>}
+          </div>
+        );
+      })}
+      {r.phase !== "baseline" && r.velo_index != null && (
+        <div>구속 하락 지수 {fmt.num(r.velo_index)}{r.change_index != null && <> · 폼 변화 지수 {fmt.num(r.change_index)}</>}</div>
       )}
+      {r.alarm_here && <div className="alarm">이 등판에서 경보 — 빨간 점을 누르면 카드가 열립니다</div>}
     </>
   );
 }
