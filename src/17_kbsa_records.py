@@ -15,6 +15,7 @@ data/raw/kbsa/record_detail_<game_idx>.html (KBSA 기록실 경기 기록, 1회 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -36,8 +37,19 @@ def parse_games(game_ids: list[int]) -> pd.DataFrame:
     missing = [g for g, p in pages.items() if not p.exists()]
     if missing:
         log.warning("기록 페이지가 없는 경기 %d개는 뺀다: %s", len(missing), missing[:10])
-    games = [kb.parse_record_detail(p.read_text(encoding="utf-8"), g) for g, p in pages.items() if p.exists()]
-    return kb.games_to_rows(games)
+    games, flows = [], {}
+    for g, p in pages.items():
+        if not p.exists():
+            continue
+        text = p.read_text(encoding="utf-8")
+        game = kb.parse_record_detail(text, g)
+        games.append(game)
+        for key, flow in hr.flows_for_game(game, kb.parse_batting(text)).items():          # 등판 흐름 (상대 타격표의 타석을 투수에게 배정)
+            flows[(g, *key)] = json.dumps(flow, ensure_ascii=False)
+    rows = kb.games_to_rows(games)
+    rows["flow"] = [flows.get((r.game_idx, r.team, r.name, r.number)) for r in rows.itertuples()]
+    log.info("등판 흐름 재구성: 등판 %d개 중 %d개 (%.1f%%)", len(rows), rows["flow"].notna().sum(), 100 * rows["flow"].notna().mean() if len(rows) else 0)
+    return rows
 
 
 def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, dict[str, str]]:

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -12,11 +13,13 @@ import pandas as pd
 import yaml
 
 from src.common import highschool as hs
+from src.common import kbsa_boxscore as kb
 from src.common.config import ROOT, _merge, load_config
 from src.core import kbsa_rules as kr
 
 GAME_KEY = ["game_idx", "team", "name", "number"]
-GAME_COLUMNS = ["date", "game_no", "competition", "round", "opponent", "role", "result", "outs", "pitches", "detail", "gap_days", "required_rest", "rest_ok", "min_rest_exact", "cum_pitches"]
+GAME_COLUMNS = ["date", "game_no", "competition", "round", "opponent", "role", "result", "outs", "pitches", "detail", "gap_days", "required_rest", "rest_ok", "min_rest_exact", "cum_pitches",
+                "batters", "k", "bb_hbp", "hits", "hr", "runs", "er"]
 
 
 def datasets_config(root: Path = ROOT) -> tuple[dict, dict[str, tuple[dict, dict]]]:
@@ -25,6 +28,40 @@ def datasets_config(root: Path = ROOT) -> tuple[dict, dict[str, tuple[dict, dict
     cfg = yaml.safe_load((Path(root) / "config_kbsa.yaml").read_text(encoding="utf-8"))
     base = load_config(root)["highschool"]
     return cfg, {key: (d, _merge(base, d["overrides"])) for key, d in cfg["datasets"].items()}
+
+
+def flows_for_game(game: dict, batting: dict[str, list[dict]]) -> dict[tuple, list[dict]]:
+    """한 경기의 '등판 흐름': 상대 타격표의 타석을 시간 순서로 펴서 이 팀 투수들에게 타자 수대로 나눠 준다.
+    {(team, name, number): [{inn, res, cat, ev}, ...]} — 타석 수 합이 투수 타자 수 합과 다르면 그 팀 투수들은 비워 둔다.
+    한 투수가 두 번 등판한 경기는 표의 두 줄이 각각 제 구간을 받으므로, 같은 열쇠에 이어 붙는다."""
+    out: dict[tuple, list[dict]] = {}
+    for team in game["teams"]:
+        opponent = [t for t in game["teams"] if t != team]
+        pitchers = [p for p in game["pitchers"] if p["team"] == team]
+        if not pitchers or not opponent or opponent[0] not in batting:
+            continue
+        pas = kb.plate_appearances(batting[opponent[0]])
+        parts = kb.assign_to_pitchers(pas, [p["batters"] or 0 for p in pitchers])
+        if parts is None:
+            continue
+        for p, part in zip(pitchers, parts):
+            key = (team, p["name"], p["number"])
+            out.setdefault(key, []).extend({"inn": pa["inning"], "res": pa["result"], "cat": kb.pa_category(pa["result"]), "ev": pa["events"]} for pa in part)
+    return out
+
+
+WALK_EVENTS = ("폭투", "보크", "포일")
+
+
+def flow_summary(flow: list[dict]) -> dict:
+    """등판 흐름 요약: 타석 수, 삼진·4구·사구·안타·홈런, 4구+사구가 2개 이상 몰린 이닝, 폭투·보크·포일 수."""
+    by_inning: dict[int, int] = {}
+    for pa in flow:
+        if pa["cat"] in ("BB", "HBP"):
+            by_inning[pa["inn"]] = by_inning.get(pa["inn"], 0) + 1
+    cats = [pa["cat"] for pa in flow]
+    return {"pa": len(flow), "k": cats.count("K"), "bb": cats.count("BB"), "hbp": cats.count("HBP"), "h": cats.count("H") + cats.count("HR"), "hr": cats.count("HR"),
+            "walk_innings": sorted(i for i, n in by_inning.items() if n >= 2), "wild": sum(sum(e in WALK_EVENTS for e in pa["ev"]) for pa in flow)}
 
 
 def mark_missing_detail(table: pd.DataFrame) -> pd.DataFrame:
@@ -47,11 +84,13 @@ def combine_stints(table: pd.DataFrame) -> pd.DataFrame:
     t["_order"] = range(len(t))
     agg = {"date": "first", "opponent": "first", "role": "first", "innings": "first", "detail": "first", "_order": "min",
            "outs": "sum", "batters": lambda s: s.sum(min_count=1), "pitches": lambda s: s.sum(min_count=1),
-           "result": lambda s: next((r for r in s if r in ("승", "패")), s.iloc[0]), "stints": "size"}
+           "result": lambda s: next((r for r in s if r in ("승", "패")), s.iloc[0]), "stints": "size",
+           **{c: (lambda s: s.sum(min_count=1)) for c in kb.RESULT_COLUMNS if c in t.columns},
+           **({"flow": "first"} if "flow" in t.columns else {})}
     out = (t.assign(stints=1).groupby(GAME_KEY, as_index=False, sort=False).agg(agg)
             .sort_values("_order").drop(columns="_order").reset_index(drop=True))
-    out["pitches"] = out["pitches"].astype("Int64")
-    out["batters"] = out["batters"].astype("Int64")
+    for col in ["pitches", "batters", *[c for c in kb.RESULT_COLUMNS if c in out.columns]]:
+        out[col] = out[col].astype("Int64")
     return out
 
 
@@ -91,7 +130,10 @@ def input_rows(table: pd.DataFrame, names: pd.DataFrame, competition: pd.Series,
         "pitches": table["pitches"].astype("Float64").astype(float).to_numpy(), "outs": table["outs"].astype(int).to_numpy(),
         "opponent": table["opponent"].to_numpy(), "role": table["role"].to_numpy(), "result": table["result"].to_numpy(),
         "round": table["game_idx"].map(round_of).to_numpy() if round_of else np.nan, "game_idx": table["game_idx"].to_numpy(), "detail": table["detail"].to_numpy(),
-        "stints": table["stints"].to_numpy() if "stints" in table else 1})
+        "stints": table["stints"].to_numpy() if "stints" in table else 1,
+        "batters": table["batters"].astype("Float64").astype(float).to_numpy() if "batters" in table else np.nan,
+        **{c: table[c].astype("Float64").astype(float).to_numpy() for c in ("k", "bb_hbp", "hits", "hr", "runs", "er") if c in table},
+        **({"flow": table["flow"].to_numpy()} if "flow" in table else {})})
     return out.sort_values(["game_no", "school", "row"], ignore_index=True)
 
 
@@ -188,11 +230,21 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
             max_7d, max_pair3 = _clean(d["sum_7d"].max()), _clean(pair3_max(g))
             load_status, reasons = load_light(max_7d, max_pair3, lights)
             per_rows.append({"school": school, "pitcher": code, "violations": int(violations_of.get(code, 0)), "load": load_status})
+            games_out = _rec(g, [c for c in GAME_COLUMNS if c in g.columns])
+            if "flow" in g.columns:
+                for rec, raw in zip(games_out, g["flow"]):
+                    flow = json.loads(raw) if isinstance(raw, str) else None
+                    rec["flow"] = [[pa["inn"], pa["res"], pa["cat"], *([pa["ev"]] if pa["ev"] else [])] for pa in flow] if flow else None   # 요약은 화면이 계산
+            batters = g["batters"].sum(min_count=1) if "batters" in g else np.nan
+            season_results = {c: _clean(g[c].sum(min_count=1)) for c in ("k", "bb_hbp", "hits", "hr") if c in g}
             pitchers.append({"code": code, "label": label_of[code], "rule_status": status, "load_status": load_status, "load_reasons": reasons,
                              "max_7d": max_7d, "max_pair3": max_pair3, "outings": int(len(g)),
                              "pitches_total": int(g["pitches"].sum()) if known else None, "max_pitches": _clean(g["pitches"].max()),
                              "back_to_back": int((g["gap_days"] == 0).sum()), "min_rest_exact": int((g["min_rest_exact"] == True).sum()),
-                             "violations": _rec(v, ["date", "rule", "detail"]), "games": _rec(g, GAME_COLUMNS)})
+                             "batters": _clean(batters), **season_results,
+                             "p_per_pa": _clean(g["pitches"].sum() / batters) if known and pd.notna(batters) and batters > 0 else None,
+                             "flow_games": int(g["flow"].notna().sum()) if "flow" in g else 0,
+                             "violations": _rec(v, ["date", "rule", "detail"]), "games": games_out})
         pitchers.sort(key=lambda p: (-(p["pitches_total"] if p["pitches_total"] is not None else -1), p["label"]))
         span = daily.loc[daily["school"] == school, "date"]
         mine_rows = [r for r in per_rows if r["school"] == school]
@@ -225,7 +277,8 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
               "compliant_with_load": int(((per["violations"] == 0) & (per["load"] != "보통")).sum()),
               "pairs3": int(len(pairs)), "pairs3_70": int((pairs >= lights["pair3"]["caution"]).sum()), "pairs3_100": int((pairs >= lights["pair3"]["high"]).sum()),
               "pitchers_7d_120": int((max7 >= lights["sum7"]["caution"]).sum()), "pitchers_7d_150": int((max7 >= lights["sum7"]["high"]).sum()),
-              "pitchers_season_500": int((outings.groupby("pitcher")["pitches"].sum(min_count=1) >= 500).sum())}
+              "pitchers_season_500": int((outings.groupby("pitcher")["pitches"].sum(min_count=1) >= 500).sum()),
+              "flow_outings": int(outings["flow"].notna().sum()) if "flow" in outings else 0}
     no_detail = sorted(int(g) for g in outings.loc[~outings["detail"], "game_no"].unique())
     first, last = outings["date"].min(), outings["date"].max()
     dataset = {"key": info.get("key"), "mode": info["mode"], "name": info["name"], "short": info["short"], "season": info["season"], "region": info.get("region"),

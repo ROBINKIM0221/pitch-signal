@@ -276,3 +276,16 @@ table.tbl.board th.cal small { display: block; font-weight: 500; font-size: 10.5
 .strip span.on.away { background: var(--base-bg); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--base); border: 0; outline: 1px dashed var(--base); outline-offset: -2px; }
 .strip span i { position: absolute; right: -2px; top: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--alarm); border: 1.5px solid #fff; }
 .toolbar label .btn { height: 30px; padding: 0 9px; }
+
+/* ---------- 고교 현황판: 등판 흐름(타석 띠) ---------- */
+.flow { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.flow-inn { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.flow-inn b { font-size: 11.5px; color: var(--muted); margin-right: 3px; font-weight: 600; }
+.flow i.pa { font-style: normal; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: var(--panel); color: var(--ink-2); border: 1px solid var(--line); white-space: nowrap; }
+.flow i.pa.k { background: var(--velo-bg); color: #1f5aa6; border-color: transparent; }
+.flow i.pa.bb { background: var(--warn-bg); color: #8a4d12; border-color: transparent; }
+.flow i.pa.h { background: var(--alarm-bg); color: #9b2a25; border-color: transparent; }
+.flow i.pa.hr { background: var(--alarm); color: #fff; border-color: transparent; }
+.flow i.pa.e { background: var(--base-bg); color: var(--ink-2); border-style: dashed; }
+.flow i.pa.tb { background: transparent; color: var(--muted); border-style: dotted; }
+table.tbl tr.flow-row td { background: var(--panel); }

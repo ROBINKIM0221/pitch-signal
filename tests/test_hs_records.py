@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.common import highschool as hs
 from src.common import hs_records as hr
+from src.common import kbsa_boxscore as kb
 
 RULES = {"season": 2025, "schools": 3, "competitions": ["전국체전", "주말리그 전반기"], "kbsa": {"daily_max": 105, "rest_table": [[45, 0], [60, 1], [75, 2], [90, 3], [105, 4]], "no_three_consecutive_days": True},
          "acwr": {"acute_days": 7, "chronic_days": 21, "flag": 1.5, "min_coverage": 1.0}, "window_days": [3, 7],
@@ -176,3 +177,29 @@ def test_season_payload_reports_absolute_load_lights_and_the_rule_versus_load_sp
     assert school["start"] == "2025-03-08" and school["end"] == "2025-04-13"
     assert pay["dataset"]["competitions"] == {"주말리그 전반기": 15}
     assert pay["totals"]["pitchers_7d_150"] == 0 and pay["totals"]["pitchers_season_500"] == 0
+
+
+def test_flows_assign_plate_appearances_to_each_pitcher_outing_and_mark_games_that_do_not_add_up():
+    from tests.test_kbsa_boxscore import PAGE, BATTING, batting_table
+    # 가나고 투수 3명(타자 11·14·7)이 다라고 타자 32명을 상대한 경기: 다라고 타격표는 BATTING(31타석)에 1타석을 더해 32로 맞춘다
+    page = PAGE + batting_table("다라고", [(1, "유격수", "가나(7)", {1: "삼진", 3: "중안/4구", 6: "2땅"}), (2, "1루수", "다라(8)", {1: "4구", 3: "사구", 4: "삼진", 7: "유플"}),
+                                        (3, "포수", "마바(12)", {1: "우플", 3: "좌월2,폭투", 4: "유땅", 7: "삼진"}), (4, "3루수", "사아(10)", {1: "좌파플", 3: "3실", 4: "중안", 7: "중안"}),
+                                        (5, "좌익수", "자차(3)", {2: "삼진", 3: "희플", 5: "병살"}), (6, "우익수", "카타(5)", {2: "2땅", 3: "삼진", 5: "4구"}),
+                                        (7, "중견수", "파하(9)", {2: "좌안", 3: "유땅", 5: "좌플", 8: "삼진"}), (8, "2루수", "거너(2)", {2: "1땅", 3: "중안"}),
+                                        (8, "대타", "더러(31)", {6: "삼진"}), (9, "지명타자", "머버(1)", {2: "삼진", 3: "좌플", 6: "삼진"})])
+    game = kb.parse_record_detail(page, game_idx=1)
+    flows = hr.flows_for_game(game, kb.parse_batting(page))
+    assert set(flows) == {("가나고", "홍길동", 17), ("가나고", "나다라", 23), ("가나고", "마바사", 11)}
+    first = flows[("가나고", "홍길동", 17)]
+    assert len(first) == 11 and first[0] == {"inn": 1, "res": "삼진", "cat": "K", "ev": []} and first[-1]["inn"] == 3
+    assert len(flows[("가나고", "나다라", 23)]) == 14 and len(flows[("가나고", "마바사", 11)]) == 7
+    assert flows[("가나고", "마바사", 11)][-1] == {"inn": 8, "res": "삼진", "cat": "K", "ev": []}
+    assert hr.flows_for_game(game, {}) == {}                                               # 상대 타격표가 없으면 흐름 없음
+    short = kb.parse_batting(page); short["다라고"] = short["다라고"][:-1]                    # 타석 수가 안 맞으면 그 팀 투수들은 흐름 없음
+    assert hr.flows_for_game(game, short) == {}
+
+
+def test_flow_summary_counts_categories_and_walk_heavy_innings():
+    flow = [{"inn": 1, "res": "4구", "cat": "BB", "ev": []}, {"inn": 1, "res": "사구", "cat": "HBP", "ev": []}, {"inn": 1, "res": "삼진", "cat": "K", "ev": []},
+            {"inn": 2, "res": "중안", "cat": "H", "ev": ["폭투"]}, {"inn": 2, "res": "좌월홈", "cat": "HR", "ev": []}, {"inn": 2, "res": "2땅", "cat": "OUT", "ev": []}]
+    assert hr.flow_summary(flow) == {"pa": 6, "k": 1, "bb": 1, "hbp": 1, "h": 2, "hr": 1, "walk_innings": [1], "wild": 1}

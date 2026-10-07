@@ -68,22 +68,72 @@ function DayTip({ d }) {
   );
 }
 
+const CAT = { K: ["삼진", "k"], BB: ["4구", "bb"], HBP: ["사구", "bb"], H: ["안타", "h"], HR: ["홈런", "hr"], OUT: ["아웃", "out"], E: ["실책 출루", "e"], SAC: ["희생", "out"], FC: ["야선", "e"], TB: ["승부치기 주자", "tb"] };
+
+/** 등판 흐름 요약: 타석·삼진·4사구·안타·4사구가 2개 이상 몰린 이닝·폭투류. flow 항목 = [이닝, 결과, 범주, (사건들)] */
+function flowSummary(flow) {
+  const walks = {};
+  let k = 0, bb = 0, h = 0, wild = 0;
+  for (const [inn, , cat, ev] of flow) {
+    if (cat === "K") k++;
+    if (cat === "BB" || cat === "HBP") { bb++; walks[inn] = (walks[inn] || 0) + 1; }
+    if (cat === "H" || cat === "HR") h++;
+    wild += (ev || []).filter((e) => ["폭투", "보크", "포일"].includes(e)).length;
+  }
+  return { pa: flow.length, k, bb, h, wild, walkInnings: Object.entries(walks).filter(([, n]) => n >= 2).map(([i]) => Number(i)) };
+}
+
+/** 이닝별 타석 띠: 결과 글자를 범주 색의 작은 칩으로. 사건(폭투·도루 등)은 툴팁에. */
+function FlowStrip({ flow }) {
+  const innings = [...new Set(flow.map((f) => f[0]))];
+  return (
+    <div className="flow">
+      {innings.map((inn) => (
+        <span key={inn} className="flow-inn">
+          <b>{inn}회</b>
+          {flow.filter((f) => f[0] === inn).map(([, res, cat, ev], i) => <i key={i} className={`pa ${CAT[cat]?.[1] || "out"}`} title={`${CAT[cat]?.[0] || cat}${ev?.length ? ` · ${ev.join(", ")}` : ""}`}>{res}</i>)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function GamesTable({ p, withCompetition }) {
+  const [open, setOpen] = useState(null);
+  const hasResults = p.games.some((g) => g.batters != null);
   return (
     <div className="tbl-wrap">
       <table className="tbl">
-        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th><th>직전 등판 뒤</th><th className="num">누적</th></tr></thead>
+        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasResults && <th>흐름</th>}</tr></thead>
         <tbody>
-          {p.games.map((g) => (
-            <tr key={g.game_no}>
-              <td>{g.date.slice(5).replace("-", "/")}</td><td>{withCompetition ? g.competition : g.round}</td><td>{g.opponent}</td>
-              <td>{g.role}{g.result !== "-" && <span style={{ color: "var(--muted)" }}> · {g.result}</span>}</td>
-              <td className="num">{innings(g.outs)}</td>
-              <td className="num">{g.pitches == null ? <span className="light base">미공개</span> : g.pitches}</td>
-              <td>{restText(g)}</td>
-              <td className="num">{g.cum_pitches == null ? "—" : g.cum_pitches}</td>
-            </tr>
-          ))}
+          {p.games.map((g) => {
+            const sum = g.flow ? flowSummary(g.flow) : null;
+            return [
+              <tr key={g.game_no} className={open === g.game_no ? "hl" : ""}>
+                <td>{g.date.slice(5).replace("-", "/")}</td><td>{withCompetition ? g.competition : g.round}</td><td>{g.opponent}</td>
+                <td>{g.role}{g.result !== "-" && <span style={{ color: "var(--muted)" }}> · {g.result}</span>}</td>
+                <td className="num">{innings(g.outs)}</td>
+                <td className="num">{g.pitches == null ? <span className="light base">미공개</span> : g.pitches}</td>
+                {hasResults && <>
+                  <td className="num">{g.batters ?? "—"}</td><td className="num">{g.k ?? "—"}</td>
+                  <td className="num">{g.bb_hbp ?? "—"}{sum?.walkInnings.length > 0 && <span className="light warn" style={{ marginLeft: 6 }} title={`4구·사구 2개 이상 몰린 이닝: ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`}>{sum.walkInnings.map((i) => `${i}회`).join("·")} 몰림</span>}</td>
+                  <td className="num">{g.hits ?? "—"}{g.hr > 0 && <span style={{ color: "var(--muted)" }}> (홈런 {g.hr})</span>}</td>
+                  <td className="num">{g.pitches != null && g.batters ? fmt.num(g.pitches / g.batters, 1) : "—"}</td>
+                </>}
+                <td>{restText(g)}</td>
+                <td className="num">{g.cum_pitches == null ? "—" : g.cum_pitches}</td>
+                {hasResults && <td>{g.flow ? <button className="pill" onClick={() => setOpen(open === g.game_no ? null : g.game_no)}>{open === g.game_no ? "닫기" : "타석별 보기"}</button> : <span style={{ color: "var(--muted)" }}>—</span>}</td>}
+              </tr>,
+              open === g.game_no && g.flow && (
+                <tr key={`${g.game_no}-flow`} className="flow-row">
+                  <td colSpan={14} style={{ whiteSpace: "normal" }}>
+                    <FlowStrip flow={g.flow} />
+                    <div className="caption" style={{ marginTop: 6 }}>타석 {sum.pa} · 삼진 {sum.k} · 4구+사구 {sum.bb} · 안타 {sum.h}{sum.wild > 0 && ` · 폭투·보크·포일 ${sum.wild}`}{sum.walkInnings.length > 0 && ` · 4사구가 몰린 이닝 ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`} — 상대 타격표의 타석을 투수 타자 수대로 배정해 복원한 순서입니다(합이 맞는 경기만).</div>
+                  </td>
+                </tr>
+              ),
+            ];
+          })}
         </tbody>
       </table>
     </div>
@@ -210,6 +260,11 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`} title={p.load_reasons.join(" · ") || undefined}>부하 {p.load_status}</span></span>
           </div>
           {p.load_reasons.length > 0 && <p className="caption" style={{ marginTop: 0 }}>부하 표시 이유: {p.load_reasons.join(" · ")}</p>}
+          {p.batters != null && p.batters > 0 && (
+            <p className="caption" style={{ marginTop: 0 }}>
+              <b>시즌 등판 결과</b> (맥락 정보 — 신호가 아닙니다): 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 투구/타자 ${fmt.num(p.p_per_pa, 2)}`} · 타석별 흐름이 복원된 등판 {p.flow_games}/{p.outings}
+            </p>
+          )}
           <div className="chart-title">일별 투구 수와 7일 합 <small>막대 = 그날 투구 수, 검은 선 = 그날까지 7일 합, 점선 = 주의 {data.load_lights.sum7.caution}구·높음 {data.load_lights.sum7.high}구{rule && ` · 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={days} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} syncId="hs-season">
