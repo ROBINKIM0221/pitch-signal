@@ -252,6 +252,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
         <div><div className="v">{totals.pairs3_70}<span className="sub"> 쌍</span></div><div className="l">3일 안 두 등판 합 {data.load_lights.pair3.caution}구 이상 · {data.load_lights.pair3.high}구 이상 {totals.pairs3_100}쌍 (규정상 허용되는 연투·하루 쉰 등판)</div></div>
         <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판) · 의무 휴식일 뒤 첫날 등판 {totals.min_rest_exact}건</div></div>
         <div><div className="v">{totals.games_91plus}<span className="sub"> 등판</span></div><div className="l">91구 이상(휴식 4일 구간) · 100구 이상 {totals.games_100plus}등판</div></div>
+        {totals.ball_read != null && <div><div className="v">{totals.ball_outings}<span className="sub"> 등판</span></div><div className="l">기록지 판독 볼 비율(추정)을 보여 주는 등판 (기록지를 읽은 등판 {totals.ball_read}) · 평소보다 볼이 많았던 등판 {totals.ball_flags}</div></div>}
       </div>
       <div className="toolbar">
         <label><span>학교</span>
@@ -284,7 +285,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
                 <span className="code">{x.label}</span>
                 <span className={`light ${STATUS_CLASS[x.rule_status]}`}>규정 {x.rule_status}</span>
                 <span className={`light ${LOAD_CLASS[x.load_status]}`}>부하 {x.load_status}</span>
-                <span className="tags"><span className="pill">{x.outings}등판 · {x.pitches_total ?? "—"}구</span>{x.max_7d != null && <span className="pill">7일 최대 {fmt.num(x.max_7d, 0)}구</span>}{x.max_pair3 != null && <span className="pill">3일 쌍 최대 {fmt.num(x.max_pair3, 0)}구</span>}</span>
+                <span className="tags"><span className="pill">{x.outings}등판 · {x.pitches_total ?? "—"}구</span>{x.max_7d != null && <span className="pill">7일 최대 {fmt.num(x.max_7d, 0)}구</span>}{x.max_pair3 != null && <span className="pill">3일 쌍 최대 {fmt.num(x.max_pair3, 0)}구</span>}{x.ball_season != null && <span className="pill" title="기록지 판독 볼 비율(추정), 검산 통과 등판 합">볼 {fmt.num(100 * x.ball_season, 0)}%</span>}{x.ball_flags > 0 && <span className="pill" title="평소보다 볼이 많았던 등판 수 (40구 이상)"><span className="dot" style={{ background: "var(--warn)" }} />볼 많음 {x.ball_flags}</span>}</span>
               </button>
             ))}
           </div>
