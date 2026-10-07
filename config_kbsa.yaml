@@ -9,6 +9,12 @@ load_lights:                                      # 고교 '누적 부하' 신�
   sum7: {caution: 120, high: 150}                 # 오늘 포함 7일 투구 수 합 — 등판일 기준 상위 5% / 2% (전국 1,024명)
   pair3: {caution: 70, high: 100}                 # 3일 안 두 등판의 합 (규정이 허용하는 '45구 이하 뒤 휴식 0일' 구멍) — 경험 투수 20% / 10%
 
+scoresheets:                                      # 기록지 사진 판독 (2026-10-07 결정: 시범 30경기 → 통과하면 2025 전체)
+  dir: C:/work/private/pitchsignal/scoresheets    # 기록지 사진 <game_idx>_<boxfile_seq>.jpg (선수 실명이 있어 저장소 밖에만 둔다)
+  pilot_games: 30                                 # 시범: 리그마다 한 경기, 기록지 두 장, 두 팀 모두 판정 기준 이상 등판의 흐름이 복원된 경기
+  dev_games: [36651]                              # 개발용으로 먼저 받은 경기 (시범 표본에서 뺀다)
+  judge_min_pitches: 40                           # '평소보다 볼이 많았던 등판' 판정은 이 투구 수 이상 등판만 (2026-10-07 사용자 결정)
+
 datasets:
   korea_2025:                                     # 시즌 모드: 2025 고교 공식 경기 전부 (전국) → KBSA 규정 + ACWR (3.14절 원안). 화면에서 권역·학교를 고른다
     mode: season
