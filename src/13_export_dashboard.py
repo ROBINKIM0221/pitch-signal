@@ -1,7 +1,7 @@
 """대시보드용 JSON 내보내기 (단계 8.1). 파일 표는 docs/SPEC.md 3.17절 표 15.
 
 검증셋(monitor_val.parquet, alerts_val.parquet)에서 감시 등판이 있는 모든 투수-시즌의 리플레이(data/replay/*.json)와 검색 목록(pitchers.json),
-경보 카드·성능 비교·불펜 부하를 만들고, 아직 결과가 없는 고교·KBO는
+경보 카드·성능 비교·팀 불펜 현황판(teams/)을 만들고, 실제 기록이 없는 화면이 있으면
 가상 데이터로 만들어 meta.json의 synthetic 목록에 적는다. 실명·원데이터 행은 넣지 않는다(고교는 가명 코드만, MLB 선수 이름은 공개 기록).
 
 사용 예:
@@ -18,9 +18,13 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 
+from src.common import baseline_window as bw
 from src.common import calibration as cal
 from src.common import highschool as hs
+from src.common import load as ld
 from src.common import metrics as mt
+from src.common import statcast as sc
+from src.common import teams as tm
 from src.common import tournament as tn
 from src.common.config import ROOT, load_config
 
@@ -70,30 +74,6 @@ def opt(x):
     if isinstance(x, (np.floating, float)) and float(x).is_integer():
         return int(x)
     return x
-
-
-def pick_replay(cfg: dict, monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, windows: pd.DataFrame) -> pd.DataFrame:
-    """리플레이할 투수: 탐지된 사례·놓친 사례를 정해진 수만큼 무작위로 고르고, 사례마다 가장 가까운 대조군을 붙인다."""
-    picks = cfg["dashboard"]["replay"]
-    hits = mt.window_results(windows, monitor, alarm="velo_alarm", index="velo_index")
-    hits = hits[hits["group"] == "case"].set_index("case_id")["hit"]
-    rng = np.random.default_rng(cfg["seed"])
-    chosen = []
-    for detected, count in ((True, picks["detected_cases"]), (False, picks["missed_cases"])):
-        ids = hits.index[hits == detected].to_numpy()
-        chosen += list(rng.choice(ids, min(count, len(ids)), replace=False))
-    nearest = controls.sort_values(["case_id", "dist", "pitcher"]).groupby("case_id").head(picks["controls_per_case"])
-    rows = []
-    for case_id in chosen:
-        c = cases[cases["case_id"] == case_id].iloc[0]
-        rows.append({"pitcher": c["pitcher"], "season": c["season"], "role": c["role"], "group": "case", "case_id": case_id,
-                     "part": c["part"], "il_date": c["il_date"], "detected": bool(hits[case_id])})
-        for k in nearest[nearest["case_id"] == case_id].itertuples():
-            rows.append({"pitcher": k.pitcher, "season": k.season, "role": k.role, "group": "control", "case_id": case_id,
-                         "part": c["part"], "il_date": k.index_date, "detected": None})
-    out = pd.DataFrame(rows)
-    out["id"] = out["pitcher"].astype(str) + "_" + out["season"].astype(str)
-    return out
 
 
 def replay_file(entry, monitor: pd.DataFrame, outings: pd.DataFrame, windows: pd.DataFrame, names: pd.Series, rules: dict,
@@ -155,21 +135,46 @@ def catalog(monitor: pd.DataFrame, cases: pd.DataFrame, controls: pd.DataFrame, 
     return out
 
 
-def bullpen_file(replay: pd.DataFrame, monitor: pd.DataFrame, names: pd.Series, acwr_flag: float) -> dict:
-    load = pd.read_parquet(PROCESSED / "load.parquet")
-    flags = [c for c in load.columns if c.startswith("flag_")]
-    pitchers = []
-    for e in replay[replay["role"] == "RP"].itertuples():
-        mine = load[(load["pitcher"] == e.pitcher) & (load["season"] == e.season)].sort_values("game_date")
-        alarms = monitor[(monitor["pitcher"] == e.pitcher) & (monitor["season"] == e.season) & (monitor["velo_alarm"] | monitor["change_alarm"])]
-        pitchers.append({
-            "id": e.id, "name": names.get(e.pitcher, str(e.pitcher)), "season": int(e.season), "group": e.group, "il_date": e.il_date,
-            "days": [{"date": r.game_date, "pitches": int(r.n_all), "back_to_back": bool(r.back_to_back), "apps_3d": int(r.apps_3d),
-                      "p7d": r3(r.p7d), "acwr": r3(r.acwr), "flags": [f[5:] for f in flags if getattr(r, f)]} for r in mine.itertuples()],
-            "alarms": [{"date": r.game_date, "signals": [s for s in SIGNALS if getattr(r, f"{s}_alarm")]} for r in alarms.itertuples()]})
-    return {"pitchers": pitchers, "acwr_flag": acwr_flag,
-            "flag_names": {"consecutive": "3일 연속 등판", "apps_3d": "3일 안 3회 등판", "p7d": "7일 투구 수 많음",
-                           "acwr": "ACWR 초과", "long_short": "긴 등판 뒤 짧은 휴식"}}
+TEAM_MAP = PROCESSED / "pitcher_game_team.parquet"
+
+
+def team_map(seasons: list[int]) -> pd.DataFrame:
+    """등판(pitcher, game_pk)별 소속 팀. 원데이터(홈·원정, 초·말)에서 한 번 만들어 저장해 두고 다시 쓴다."""
+    if TEAM_MAP.exists():
+        have = pd.read_parquet(TEAM_MAP)
+        if set(seasons) <= set(have["season"].unique()):
+            return have
+    parts = []
+    for season in seasons:
+        raw = sc.load_season(ROOT / "data" / "raw" / "statcast", season, ["pitcher", "game_pk", "home_team", "away_team", "inning_topbot"])
+        parts.append(tm.team_of_outing(raw).assign(season=season))
+        log.info("팀 배정: %d년 등판 %d개", season, len(parts[-1]))
+    out = pd.concat(parts, ignore_index=True)
+    out.to_parquet(TEAM_MAP, compression="zstd", index=False)
+    return out
+
+
+def team_files(cfg: dict, outings: pd.DataFrame, splits: list[str], names: pd.Series, labels: pd.DataFrame) -> dict:
+    """팀 불펜 현황판: teams/<팀>_<시즌>.json (불펜 투수별 등판 전부)와 목록 teams.json. 돌려주는 값은 파일 크기."""
+    seasons = sorted(sum((cfg["data"]["split"][sp] for sp in splits), []))
+    tmap = team_map(seasons)
+    alarms = pd.concat([pd.read_parquet(PROCESSED / f"monitor_{sp}.parquet", columns=["pitcher", "season", "game_pk", "velo_alarm", "change_alarm"]) for sp in splits], ignore_index=True)
+    ends = bw.baseline_windows(outings, cfg["baseline"]).set_index(["pitcher", "season"])["baseline_end"]
+    relievers = outings[outings["role"] == "RP"]
+    limits = pd.Series({key: ld.p7d_limit(g, cfg["load"], ends.get(key, pd.NaT)) for key, g in relievers.groupby(["pitcher", "season"])})
+    sizes, index = {}, []
+    for season in seasons:
+        season_map = tmap.loc[tmap["season"] == season, ["pitcher", "game_pk", "team"]]
+        for team in sorted(season_map["team"].unique()):
+            pay = tm.team_payload(team, season, outings, season_map, alarms, labels, names, limits)
+            if not pay["pitchers"]:
+                continue
+            sizes[f"teams/{team}_{season}.json"] = dump(f"teams/{team}_{season}.json", pay)
+            index.append({"team": team, "season": season, "relievers": len(pay["pitchers"]), "first": pay["dates"][0], "last": pay["dates"][-1],
+                          "alarms": sum(len(o["signals"]) for q in pay["pitchers"] for o in q["outings"] if o["here"]),
+                          "arm_il": sum(q["il"] is not None for q in pay["pitchers"])})
+    sizes["teams.json"] = dump("teams.json", {"rules": cfg["load"], "teams": index})
+    return sizes
 
 
 def synthetic_highschool(cfg: dict) -> dict:
@@ -263,12 +268,7 @@ def main() -> None:
     cfg = load_config()
     core, seasons = cfg["features"]["core"], cfg["data"]["split"][SPLIT]
     OUT.mkdir(parents=True, exist_ok=True)
-    monitor = pd.read_parquet(PROCESSED / f"monitor_{SPLIT}.parquet")
     outings = pd.read_parquet(PROCESSED / "outings.parquet")
-    cases = pd.read_csv(PROCESSED / "cases.csv", encoding="utf-8-sig", parse_dates=["il_date"])
-    controls = pd.read_csv(PROCESSED / "controls.csv", encoding="utf-8-sig", parse_dates=["index_date"])
-    windows = pd.read_csv(PROCESSED / "windows.csv", encoding="utf-8-sig")
-    cases, controls, windows = (d[d["season"].isin(seasons)] for d in (cases, controls, windows))
     names = pd.read_parquet(ROOT / "data" / "raw" / "people.parquet").set_index("id")["full_name"]
     rules = cal.final_rules(cfg)
 
@@ -300,7 +300,6 @@ def main() -> None:
          "part": opt(e.part), "il_date": opt(e.il_date), "detected": opt(e.detected), "n_mon": e.n_mon, "alarms_velo": e.alarms_velo,
          "alarms_change": e.alarms_change, "split": e.split} for e in everyone.itertuples()])
     sizes["alerts.json"] = dump("alerts.json", alert_rows)
-    replay = pick_replay(cfg, monitor, cases, controls, windows)                       # 불펜 부하 화면의 표본
     performance = {"split": SPLIT, "seasons": seasons, "design_far": 100 / cfg["monitor"]["arl0_target"],
                    "results": records(pd.read_csv(TABLES / f"{SPLIT}_results.csv", encoding="utf-8-sig"), 3),
                    "opcurve": records(pd.read_csv(TABLES / f"{SPLIT}_opcurve.csv", encoding="utf-8-sig"), 3),
@@ -317,7 +316,7 @@ def main() -> None:
     sizes["performance.json"] = dump("performance.json", performance)
     if "sealed" in splits:
         sizes["watchlist.json"] = dump("watchlist.json", watchlist(cfg, everyone[everyone["split"] == "sealed"], names, outings, labels))
-    sizes["bullpen.json"] = dump("bullpen.json", bullpen_file(replay, monitor, names, cfg["load"]["acwr_flag"]))
+    sizes.update(team_files(cfg, outings, splits, names, labels))                       # 팀 불펜 현황판 (화면 4)
     if (PROCESSED / "hs_tournament_rows.parquet").exists():                                   # 2025 전국체전 실제 기록 (src/17)
         info, hs_rules = tn.tournament_config()
         sizes["highschool.json"] = dump("highschool.json", tn.payload(
@@ -342,11 +341,13 @@ def main() -> None:
     sizes["meta.json"] = dump("meta.json", meta)
 
     replays = {k: v for k, v in sizes.items() if k.startswith("replay/")}
-    log.info("JSON %d개 → %s. 검색 가능한 투수-시즌 %d개(리플레이 합계 %.1f MB, 가장 큰 파일 %.0f KB), 가상 데이터: %s",
-             len(sizes), OUT, len(everyone), sum(replays.values()) / 1e6, max(replays.values()) / 1024, synthetic)
-    for name, size in sorted(((k, v) for k, v in sizes.items() if not k.startswith("replay/")), key=lambda kv: -kv[1])[:8]:
+    team_sizes = {k: v for k, v in sizes.items() if k.startswith("teams/")}
+    log.info("JSON %d개 → %s. 검색 가능한 투수-시즌 %d개(리플레이 합계 %.1f MB, 가장 큰 파일 %.0f KB), 팀-시즌 %d개(%.1f MB), 가상 데이터: %s",
+             len(sizes), OUT, len(everyone), sum(replays.values()) / 1e6, max(replays.values()) / 1024, len(team_sizes), sum(team_sizes.values()) / 1e6, synthetic)
+    for name, size in sorted(((k, v) for k, v in sizes.items() if not k.startswith(("replay/", "teams/"))), key=lambda kv: -kv[1])[:8]:
         print(f"{name:32s} {size / 1024:7.1f} KB")
     print(f"리플레이 파일 {len(replays)}개, 합계 {sum(replays.values()) / 1e6:.1f} MB, 가장 큰 파일 {max(replays.values()) / 1024:.0f} KB")
+    print(f"팀-시즌 파일 {len(team_sizes)}개, 합계 {sum(team_sizes.values()) / 1e6:.1f} MB, 가장 큰 파일 {max(team_sizes.values()) / 1024:.0f} KB")
 
 
 if __name__ == "__main__":

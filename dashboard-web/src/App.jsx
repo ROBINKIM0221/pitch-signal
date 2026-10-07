@@ -12,7 +12,7 @@ const MENU = [
   { to: "/", no: "1", label: "리플레이 · 경보 카드", file: "pitchers.json" },
   { to: "/performance", no: "2", label: "성능 비교", file: "performance.json" },
   { to: "/highschool", no: "3", label: "고교 현황판", file: "highschool.json" },
-  { to: "/bullpen", no: "4", label: "불펜 부하", file: "bullpen.json" },
+  { to: "/bullpen", no: "4", label: "팀 불펜 현황판", file: "teams.json" },
   { to: "/kbo", no: "5", label: "KBO · 영입 전 점검", file: "kbo_case.json" },
   { to: "/watch", no: "6", label: "2026 시즌 현황", file: "watchlist.json" },
   { to: "/about", no: "ⓘ", label: "소개 · 방법", file: null },
@@ -34,7 +34,8 @@ export default function App() {
         {synthetic && <span className="badge synthetic">가상 데이터</span>}
         {current.to === "/kbo" && <span className="badge real">MLB·트리플A 공개 기록 · 트리플A는 참고용</span>}
         {current.to === "/highschool" && !synthetic && <span className="badge real">KBSA 기록실 · 2025 전국체전 실제 기록 (가명)</span>}
-        {meta && !synthetic && current.file && !["/kbo", "/highschool"].includes(current.to) && (
+        {current.to === "/bullpen" && <span className="badge real">MLB 30개 팀 · {meta?.dev_seasons?.[0] ?? 2021}~{meta?.sealed_seasons?.[0] ?? 2026} 실제 기록</span>}
+        {meta && !synthetic && current.file && !["/kbo", "/highschool", "/bullpen"].includes(current.to) && (
           <span className="badge real">{current.to === "/" ? `${meta.dev_seasons?.[0] ?? 2021}~${meta.sealed_seasons?.[0] ?? meta.seasons?.at(-1)} 실제 결과` : current.to === "/watch" ? "2026 봉인 시즌 · 10/7 평가" : `검증셋 ${meta.seasons?.join("~")} 실제 결과`}</span>
         )}
         <div className="meta">

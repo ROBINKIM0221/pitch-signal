@@ -27,9 +27,7 @@ def load_metrics(outings: pd.DataFrame, rules: dict, baseline_end) -> pd.DataFra
         "prev_pitches": last.map(daily),
         "rest_days": (daily.index.to_series() - last).dt.days - 1,
     })
-    limit = np.nan
-    if not pd.isna(baseline_end):
-        limit = np.percentile(day.loc[pitched & (daily.index <= baseline_end), "p7d"], rules["p7d_percentile"])
+    limit = _p7d_limit(day["p7d"], pitched, rules, baseline_end)
     day["flag_consecutive"] = day["consecutive_days"] >= rules["consecutive_days_flag"]
     day["flag_apps_3d"] = day["apps_3d"] >= rules["apps_3d_flag"]
     day["flag_p7d"] = day["p7d"] > limit
@@ -37,6 +35,21 @@ def load_metrics(outings: pd.DataFrame, rules: dict, baseline_end) -> pd.DataFra
     day["flag_long_short"] = ((day["prev_pitches"] >= rules["long_outing_pitches"])
                               & (day["rest_days"] <= rules["short_rest_days"]))
     return outings[["game_pk", "game_date"]].merge(day, left_on="game_date", right_index=True, how="left")
+
+
+def _p7d_limit(p7d: pd.Series, pitched: pd.Series, rules: dict, baseline_end) -> float:
+    if pd.isna(baseline_end):
+        return np.nan
+    return float(np.percentile(p7d[pitched & (p7d.index <= baseline_end)], rules["p7d_percentile"]))
+
+
+def p7d_limit(outings: pd.DataFrame, rules: dict, baseline_end) -> float:
+    """7일 투구 수 표시의 투수별 한계값: 기준선 기간 등판일의 7일 합 백분위(p7d_percentile). 기준선이 없으면 NaN.
+    대시보드가 날짜별 상태를 다시 계산할 때 쓰도록 내보낸다."""
+    log = outings.rename(columns={"game_date": "date", "n_all": "pitches"})
+    daily = kr.daily_series(log)
+    pitched = log.groupby("date").size().reindex(daily.index, fill_value=0) > 0
+    return _p7d_limit(daily.rolling(rules["acute_days"], min_periods=1).sum(), pitched, rules, baseline_end)
 
 
 def load_table(outings: pd.DataFrame, windows: pd.DataFrame, rules: dict) -> pd.DataFrame:

@@ -260,3 +260,19 @@ table.heat td.game.unknown { background: var(--base-bg); border: 1px dashed var(
   .hs-detail { grid-template-columns: 1fr; }
   .list .tags { display: none; }
 }
+
+/* ---------- 팀 불펜 현황판 ---------- */
+table.tbl.board td, table.tbl.board th { padding: 7px 10px; }
+table.tbl.board th.cal small { display: block; font-weight: 500; font-size: 10.5px; }
+.strip { display: inline-flex; gap: 2px; }
+.strip span { position: relative; width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); background: transparent; }
+.strip span.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line); opacity: 0.45; }
+.strip span.game { background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+.strip span.on { font-weight: 650; }
+.strip span.on.h1 { background: var(--velo-bg); color: #1f5aa6; }
+.strip span.on.h2 { background: #9dc1ec; color: #0f2e5c; }
+.strip span.on.h3 { background: #4f8fdc; color: #fff; }
+.strip span.on.h4 { background: #1d4f8f; color: #fff; }
+.strip span.on.away { background: var(--base-bg); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--base); border: 0; outline: 1px dashed var(--base); outline-offset: -2px; }
+.strip span i { position: absolute; right: -2px; top: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--alarm); border: 1.5px solid #fff; }
+.toolbar label .btn { height: 30px; padding: 0 9px; }

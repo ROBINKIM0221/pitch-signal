@@ -66,3 +66,13 @@ def test_flag_rates_count_outings_after_the_baseline_of_the_chosen_pitcher_seaso
     rates = ld.flag_rates(load, pd.DataFrame({"pitcher": [1, 2], "season": 2023}), ends)     # 3번 투수는 고르지 않음
     assert rates.loc["flag_acwr"].to_dict() == {"outings": 4, "flagged": 2, "rate": 0.5}     # 1번의 5월 3등판 + 2번의 5/2
     assert rates.loc["flag_apps_3d"].to_dict() == {"outings": 4, "flagged": 1, "rate": 0.25}
+
+
+def test_p7d_limit_is_the_baseline_percentile_of_pitched_days_and_nan_without_a_baseline():
+    rows = [("2023-04-01", 20), ("2023-04-02", 15), ("2023-04-03", 10), ("2023-04-06", 35), ("2023-04-07", 5), ("2023-04-12", 40)]
+    limit = ld.p7d_limit(log(rows), RULES, pd.Timestamp("2023-04-07"))
+    p7d_on_pitched_days = [20, 35, 45, 80, 85]                        # 4/1, 4/2, 4/3, 4/6, 4/7의 7일 합 (4/12는 기준선 뒤)
+    assert abs(limit - np.percentile(p7d_on_pitched_days, 95)) < 1e-9
+    assert np.isnan(ld.p7d_limit(log(rows), RULES, pd.NaT))
+    m = metrics(rows, "2023-04-07")
+    assert list(m["flag_p7d"]) == list(m["p7d"] > limit)             # load_metrics와 같은 한계값
