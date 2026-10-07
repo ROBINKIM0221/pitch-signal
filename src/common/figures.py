@@ -84,9 +84,13 @@ def kbo_timeline(rows: list[dict]) -> pd.DataFrame:
     return out
 
 
+HS_SEASON = DASH / "highschool" / "gyeonggi_2025.json"
+HS_TOURNAMENT = DASH / "highschool" / "tournament_2025.json"
+
+
 def highschool_is_real() -> bool:
     meta = json.loads((DASH / "meta.json").read_text(encoding="utf-8"))
-    return "highschool.json" not in meta.get("synthetic", [])
+    return "highschool.json" not in meta.get("synthetic", []) and HS_SEASON.exists() and HS_TOURNAMENT.exists()
 
 
 # ---------- 그림 ----------
@@ -243,22 +247,53 @@ def _rest_days(pitches, rest_table) -> int:
 HEAT = [(30, "#eaf2fc", plots.INK), (60, "#9dc1ec", plots.INK), (90, "#4f8fdc", "white"), (10 ** 6, "#1d4f8f", "white")]
 
 
+def draw_highschool_season(payload: dict, path: Path) -> None:
+    """⑥ 경기도 23팀 투수 208명의 2025 시즌 투구 수: 팀마다 점 하나가 투수 한 명(크기는 등판 수). 빨간 테두리는 KBSA 규정 위반이 있던 투수.
+    팀은 팀 투구 수가 많은 순, 점선은 500구."""
+    plots.use_style()
+    schools = sorted(payload["schools"], key=lambda s: -(s["pitches_total"] or 0))
+    fig, ax = plt.subplots(figsize=(11, 4.8))
+    rng = np.random.default_rng(0)
+    for i, s in enumerate(schools):
+        for p in s["pitchers"]:
+            if p["pitches_total"] is None:
+                continue
+            x = i + rng.uniform(-0.18, 0.18)
+            ax.scatter(x, p["pitches_total"], s=14 + 5 * p["outings"], color=VELO, alpha=0.55, edgecolor="none", zorder=3)
+            if p["rule_status"] == "위반":
+                ax.scatter(x, p["pitches_total"], s=40 + 5 * p["outings"], facecolor="none", edgecolor=ALARM, linewidth=1.6, zorder=4)
+        top = max((p for p in s["pitchers"] if p["pitches_total"] is not None), key=lambda p: p["pitches_total"], default=None)
+        if top and top["pitches_total"] >= 850:
+            ax.text(i, top["pitches_total"] + (25 if i % 2 == 0 else 60), f"{top['label']} {top['pitches_total']:,}구 · {top['outings']}등판", ha="center", va="bottom", fontsize=7.5, color=plots.INK_SECONDARY)
+    ax.axhline(500, color=ALARM, linewidth=1, linestyle="--")
+    ax.text(len(schools) - 0.5, 505, "시즌 500구", ha="right", va="bottom", fontsize=8.5, color=ALARM)
+    ax.set_xticks(range(len(schools)), [s["name"] for s in schools], rotation=45, ha="right", fontsize=8.5)
+    ax.set_xlim(-0.7, len(schools) - 0.3)
+    ax.set_ylabel("시즌 투구 수 (공식 경기)")
+    k = payload["totals"]
+    ax.set_title(f"2025 경기도 고교 {k['schools']}팀 투수 {k['pitchers']}명의 시즌 투구 수 — 점 하나가 투수 한 명(크기는 등판 수), 빨간 테두리는 규정 위반 투수. "
+                 f"규정 위반 {k['violations']}건, 시즌 500구 이상 {k['pitchers_season_500']}명", fontsize=10, loc="left")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
 def draw_highschool(payload: dict, path: Path) -> None:
-    """⑥ 전국체전(가명) 결승 진출 두 학교의 대회 등판 달력. 칸의 숫자는 그날 투구 수(짙을수록 많음), 빗금은 직전 투구 수가 요구하는 의무 휴식일, ?는 투구 수 미공개."""
+    """⑥b 전국체전 결승 진출 두 학교의 대회 등판 달력(학교 실명, 투수는 등번호). 칸의 숫자는 그날 투구 수(짙을수록 많음), 빗금은 직전 투구 수가 요구하는 의무 휴식일, ?는 투구 수 미공개."""
     plots.use_style()
     rest_table = [tuple(r) for r in payload["kbsa"]["rest_table"]]
     days = pd.date_range(min(g["date"] for g in payload["games"]), max(g["date"] for g in payload["games"])).strftime("%Y-%m-%d").tolist()
-    schools = sorted(payload["schools"], key=lambda x: (-x["games"], x["code"]))[:2]
+    schools = sorted(payload["schools"], key=lambda x: (-x["games"], x["name"]))[:2]
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), gridspec_kw={"wspace": 0.28, "top": 0.8})
     for ax, school in zip(axes, schools):
         pitchers = sorted(school["pitchers"], key=lambda x: -(x["pitches_total"] if x["pitches_total"] is not None else -1))
-        rounds = {g["date"]: g["round"] for g in payload["games"] if school["code"] in g["teams"]}     # 그 학교가 그날 치른 경기의 라운드
+        rounds = {g["date"]: g["round"] for g in payload["games"] if school["name"] in g["teams"]}     # 그 학교가 그날 치른 경기의 라운드
         ax.set_xlim(0, len(days)); ax.set_ylim(len(pitchers), -0.9); ax.axis("off"); ax.grid(False)
         for j, d in enumerate(days):
             ax.text(j + 0.5, -0.55, d[5:].replace("-", "/"), ha="center", va="center", fontsize=8.5, color=plots.INK_SECONDARY)
             ax.text(j + 0.5, -0.15, rounds.get(d, ""), ha="center", va="center", fontsize=7.5, color=plots.MUTED)
         for i, p in enumerate(pitchers):
-            ax.text(-0.15, i + 0.5, p["code"], ha="right", va="center", fontsize=9, color=plots.INK)
+            ax.text(-0.15, i + 0.5, p["label"], ha="right", va="center", fontsize=9, color=plots.INK)
             by_date = {g["date"]: g for g in p["games"]}
             rest = set()
             for g in p["games"]:
@@ -279,9 +314,9 @@ def draw_highschool(payload: dict, path: Path) -> None:
                 else:
                     ax.add_patch(plt.Rectangle((j + 0.06, i + 0.08), 0.88, 0.84, facecolor="#f7f7f4", edgecolor="none"))
         total = sum(p["pitches_total"] or 0 for p in school["pitchers"])
-        ax.set_title(f"{school['code']} — {school['games']}경기, 투수 {len(pitchers)}명, 팀 합계 {total:.0f}구", fontsize=10.5, loc="left", pad=10)
-    t = payload["tournament"]
-    fig.suptitle(f"{t['season']} {t['short']} 18세 이하부 결승 진출 두 학교의 등판 달력 — 칸 숫자는 그날 투구 수(짙을수록 많음), 빗금은 의무 휴식일, ?는 투구 수 미공개",
+        ax.set_title(f"{school['name']} — {school['games']}경기, 투수 {len(pitchers)}명, 팀 합계 {total:.0f}구", fontsize=10.5, loc="left", pad=10)
+    t = payload["dataset"]
+    fig.suptitle(f"{t['short']} 18세 이하부 결승 진출 두 학교의 등판 달력 — 칸 숫자는 그날 투구 수(짙을수록 많음), 빗금은 의무 휴식일, ?는 투구 수 미공개 (투수는 등번호)",
                  fontsize=10.5, x=0.02, y=0.97, ha="left")
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
@@ -311,16 +346,27 @@ def draw_kbo(timeline: pd.DataFrame, path: Path) -> None:
 
 # ---------- 전체 ----------
 
+def highschool_season_caption(payload: dict) -> str:
+    t, k = payload["dataset"], payload["totals"]
+    worst = sorted((p for s in payload["schools"] for p in s["pitchers"] if p["pitches_total"] is not None), key=lambda p: -p["pitches_total"])[:3]
+    return (f"그림 6. {t['name']}({t['dates']}, {k['schools']}팀 {k['games']}경기)의 투수 {k['pitchers']}명이 던진 시즌 투구 수. 점 하나가 투수 한 명이고 크기는 등판 수, "
+            f"팀은 팀 투구 수가 많은 순이다. 투수는 등번호로만 표시했다. 등판 {k['outings']}회에서 KBSA 규정 위반은 {k['violations']}건(하루 105구 초과 1, 의무 휴식일 미준수 1)뿐이지만 "
+            f"시즌 500구 이상이 {k['pitchers_season_500']}명, 7일 합 150구 이상을 경험한 투수가 {k['pitchers_7d_150']}명, 100구 이상 등판이 {k['games_100plus']}회였고 "
+            f"가장 많이 던진 세 투수는 {', '.join(f'{p['pitches_total']:,}구({p['outings']}등판)' for p in worst)}였다. 연투 {k['back_to_back']}건은 모두 45구 이하 뒤라 규정상 허용이다. "
+            f"ACWR 1.5 초과를 경험한 투수는 {k['acwr_flag_pitchers']}/{k['acwr_ok_pitchers']}명인데 초과 시점의 직전 3주 주평균은 중앙값 {k['acwr_flag_chronic_median']:.0f}구로, "
+            f"띄엄띄엄 던지는 고교 일정에서는 ACWR이 저활동 뒤 등판에 쉽게 켜져 단독 지표로는 변별력이 약하다.")
+
+
 def highschool_caption(payload: dict) -> str:
-    t, k = payload["tournament"], payload["totals"]
-    finalists = sorted(payload["schools"], key=lambda x: (-x["games"], x["code"]))[:2]
-    return (f"그림 6. {t['season']} {t['short']} 18세 이하부({t['dates']}, 15개교 {t['games']}경기) 결승 진출 두 학교({', '.join(s['code'] for s in finalists)})의 등판 달력. "
-            f"학교·투수는 가명 코드이고 숫자는 KBSA 기록실 경기 기록의 투구 수다. 대회 전체 투수 {k['pitchers']}명·등판 {k['outings']}회에서 규정 위반은 {k['violations']}건이었지만, "
+    t, k = payload["dataset"], payload["totals"]
+    finalists = sorted(payload["schools"], key=lambda x: (-x["games"], x["name"]))[:2]
+    return (f"그림 6b. {t['short']} 18세 이하부({t['dates']}, 15개교 {t['games']}경기) 결승 진출 두 학교({', '.join(s['name'] for s in finalists)})의 등판 달력. "
+            f"투수는 등번호로만 표시했고 숫자는 KBSA 기록실 경기 기록의 투구 수다. 대회 전체 투수 {k['pitchers']}명·등판 {k['outings']}회에서 규정 위반은 {k['violations']}건이었지만, "
             f"연투 {k['back_to_back']}건, 의무 휴식일을 꼭 채운 뒤 첫날 등판 {k['min_rest_exact']}건, 91구 이상 등판 {k['games_91plus']}회가 있었고 한 투수가 7일 동안 최대 {k['max_total']:.0f}구를 던졌다. "
             f"규정은 지켰어도 부하가 몇 명에게 몰리는 모습을 현황판이 보여 준다. 상세 기록이 공개되지 않은 {len(t['no_detail_games'])}경기는 '?'로 표시했다.")
 
 
-def captions(results: pd.DataFrame, tests: pd.DataFrame, sim: dict, stories: dict, timeline: pd.DataFrame, names: list[str], hs_caption: str = "") -> str:
+def captions(results: pd.DataFrame, tests: pd.DataFrame, sim: dict, stories: dict, timeline: pd.DataFrame, names: list[str], hs_caption: str = "", hs_season_caption: str = "") -> str:
     velo = results[(results["method"] == "구속 하락 신호") & (results["group"] == "all")].iloc[0]
     b1 = results[(results["method"] == "B1 구속 1mph") & (results["group"] == "all")].iloc[0]
     h1 = tests[tests["test"].str.startswith("H1")].iloc[0]
@@ -348,7 +394,8 @@ def captions(results: pd.DataFrame, tests: pd.DataFrame, sim: dict, stories: dic
         "05_case_missed.png": (f"그림 5. 놓친 사례 — {mis['name']}({ROLE[mis['role']]}, {PART[mis['part']]}, {mis['season']}). 관찰 창 다섯 등판의 구속이 평소 범위 안에 머물러 "
                                f"구속 하락 지수가 1에 이르지 못했다(창 안 최댓값 {mis['index'][mis['in_window']].max():.2f}). 구속이 떨어지지 않는 부상은 이 신호로 잡히지 않는다.",
                                f"dashboard-web/public/data/replay/{CASES["missed"]}.json"),
-        "06_highschool.png": (hs_caption, "dashboard-web/public/data/highschool.json (src/17_kbsa_tournament.py가 KBSA 기록실 경기 기록 14경기를 가명 코드로 변환, 2026-10-07 1회 수집)"),
+        "06_highschool.png": (hs_season_caption, "dashboard-web/public/data/highschool/gyeonggi_2025.json (src/17_kbsa_records.py가 KBSA 기록실 경기 기록 265경기를 변환, 2026-10-07 1회 수집)"),
+        "06b_tournament.png": (hs_caption, "dashboard-web/public/data/highschool/tournament_2025.json (src/17_kbsa_records.py가 KBSA 기록실 경기 기록 14경기를 변환, 2026-10-07 1회 수집)"),
         "07_kbo_timeline.png": (f"그림 7. 2026 KBO 외국인 투수 부상 이후 결정까지. 완전 교체 두 건은 {timeline[timeline['kind'] == '완전 교체']['days'].min()}~"
                                 f"{timeline[timeline['kind'] == '완전 교체']['days'].max()}일, 6주 대체 두 건은 {timeline[timeline['kind'] == '6주 대체']['days'].min()}~"
                                 f"{timeline[timeline['kind'] == '6주 대체']['days'].max()}일 만에 결정되었다. 오웬 화이트는 수비 중 하체 부상이라 투구 신호 감시 대상이 아니지만 "
@@ -371,15 +418,17 @@ def draw_all(out: Path | str = FINAL) -> list[str]:
     sim = sim_rows(pd.read_csv(TABLES / "sim_short_outings.csv"))
     stories = {k: replay_story(json.loads((DASH / f"replay/{v}.json").read_text(encoding="utf-8"))) for k, v in CASES.items()}
     timeline = kbo_timeline(KBO)
-    names, hs_caption = [], ""
+    names, hs_caption, hs_season_caption = [], "", ""
     draw_system(out / "01_system.png"); names.append("01_system.png")
     draw_short_outings(sim, out / "02_short_outings.png"); names.append("02_short_outings.png")
     draw_opcurve(points, results, 1.0, out / "03_opcurve_val.png"); names.append("03_opcurve_val.png")
     draw_case(stories["detected"], out / "04_case_detected.png"); names.append("04_case_detected.png")
     draw_case(stories["missed"], out / "05_case_missed.png"); names.append("05_case_missed.png")
     if highschool_is_real():
-        payload = json.loads((DASH / "highschool.json").read_text(encoding="utf-8"))
-        draw_highschool(payload, out / "06_highschool.png"); names.append("06_highschool.png"); hs_caption = highschool_caption(payload)
+        season = json.loads(HS_SEASON.read_text(encoding="utf-8"))
+        draw_highschool_season(season, out / "06_highschool.png"); names.append("06_highschool.png"); hs_season_caption = highschool_season_caption(season)
+        payload = json.loads(HS_TOURNAMENT.read_text(encoding="utf-8"))
+        draw_highschool(payload, out / "06b_tournament.png"); names.append("06b_tournament.png"); hs_caption = highschool_caption(payload)
     draw_kbo(timeline, out / "07_kbo_timeline.png"); names.append("07_kbo_timeline.png")
-    (out / "captions.md").write_text(captions(results, tests, sim, stories, timeline, names, hs_caption), encoding="utf-8")
+    (out / "captions.md").write_text(captions(results, tests, sim, stories, timeline, names, hs_caption, hs_season_caption), encoding="utf-8")
     return names

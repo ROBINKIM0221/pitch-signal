@@ -137,18 +137,32 @@
 | 트리플A 자료 | Baseball Savant Minor League Statcast 2023~2025, 선수별 조회, 구장 보정 없음 | src/16_scout.py |
 | 트리플A IL 등재 | 9건 (목록 투수 7명, 모두 부위 미상 — 거래 기록에 사유 문구 없음) | MLB Stats API transactions sportId=11, data/raw/transactions/aaa_<시즌>.parquet, reports/logs/scout.log |
 
-## 고교 현황판 (화면 3) — 2025 전국체전 18세 이하부
+## 고교 현황판 (화면 3) — 2025 경기도 시즌 (시즌 모드)
 
 | 항목 | 값 | 출처 |
 |---|---|---|
-| 대회 | 제106회 전국체육대회 18세 이하부, 2025-10-17 ~ 10-23, 15개교 14경기 (16강 7·8강 4·준결승 2·결승 1) | config_kbsa.yaml (KBSA 기록실 lig_idx 1356) |
-| 자료 | KBSA 기록실 경기 기록(/game/record_detail) 14경기, 2026-10-07 1회 수집 | data/raw/kbsa/ (저장소 밖), src/common/kbsa_boxscore.py |
-| 투수 / 등판 | 70명 / 101회 (한 경기 두 번 등판 1건 합산), 투구 수 모르는 등판 2 (준결승 1경기 상세 기록 미공개) | reports/logs/tournament.log |
-| 규정 위반 | 0건 (판정 불가 2) | data/processed/hs_tournament_violations.csv, reports/tables/hs_tournament_summary.csv |
-| 연투 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 5 / 3 / 0 | dashboard-web/public/data/highschool.json (totals) |
+| 범위 | 경기도 소재 23개 팀(주말리그 경기권 A·B·C 전·후반기 참가팀, U-18 클럽 포함)의 2025-03-08 ~ 10-23 공식 경기 265경기 (주말리그 전반기 69·후반기 69, 이마트배 34, 황금사자기 18, 청룡기 25, 봉황대기 35, 대통령배 11, 전국체전 4) | config_kbsa.yaml datasets.gyeonggi_2025, data/raw/kbsa/games_2025.csv (2025 고교 37개 리그 976경기 목록) |
+| 자료 | KBSA 기록실 경기 기록(/game/record_detail) 265경기, 2026-10-07 1회 수집(저장소 밖 스크립트) | data/raw/kbsa/ (저장소 밖), src/common/kbsa_boxscore.py, src/17_kbsa_records.py |
+| 투수 / 등판 | 208명 / 1,500회 (한 경기 두 번 등판 18건 합산), 투구 수 모르는 등판 2 (상세 기록 미공개 1경기 + 아웃 있는데 0구로 적힌 1줄) | reports/logs/hs_records.log |
+| 규정 위반 | 2건 (2명): 하루 105구 초과 1 (120구), 의무 휴식일 미준수 1 (77구 → 3일 필요, 2일 휴식) | data/processed/hs_gyeonggi_2025_violations.csv, reports/tables/hs_gyeonggi_2025_summary.csv |
+| 100구 이상 / 91구 이상 등판 | 53 / 102 | dashboard-web/public/data/highschool/gyeonggi_2025.json (totals) |
+| 시즌 500구 이상 / 7일 합 150구 이상 경험 투수 | 41명 / 20명, 시즌 최다 1,134구(20등판)·1,045구(14등판)·986구(16등판) | 〃 |
+| 연투 / 이틀 합 70구 이상 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 125 / 56 / 24 / 1 | 〃 |
+| ACWR 1.5 초과 경험 / 계산 가능 투수, 초과 시점 직전 3주 주평균 중앙값 | 143 / 206, 14구 | 〃 (acwr_flag_chronic_median) |
+| 규정은 지켰지만 ACWR 초과 표시가 있던 투수 | 141 | 〃 (compliant_with_flag) |
+
+## 고교 현황판 (화면 3) — 2025 전국체전 18세 이하부 (대회 모드)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 대회 | 제106회 전국체육대회 18세 이하부, 2025-10-17 ~ 10-23, 15개교 14경기 (16강 7·8강 4·준결승 2·결승 1) | config_kbsa.yaml datasets.tournament_2025 (KBSA 기록실 lig_idx 1356) |
+| 투수 / 등판 | 70명 / 101회 (한 경기 두 번 등판 1건 합산), 투구 수 모르는 등판 2 (준결승 1경기 상세 기록 미공개) | reports/logs/hs_records.log |
+| 규정 위반 | 0건 (판정 불가 2) | data/processed/hs_tournament_2025_violations.csv |
+| 연투 / 의무 휴식 뒤 첫날 등판 / 휴식 부족 | 5 / 3 / 0 | dashboard-web/public/data/highschool/tournament_2025.json (totals) |
 | 91구 이상 / 100구 이상 등판, 최다 | 5 / 3, 105구 | 〃 |
 | 3경기 이상 등판 투수 / 누적 최다 | 6명 / 188구 | 〃 |
-| 결승 진출 두 학교 팀 합계 | S01 557구(투수 6명), S07 356구(투수 6명) | reports/figures/final/06_highschool.png |
+| 결승 진출 두 학교 팀 합계 | 광주제일고 557구(투수 6명), 유신고 356구 이상(투수 6명, 1등판 미공개) | reports/figures/final/06b_tournament.png |
+| 표기 | 학교는 실명, 선수는 등번호(#nn); 선수 실명 대응표는 저장소 밖(C:/work/private/pitchsignal/kbsa_2025_names.csv) | config_kbsa.yaml labels |
 
 ## 팀 불펜 현황판 (화면 4)
 

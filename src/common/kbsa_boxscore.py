@@ -2,7 +2,7 @@
 
 페이지 머리의 설명(meta description)에서 날짜·시각·구장·두 팀을, 팀마다 있는 '<팀> 투수기록' 표에서
 투수별 등판 구분·이닝·타자·투구수를 읽는다. 실명이 들어 있으므로 이 결과는 data/ 밖으로 내보내지 않고,
-가명 처리(src/17_kbsa_tournament.py)를 거친 뒤에만 쓴다.
+등번호 표기로 바꾸는 변환(src/17_kbsa_records.py)을 거친 뒤에만 쓴다.
 """
 from __future__ import annotations
 

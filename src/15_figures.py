@@ -18,7 +18,7 @@ def main() -> None:
     for name in names:
         log.info("저장: %s", fg.FINAL / name)
     if "06_highschool.png" not in names:
-        log.info("⑥ 고교 그림은 건너뜀: 대시보드 고교 자료가 아직 가상(meta.json synthetic)")
+        log.info("⑥ 고교 그림은 건너뜀: 대시보드 고교 자료(highschool/*.json)가 아직 없음")
     log.info("캡션: %s", fg.FINAL / "captions.md")
 
 

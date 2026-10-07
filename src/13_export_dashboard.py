@@ -24,8 +24,8 @@ from src.common import highschool as hs
 from src.common import load as ld
 from src.common import metrics as mt
 from src.common import statcast as sc
+from src.common import hs_records as hr
 from src.common import teams as tm
-from src.common import tournament as tn
 from src.common.config import ROOT, load_config
 
 PROCESSED = ROOT / "data" / "processed"
@@ -177,6 +177,28 @@ def team_files(cfg: dict, outings: pd.DataFrame, splits: list[str], names: pd.Se
     return sizes
 
 
+def highschool_files(cfg: dict) -> dict:
+    """화면 3: config_kbsa.yaml의 데이터셋마다 highschool/<key>.json, 목록은 highschool.json. 변환 결과가 하나도 없으면 빈 dict."""
+    kcfg, datasets = hr.datasets_config()
+    sizes, index = {}, []
+    for key, (d, rules) in datasets.items():
+        rows_path = PROCESSED / f"hs_{key}_rows.parquet"
+        if not rows_path.exists():
+            continue
+        names = pd.read_csv(PROCESSED / f"hs_{key}_names.csv", encoding="utf-8-sig")
+        names["name"] = names["pitcher"]                                                   # 실명 없이도 payload가 기대하는 열 모양을 맞춘다
+        rules = {**rules, "schools": int(names["school"].nunique())}
+        pay = hr.payload(pd.read_parquet(rows_path), pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet"),
+                         pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"]), names, rules,
+                         {**d, "key": key}, kcfg["source"])
+        sizes[f"highschool/{key}.json"] = dump(f"highschool/{key}.json", pay)
+        index.append({"key": key, **{k: pay["dataset"][k] for k in ("mode", "name", "short", "season", "region", "dates", "games")},
+                      "schools": pay["totals"]["schools"], "pitchers": pay["totals"]["pitchers"], "outings": pay["totals"]["outings"]})
+    if index:
+        sizes["highschool.json"] = dump("highschool.json", {"synthetic": False, "labels": kcfg["labels"], "datasets": index})
+    return sizes
+
+
 def synthetic_highschool(cfg: dict) -> dict:
     """실제 고교 기록이 들어오기 전까지 쓰는 가상 데이터. 계산은 실제 모듈(src/common/highschool)과 같은 함수로 한다."""
     rules, rng = cfg["highschool"], np.random.default_rng(cfg["seed"])
@@ -317,11 +339,9 @@ def main() -> None:
     if "sealed" in splits:
         sizes["watchlist.json"] = dump("watchlist.json", watchlist(cfg, everyone[everyone["split"] == "sealed"], names, outings, labels))
     sizes.update(team_files(cfg, outings, splits, names, labels))                       # 팀 불펜 현황판 (화면 4)
-    if (PROCESSED / "hs_tournament_rows.parquet").exists():                                   # 2025 전국체전 실제 기록 (src/17)
-        info, hs_rules = tn.tournament_config()
-        sizes["highschool.json"] = dump("highschool.json", tn.payload(
-            pd.read_parquet(PROCESSED / "hs_tournament_rows.parquet"), pd.read_parquet(PROCESSED / "hs_tournament_daily.parquet"),
-            pd.read_csv(PROCESSED / "hs_tournament_violations.csv", encoding="utf-8-sig", parse_dates=["date"]), hs_rules, info))
+    hs_sets = highschool_files(cfg)                                                        # KBSA 실제 기록 (src/17): 시즌·대회 데이터셋
+    if hs_sets:
+        sizes.update(hs_sets)
     elif (PROCESSED / "hs_daily.parquet").exists():
         daily = pd.read_parquet(PROCESSED / "hs_daily.parquet")
         violated = pd.read_csv(PROCESSED / "hs_violations.csv", encoding="utf-8-sig", parse_dates=["date"])

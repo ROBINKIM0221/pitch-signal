@@ -1,18 +1,44 @@
-# 화면 3 '고교 투구수 현황판'의 실제 입력: 2025 전국체전 18세 이하부 기록 변환 설정.
-# 평가 설정(config.yaml·config_calibrated.yaml)과 분리해 두어 고정한 설정 파일의 해시가 바뀌지 않게 한다.
-tournament:
-  name: 제106회 전국체육대회 18세 이하부
-  short: 전국체전
-  season: 2025
-  dates: 2025-10-17 ~ 2025-10-23          # 부산(기장 현대차드림볼파크), 15팀 단판 토너먼트 14경기
-  lig_idx: 1356                           # KBSA 기록실 대회 번호 (kind_cd=31)
-  source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail). 2026-10-07 1회 수집, data/raw/kbsa/
-  games: [36651, 36652, 36653, 36654, 36655, 36656, 36657, 36692, 36693, 36696, 36698, 36700, 36702, 36712]
-  rounds: {16강: 7, 8강: 4, 준결승: 2, 결승: 1}  # 경기 순서(날짜·번호)대로 배정
-  name_map: C:/work/private/pitchsignal/kbsa_2025_tournament_names.csv   # 실명 ↔ 가명 대응표 (저장소 밖에만 둔다)
-  seed: 2025
-  overrides:                              # config.yaml highschool 블록 위에 덮어쓰는 값 (규정 수치는 그대로 둔다)
+# 화면 3 '고교 투구수 현황판'의 실제 입력 두 벌. 평가 설정(config.yaml·config_calibrated.yaml)과 분리해 두어 고정한 설정 파일의 해시가 바뀌지 않게 한다.
+# 자료: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail, 팀별 투수기록 표). 2026-10-07 1회 수집(저장소 밖 스크립트), 원본은 data/raw/kbsa/ (저장소에 올리지 않음).
+source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail), 2026-10-07 1회 수집
+games_csv: data/raw/kbsa/games_2025.csv            # 2025 고교(18세 이하부) 37개 리그 976경기 목록: 리그·날짜·두 팀·점수
+name_map: C:/work/private/pitchsignal/kbsa_2025_names.csv   # 선수 실명 ↔ 등번호 표기 대응표 (저장소 밖에만 둔다)
+labels: 학교는 실명, 선수는 등번호(#nn)로만 표시한다 (2026-10-07 결정. 선수 실명은 저장소·화면 어디에도 넣지 않는다)
+seed: 2025
+
+datasets:
+  gyeonggi_2025:                                  # 시즌 모드: 경기도 소재 팀의 2025 공식 경기 전부 → KBSA 규정 + ACWR (3.14절 원안)
+    mode: season
+    name: 2025 시즌 경기도 고교 공식 경기
+    short: 경기도 2025 시즌
     season: 2025
-    schools: 15
-    competitions: [전국체전]
-    input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}   # 13회 경기·상세 기록 없는 경기 허용
+    region: 경기도
+    region_leagues: [1267, 1268, 1269, 1305, 1306, 1307]   # 주말리그 경기권 A·B·C 전·후반기 — 이 리그 참가팀을 '경기도 팀'으로 본다 (U-18 클럽팀 포함)
+    competitions:                                 # 리그 이름에 이 글자가 들어가면 그 대회 (hs 모듈의 competition 열)
+      주말리그 전반기: 주말리그 전반기
+      주말리그 후반기: 주말리그 후반기
+      이마트배 전국고교야구대회: 신세계 이마트배
+      황금사자기: 황금사자기
+      청룡기: 청룡기
+      대통령배: 대통령배
+      봉황대기: 봉황대기
+      전국체육대회: 전국체전
+      노브랜드배: 기타
+    overrides:                                    # config.yaml highschool 블록 위에 덮어쓰는 값 (schools 수는 실행 때 팀 수로 채움)
+      season: 2025
+      competitions: [주말리그 전반기, 주말리그 후반기, 신세계 이마트배, 황금사자기, 청룡기, 대통령배, 봉황대기, 전국체전, 기타]
+      input_ranges: {game_no: [1, 9999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}
+
+  tournament_2025:                                # 대회 모드: 7일 단판 토너먼트 → ACWR 대신 대회 누적 투구 수·휴식 간격
+    mode: tournament
+    name: 제106회 전국체육대회 18세 이하부
+    short: 2025 전국체전
+    season: 2025
+    dates: 2025-10-17 ~ 2025-10-23                # 부산(기장 현대차드림볼파크), 15팀 14경기
+    lig_idx: 1356
+    games: [36651, 36652, 36653, 36654, 36655, 36656, 36657, 36692, 36693, 36696, 36698, 36700, 36702, 36712]
+    rounds: {16강: 7, 8강: 4, 준결승: 2, 결승: 1}  # 경기 순서(날짜·번호)대로 배정
+    overrides:
+      season: 2025
+      competitions: [전국체전]
+      input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}   # 13회 경기·상세 기록 없는 경기 허용

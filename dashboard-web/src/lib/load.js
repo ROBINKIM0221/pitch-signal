@@ -64,10 +64,11 @@ export function dayState(outings, date, rules, p7dLimit) {
   };
 }
 
-/** 신호등 한 단계: 표시가 하나라도 켜지면 '표시', 연투·3일 2등판·ACWR 1.5 초과면 '주의', 아니면 '평소'. */
+/** 신호등 한 단계: 표시가 하나라도 켜지면 '표시', 연투(어제도 오늘도 등판)이거나 ACWR이 1.5를 넘으면(1.8이 표시 기준) '주의', 아니면 '평소'.
+ *  '주의'는 평가 계획에 없는 현황판용 중간 단계다 (2026-10-07, 3일 2등판은 불펜의 흔한 패턴이라 뺌). */
 export function loadStatus(st) {
   if (st.flags.length) return "표시";
-  if ((st.pitchedToday && st.backToBack) || st.apps3d === 2 || (st.acwr != null && st.acwr > 1.5)) return "주의";
+  if ((st.pitchedToday && st.backToBack) || (st.acwr != null && st.acwr > 1.5)) return "주의";
   return "평소";
 }
 
