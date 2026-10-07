@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, LEGEND_STYLE, TICK, TIP_STYLE, limitLabel } from "../lib/chart.jsx";
 import { addDays, dailySeries, dateRange } from "../lib/load.js";
+import { availability, nextEligible, requiredRest } from "../lib/rules.js";
 
 const RULE_NAME = { daily_max: "하루 105구 초과", rest: "의무 휴식일 미준수", three_days: "3일 연속 등판", unknown: "투구 수 기록 없음(판정 불가)" };
 const LOAD_CLASS = { "보통": "ok", "주의": "warn", "높음": "alarm", "계산 불가": "base" };
@@ -43,12 +44,6 @@ function useSelection(data, params, setParams, region) {
   const setSchool = (next) => setParams({ ...keep, s: next }, { replace: true });
   const setCode = (next) => setParams({ ...keep, s: s.code, p: next }, { replace: true });
   return { schools, s, pitchers, p, setSchool, setCode, keep };
-}
-
-function requiredRest(pitches, table) {
-  if (pitches == null) return null;
-  for (const [upper, rest] of table) if (pitches <= upper) return rest;
-  return table[table.length - 1][1];
 }
 
 function restText(g) {
@@ -207,6 +202,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           <p className="caption">팀 합계 {s?.pitches_total ?? "—"}구 · {s?.games}경기. 한두 명에게 몰리는지 한눈에 봅니다.</p>
         </div>
       </div>
+      {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
       {p && (
         <div className="card">
           <div className="card-head">
@@ -243,13 +239,88 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
   );
 }
 
+/* ---------- 투수 운용 계획판: 기준일에 누가 등판할 수 있는가 (KBSA 규정을 앞으로 계산) ---------- */
+
+function sumWindow(games, from, to) {
+  let total = 0;
+  for (const g of games) if (g.date >= from && g.date <= to) { if (g.pitches == null) return null; total += g.pitches; }
+  return total;
+}
+
+function Planner({ school, games, kbsa, lights, onPick, picked }) {
+  const mine = useMemo(() => games.filter((g) => g.teams.includes(school.name)), [games, school]);
+  const firstDays = useMemo(() => {                                   // 이 학교가 치른 대회의 첫날 (바로가기)
+    const out = new Map();
+    for (const g of mine) if (!out.has(g.competition) || g.date < out.get(g.competition)) out.set(g.competition, g.date);
+    return [...out.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [mine]);
+  const [date, setDate] = useState(school.end);
+  const [assume, setAssume] = useState(0);
+  const rows = school.pitchers.map((x) => {
+    const outings = x.games.map((g) => ({ date: g.date, pitches: g.pitches }));
+    const today = x.games.find((g) => g.date === date) || null;
+    const before = outings.filter((o) => o.date < date);              // 기준일 아침 기준: 그날 이전 등판만으로 판단
+    const a = availability(before, date, kbsa.rest_table);
+    const next = nextEligible(before, kbsa.rest_table);
+    const sum7 = sumWindow(outings, addDays(date, -6), addDays(date, -1));
+    const hypo = assume > 0 && a.status === "가용" ? nextEligible([...before, { date, pitches: assume }], kbsa.rest_table) : null;
+    return { x, a, next, sum7, today, hypo };
+  }).sort((r1, r2) => {
+    const order = { "가용": 0, "불가": 1, "판정 불가": 2 };
+    return order[r1.a.status] - order[r2.a.status] || (r1.sum7 ?? 0) - (r2.sum7 ?? 0) || r1.x.label.localeCompare(r2.x.label);
+  });
+  const counts = { "가용": 0, "불가": 0, "판정 불가": 0 };
+  rows.forEach((r) => { counts[r.a.status] += 1; });
+  const gameToday = mine.find((g) => g.date === date);
+  const cls = { "가용": "ok", "불가": "alarm", "판정 불가": "base" };
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>{school.name} 투수 운용 계획판 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 기준일 아침에 누가 등판할 수 있는가</span></h2>
+        <span className="caption" style={{ margin: 0 }}>가용 <b style={{ color: "var(--ok)" }}>{counts["가용"]}</b> · 불가 <b style={{ color: "var(--alarm)" }}>{counts["불가"]}</b> · 판정 불가 {counts["판정 불가"]}{gameToday && ` · 이날 경기: ${gameToday.competition}`}</span>
+      </div>
+      <div className="toolbar" style={{ marginBottom: 10 }}>
+        <label><span>기준일</span><input type="date" value={date} min={school.start} max={addDays(school.end, 14)} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ height: 34, padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: 9, background: "var(--card)" }} /></label>
+        <label><span>바로가기</span>
+          <select value="" onChange={(e) => e.target.value && setDate(e.target.value)}>
+            <option value="">대회 첫날…</option>
+            {firstDays.map(([c, d]) => <option key={c} value={d}>{c} {fmt.date(d)}</option>)}
+            <option value={school.end}>시즌 마지막 경기 {fmt.date(school.end)}</option>
+          </select>
+        </label>
+        <label><span>오늘 투구 가정</span><input type="number" min={0} max={130} step={5} value={assume} onChange={(e) => setAssume(Math.max(0, Number(e.target.value) || 0))} style={{ width: 80, height: 34, padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: 9, background: "var(--card)" }} /><span style={{ color: "var(--muted)" }}>구 → 가용 투수의 다음 가능일</span></label>
+      </div>
+      <div className="tbl-wrap">
+        <table className="tbl">
+          <thead><tr><th>투수</th><th>기준일 상태</th><th>마지막 등판</th><th>의무 휴식</th><th>다음 등판 가능일</th><th className="num">직전 7일 합</th><th>이날 실제</th>{assume > 0 && <th>오늘 {assume}구 던지면</th>}</tr></thead>
+          <tbody>
+            {rows.map(({ x, a, next, sum7, today, hypo }) => (
+              <tr key={x.code} className={x.code === picked ? "hl" : ""} onClick={() => onPick(x.code)} style={{ cursor: "pointer" }}>
+                <td><b>{x.label}</b></td>
+                <td><span className={`light ${cls[a.status]}`} title={a.reasons.join(" / ") || undefined}>{a.status}{a.status === "불가" && a.until && ` · ${fmt.date(a.until)}부터`}</span></td>
+                <td>{next ? <>{fmt.date(next.last.date)} <span style={{ color: "var(--muted)" }}>· {next.last.pitches == null ? "투구 수 미공개" : `${next.last.pitches}구`}</span></> : <span style={{ color: "var(--muted)" }}>기준일 전 등판 없음</span>}</td>
+                <td>{next ? (next.rest == null ? "—" : next.rest === 0 ? "없음" : `${next.rest}일`) : "—"}</td>
+                <td>{next ? (next.date ? fmt.date(next.date) : "판정 불가") : "—"}</td>
+                <td className="num">{sum7 == null ? "—" : sum7}{sum7 != null && sum7 >= lights.sum7.caution && <span className={`light ${sum7 >= lights.sum7.high ? "alarm" : "warn"}`} style={{ marginLeft: 6 }}>{sum7 >= lights.sum7.high ? "높음" : "주의"}</span>}</td>
+                <td>{today ? <span className={`light ${a.status === "불가" ? "alarm" : "velo"}`}>{today.pitches == null ? "등판 (투구 수 미공개)" : `${today.pitches}구 등판`}{a.status === "불가" && " · 규정 위반?"}</span> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
+                {assume > 0 && <td>{hypo ? `${fmt.date(hypo.date)}부터 (휴식 ${hypo.rest}일)` : ""}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="caption">상태는 기준일 아침 기준 — 그날 이전 등판만으로 KBSA 규정(투구 수별 의무 휴식일, 3일 연속 등판 금지)을 적용합니다. '이날 실제'는 기록에 있는 그날 등판입니다. 2025 기록으로 되돌아보는 화면이지만, 운영 중에는 어제까지의 투구 수만 넣으면 오늘의 가용 투수와 '오늘 몇 구를 던지면 언제 다시 나올 수 있는가'가 그대로 나옵니다.</p>
+    </div>
+  );
+}
+
 /* ---------- 대회 모드: 2025 전국체전 18세 이하부 ---------- */
 
 function cellsFor(p, days, restTable) {
   const byDate = Object.fromEntries(p.games.map((g) => [g.date, g]));
   const rest = new Set();
   for (const g of p.games) {
-    const need = requiredRest(g.pitches, restTable);
+    const need = g.pitches == null ? null : requiredRest(g.pitches, restTable);
     for (let i = 1; need != null && i <= need; i++) rest.add(addDays(g.date, i));
   }
   return days.map((d) => (byDate[d] ? { kind: "game", g: byDate[d] } : rest.has(d) ? { kind: "rest" } : { kind: "empty" }));
