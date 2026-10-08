@@ -19,7 +19,7 @@ from src.core import kbsa_rules as kr
 
 GAME_KEY = ["game_idx", "team", "name", "number"]
 GAME_COLUMNS = ["date", "game_no", "competition", "round", "opponent", "role", "result", "outs", "pitches", "detail", "gap_days", "required_rest", "rest_ok", "min_rest_exact", "cum_pitches",
-                "batters", "k", "bb_hbp", "hits", "hr", "runs", "er", "ball_pct", "ball_marks", "ball_flag"]
+                "batters", "k", "bb_hbp", "hits", "hr", "runs", "er", "ball_pct", "ball_marks", "ball_flag", "ball_reread"]
 BALL_COLUMNS = ["ball_marks", "ball_balls", "ball_pct", "ball_flag", "ball_usual"]
 
 
@@ -168,13 +168,16 @@ def annotate_outings(rows: pd.DataFrame, kbsa: dict) -> pd.DataFrame:
 def attach_scoresheet(rows: pd.DataFrame, sheet: pd.DataFrame, names: pd.DataFrame) -> pd.DataFrame:
     """기록지 판독 결과(18_scoresheets score: 경기·던진 팀·등번호별 읽은 표시·볼·검산·평소 비교)를 등판표에 붙인다.
     ball_marks가 비면 기록지를 안 읽은 등판, ball_marks는 있고 ball_pct가 비면 읽었지만 검산(공식 투구 수와 비교) 미달.
+    판독 결과에 reread(그 등판 표시 중 사람·AI가 다시 읽은 몫)가 있으면 ball_reread로 같이 붙인다.
     한 경기에 같은 팀·등번호로 이어지는 등판이 둘이면(등번호가 같은 다른 선수) 어느 쪽인지 알 수 없어 붙이지 않는다."""
     key = names[["pitcher", "team", "number"]].drop_duplicates("pitcher").rename(columns={"team": "_team", "number": "_number"})
     r = rows.merge(key, on="pitcher", how="left")
-    s = sheet.rename(columns={"team": "_team", "number": "_number", "marks": "ball_marks", "balls": "ball_balls", "usual": "ball_usual"})
-    out = r.merge(s[["game_idx", "_team", "_number", *BALL_COLUMNS]], on=["game_idx", "_team", "_number"], how="left")
+    s = sheet.rename(columns={"team": "_team", "number": "_number", "marks": "ball_marks", "balls": "ball_balls", "usual": "ball_usual",
+                              "reread": "ball_reread"})
+    cols = [*BALL_COLUMNS, *(["ball_reread"] if "ball_reread" in s else [])]
+    out = r.merge(s[["game_idx", "_team", "_number", *cols]], on=["game_idx", "_team", "_number"], how="left")
     ambiguous = out.duplicated(["game_idx", "_team", "_number"], keep=False).to_numpy() & out["_team"].notna().to_numpy()
-    out.loc[ambiguous, BALL_COLUMNS] = np.nan
+    out.loc[ambiguous, cols] = np.nan
     return out.drop(columns=["_team", "_number"])
 
 

@@ -238,6 +238,20 @@ def test_payload_carries_ball_rates_per_game_and_pooled_per_pitcher():
     assert pay["totals"]["ball_outings"] == 2 and pay["totals"]["ball_flags"] == 1
 
 
+def test_reread_share_rides_along_to_each_game_when_the_reader_reports_it():
+    t, names, rows = prepared()
+    sheet = sheet_outings().assign(reread=[0.0, 0.0, 0.4])                 # 2경기 다라고 #13: 표시의 40%를 다시 읽음
+    outings = hr.annotate_outings(hr.attach_scoresheet(rows, sheet, names), RULES["kbsa"])
+    daily = hs.daily_table(rows, RULES); violated = hs.violations(rows, daily, RULES)
+    pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "-"}, "시험", LIGHTS)
+    school = next(s for s in pay["schools"] if s["name"] == "다라고")
+    reliever = next(p for p in school["pitchers"] if p["label"] == "#13")
+    ace = next(p for p in school["pitchers"] if p["label"] == "#54")
+    assert reliever["games"][0]["ball_reread"] == 0.4 and ace["games"][0]["ball_reread"] == 0.0
+    plain = hr.attach_scoresheet(rows, sheet_outings(), names)                # 옛 판독 결과(열 없음)도 그대로 붙는다
+    assert "ball_reread" not in plain.columns
+
+
 def test_with_player_names_prefixes_label_with_real_name_for_that_dataset_only():
     names = pd.DataFrame({"pitcher": ["S01-P01", "S01-P02", "S02-P01"], "label": ["#1", "#17", "#17-2"], "team": ["가나고"] * 2 + ["다라고"]})
     real = pd.DataFrame({"pitcher": ["S01-P01", "S01-P02", "S01-P01"], "name": ["홍길동", "김철수", "다른대회"],

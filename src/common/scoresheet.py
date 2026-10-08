@@ -348,6 +348,46 @@ def implied_pitches(marks: pd.DataFrame, inplay: set) -> pd.DataFrame:
     return out
 
 
+READ_PA_COLUMNS = ["game_idx", "team", "number", "inning", "col", "cat", "ibb"]
+
+
+def readings_from_labels(items: list[dict], labels: dict, checked: set = frozenset()) -> pd.DataFrame:
+    """다시 읽은 판독(확인 페이지 묶음) → 덩어리마다 한 줄: sheet·pa·idx·label·source.
+    items = 타석 목록(id·sheet·pa·blobs[idx]), labels = 타석 id → 덩어리 순서대로 판독 글자. 사람이 '확인'한 타석(checked)은 source '사람', 나머지는 'AI'.
+    판독 수가 덩어리 수와 다른 타석은 뺀다."""
+    rows = []
+    for it in items:
+        labs = labels.get(it["id"])
+        if labs is None or len(labs) != len(it["blobs"]):
+            continue
+        for b, lab in zip(it["blobs"], labs):
+            rows.append(dict(sheet=it["sheet"], pa=int(it["pa"]), idx=int(b["idx"]), label=str(lab).strip().upper(),
+                             source="사람" if it["id"] in checked else "AI"))
+    return pd.DataFrame(rows, columns=["sheet", "pa", "idx", "label", "source"])
+
+
+def apply_readings(marks: pd.DataFrame, readings: pd.DataFrame) -> pd.DataFrame:
+    """사람·AI가 다시 읽은 타석은 모델 판독 대신 그 판독을 쓴다 (2026-10-08 밤, 시험 중 — 브랜치 ai-readings).
+    readings = 덩어리마다 한 줄: sheet·pa·idx·label·source + 타석 열(READ_PA_COLUMNS). label 글자 하나 = 표시 하나(위→아래),
+    B = 볼, S = 볼 아님, X = 표시 아님, '?' = 확신 없음(그래도 그 판독을 쓰고 unsure로 남긴다).
+    반환: 다시 읽은 타석의 모델 줄을 빼고 판독 줄을 넣은 표 + read_by(모델·AI·사람)·unsure 열. 결과가 정해 주는 마지막 공 채우기는 이 뒤에 그대로 한다."""
+    m = marks.assign(read_by="모델", unsure=False)
+    if len(readings) == 0:
+        return m
+    reread = set(zip(readings["sheet"], readings["pa"]))
+    m = m[[key not in reread for key in zip(m["sheet"], m["pa"])]]
+    rows = []
+    for r in readings.itertuples(index=False):
+        label = str(r.label).upper()
+        seq = [c for c in label if c in "BS"]
+        for j, c in enumerate(seq):
+            rows.append({**{c2: getattr(r, c2) for c2 in READ_PA_COLUMNS}, "sheet": r.sheet, "pa": r.pa, "idx": r.idx, "piece": j, "k": len(seq),
+                         "ball": int(c == "B"), "p_ball": float(c == "B"), "read_by": r.source, "unsure": "?" in label})
+    add = pd.DataFrame(rows, columns=[*READ_PA_COLUMNS, "sheet", "pa", "idx", "piece", "k", "ball", "p_ball", "read_by", "unsure"])
+    out = pd.concat([m, add], ignore_index=True) if len(add) else m
+    return out.sort_values(["sheet", "pa", "idx", "piece"]).reset_index(drop=True)
+
+
 def usual_flags(o: pd.DataFrame, min_pitches: int = 40, z: float = 2.0, min_history: int = 3) -> pd.DataFrame:
     """'평소보다 볼이 많았던 등판': 검산 통과한 등판 중 투구 수 min_pitches 이상만 판정.
     평소 = 같은 투수의 다른 검산 통과 등판들의 볼 합 ÷ 표시 합 (그 등판은 뺀다, 다른 등판 min_history개 이상).

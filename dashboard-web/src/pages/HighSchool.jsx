@@ -147,16 +147,23 @@ function BallChart({ p }) {
   );
 }
 
+/** 다시 읽은 등판 표시 (2026-10-08 밤, 시험 중 — 문구는 사용자 결정 대기). */
+function RereadMark({ g }) {
+  if (!(g.ball_reread > 0)) return null;
+  return <span className="light base" style={{ marginLeft: 6 }} title={`자동 판독이 어려운 기록지라 다시 읽은 등판입니다 — 그린 표시의 ${fmt.num(100 * g.ball_reread, 0)}%를 AI가 다시 읽었습니다(일부는 사람이 확인).`}>다시 읽음</span>;
+}
+
 /** 기록지 판독 볼 비율(추정) 칸: 안 읽음 — / 읽었지만 검산 미달 / 비율과 '평소보다 볼 많음'. */
 function BallCell({ g }) {
   if (g.ball_marks == null) return <span style={{ color: "var(--muted)" }}>—</span>;
   if (g.ball_pct == null) {
-    return <span className="light base" title={`기록지에서 센 공 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span>;
+    return <><span className="light base" title={`기록지에서 센 공 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span><RereadMark g={g} /></>;
   }
   return (
     <>
       {fmt.num(100 * g.ball_pct, 0)}%
       {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="평소보다 볼이 많았던 등판: 그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(읽은 투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">볼 많음</span>}
+      <RereadMark g={g} />
     </>
   );
 }

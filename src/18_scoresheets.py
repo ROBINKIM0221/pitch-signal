@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import pickle
 import re
@@ -333,6 +334,35 @@ def sheet_marks(df_all: pd.DataFrame, count_model: dict | None) -> pd.DataFrame:
     return out.drop(columns=[c for c in ("mask", "gctx") if c in out])
 
 
+def load_readings(review_dir: Path, sheet_dir: Path = SHEET_OUT) -> pd.DataFrame:
+    """다시 읽은 판독 묶음(review/<배치>/items.json + 사람 확인 파일 review_<배치>_user.json, 없으면 다 채운 first_pass.json) → 판독 표.
+    타석 열(경기·던진 팀·등번호·이닝·열·결과·고의4구)은 그 기록지 판독 파일에서 붙인다 (2026-10-08 밤, 시험 중)."""
+    parts = []
+    for b in sorted(p for p in Path(review_dir).iterdir() if (p / "items.json").exists()):
+        items = json.loads((b / "items.json").read_text(encoding="utf-8"))
+        user = b / f"review_{b.name}_user.json"
+        if user.exists():
+            u = json.loads(user.read_text(encoding="utf-8"))["items"]
+            labels, checked = {k: v["labels"] for k, v in u.items()}, {k for k, v in u.items() if v.get("checked")}
+        elif (b / "first_pass.json").exists():
+            labels, checked = json.loads((b / "first_pass.json").read_text(encoding="utf-8")), set()
+            if len(labels) < len(items):
+                log.info("판독 묶음 %s: 1차 판독이 덜 끝나 뺌 (%d/%d타석)", b.name, len(labels), len(items))
+                continue
+        else:
+            continue
+        parts.append(ss.readings_from_labels(items, labels, checked).assign(batch=b.name))
+    cols = ["sheet", "pa", "idx", "label", "source", "batch", *ss.READ_PA_COLUMNS]
+    if not parts:
+        return pd.DataFrame(columns=cols)
+    rd = pd.concat(parts, ignore_index=True).drop_duplicates(["sheet", "pa", "idx"], keep="last")
+    info = [pd.read_parquet(Path(sheet_dir) / f"{s}.parquet", columns=["pa", *ss.READ_PA_COLUMNS]).drop_duplicates("pa").assign(sheet=s)
+            for s in rd["sheet"].unique() if (Path(sheet_dir) / f"{s}.parquet").exists()]
+    if not info:
+        return pd.DataFrame(columns=cols)
+    return rd.merge(pd.concat(info, ignore_index=True), on=["sheet", "pa"], how="inner")[cols].reset_index(drop=True)
+
+
 def score(cfg: dict, clf) -> pd.DataFrame:
     sc = cfg["scoresheets"]
     cm_path = PROCESSED / "scoresheet_count_model.pkl"
@@ -354,6 +384,13 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     marks = pd.concat(parts, ignore_index=True)
     marks["ball"] = (marks["p_ball"] >= 0.5).astype(int)
     marks["number"] = marks["number"].astype(int)
+    if sc.get("readings_dir") and Path(sc["readings_dir"]).exists():          # 사람·AI가 다시 읽은 타석은 그 판독을 쓴다 (2026-10-08 밤, 시험 중)
+        rd = load_readings(Path(sc["readings_dir"]))
+        rd = rd[rd["number"].notna()]
+        marks = ss.apply_readings(marks, rd)
+        marks["number"] = marks["number"].astype(int)
+        pas = rd.drop_duplicates(["sheet", "pa"])
+        log.info("다시 읽은 타석 %d (사람 확인 %d · AI %d)", len(pas), int((pas["source"] == "사람").sum()), int((pas["source"] == "AI").sum()))
     marks["filled"] = False
     fill = ss.implied_pitches(marks, INPLAY)                                  # 띠에 안 그린 '결과가 정해 주는 마지막 공' (4구 넷째 볼 등)
     log.info("결과가 정해 주는 마지막 공 채움: %d구 (볼 %d · 스트라이크 %d)", len(fill), int(fill["ball"].sum()), int((fill["ball"] == 0).sum()))
@@ -366,6 +403,10 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     raw = ss.outing_table(marks[~marks["filled"]], off, tol=sc["gate_tol"])[["game_idx", "team", "number", "marks", "balls", "gate", "ball_pct"]]
     o = o.merge(raw.rename(columns={"marks": "raw_marks", "balls": "raw_balls", "gate": "raw_gate", "ball_pct": "raw_ball_pct"}),
                 on=["game_idx", "team", "number"], how="left")                 # 채우기 전 판독만 (독립 검증용)
+    if "read_by" in marks:                                                     # 그 등판 그린 표시 중 사람·AI가 다시 읽은 몫
+        drawn = marks[~marks["filled"].astype(bool)]
+        rr = drawn[["game_idx", "team", "number"]].assign(reread=(drawn["read_by"] != "모델").to_numpy().astype(float))
+        o = o.merge(rr.groupby(["game_idx", "team", "number"], as_index=False)["reread"].mean(), on=["game_idx", "team", "number"], how="left")
     marks.to_parquet(PROCESSED / "hs_scoresheet_marks.parquet", index=False)
     return o
 
@@ -539,7 +580,8 @@ def summary(o: pd.DataFrame, cfg: dict) -> pd.DataFrame:
                      "추정 볼 비율 중앙값": round(float(ok["ball_pct"].median()), 3) if len(ok) else np.nan,
                      "평소보다 볼 많음 표시": int(big["ball_flag"].sum()), "판정한 등판": int(len(judged)),
                      "표시 등판 사구/타자": rate(flag, "hbp"), "안 표시 사구/타자": rate(rest, "hbp"),
-                     "표시 등판 폭투/타자": rate(flag, "wp"), "안 표시 폭투/타자": rate(rest, "wp")})
+                     "표시 등판 폭투/타자": rate(flag, "wp"), "안 표시 폭투/타자": rate(rest, "wp"),
+                     "다시 읽은 40구+ 등판": int((big["reread"] > 0).sum()) if "reread" in big else 0})
     return pd.DataFrame(rows)
 
 

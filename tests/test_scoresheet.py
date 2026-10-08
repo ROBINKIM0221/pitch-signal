@@ -1,4 +1,7 @@
 """기록지 사진 판독(격자 찾기·표시 떼기·칸↔타석·검산·'평소보다 볼이 많았던 등판') 테스트. 실행: python -m pytest -q tests/test_scoresheet.py"""
+import importlib
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -136,6 +139,62 @@ def test_implied_pitches_can_be_appended_to_a_table_that_already_has_the_filled_
     assert not add.columns.duplicated().any()
     both = pd.concat([marks, add], ignore_index=True)
     assert both["filled"].tolist() == [False, False, False, True, True]
+
+
+def pa_reading(pa, labels, source="AI", cat="BB"):
+    """다시 읽은 타석 하나: 덩어리 순서대로 판독 글자."""
+    return pd.DataFrame({"sheet": "s", "pa": pa, "idx": range(len(labels)), "label": labels, "source": source,
+                         "game_idx": 1, "team": "가", "number": 17, "inning": 1, "col": 1, "cat": cat, "ibb": False})
+
+
+def test_apply_readings_replaces_model_marks_of_reread_pas_only():
+    marks = pd.concat([pa_marks(0, "BB", [1, 0]), pa_marks(1, "K", [0, 0, 0])])
+    out = ss.apply_readings(marks, pa_reading(0, ["SB", "X", "B?"]))
+    pa0 = out[out["pa"] == 0]
+    assert pa0["ball"].tolist() == [0, 1, 1] and pa0["k"].tolist() == [2, 2, 1] and pa0["piece"].tolist() == [0, 1, 0]
+    assert pa0["idx"].tolist() == [0, 0, 2]                        # X(표시 아님) 덩어리는 빠진다
+    assert pa0["read_by"].eq("AI").all() and pa0["unsure"].tolist() == [False, False, True]
+    pa1 = out[out["pa"] == 1]
+    assert pa1["ball"].tolist() == [0, 0, 0] and pa1["read_by"].eq("모델").all() and not pa1["unsure"].any()
+    assert (pa0[["game_idx", "team", "number", "inning", "col", "cat"]].notna().all().all())
+
+
+def test_apply_readings_keeps_model_marks_when_there_are_no_readings():
+    out = ss.apply_readings(pa_marks(0, "BB", [1, 1]), pa_reading(0, []).iloc[:0])
+    assert out["ball"].tolist() == [1, 1] and out["read_by"].eq("모델").all()
+
+
+def test_reread_walk_is_still_filled_up_to_four_balls():
+    marks = ss.apply_readings(pa_marks(0, "BB", [1, 0]), pa_reading(0, ["B", "S", "BB"])).assign(filled=False)
+    add = ss.implied_pitches(marks, inplay=set())
+    assert add["ball"].tolist() == [1] and add["read_by"].eq("AI").all()
+
+
+def test_readings_from_labels_aligns_labels_to_blobs_and_marks_checked_items_as_person():
+    items = [{"id": "s_0", "sheet": "s", "pa": 0, "blobs": [{"idx": 0}, {"idx": 1}]},
+             {"id": "s_1", "sheet": "s", "pa": 1, "blobs": [{"idx": 0}]},
+             {"id": "s_2", "sheet": "s", "pa": 2, "blobs": [{"idx": 0}, {"idx": 1}]}]
+    labels = {"s_0": ["B", "sb"], "s_1": ["S"], "s_2": ["B"]}          # s_2는 덩어리 수가 안 맞아 뺀다
+    r = ss.readings_from_labels(items, labels, checked={"s_1"})
+    assert r[["pa", "idx", "label"]].values.tolist() == [[0, 0, "B"], [0, 1, "SB"], [1, 0, "S"]]
+    assert r["source"].tolist() == ["AI", "AI", "사람"]
+
+
+def test_load_readings_prefers_the_person_checked_file_and_takes_pa_columns_from_the_sheet(tmp_path):
+    m18 = importlib.import_module("src.18_scoresheets")
+    items = [{"id": "s1_0", "sheet": "s1", "pa": 0, "blobs": [{"idx": 0}, {"idx": 1}]}, {"id": "s1_1", "sheet": "s1", "pa": 1, "blobs": [{"idx": 0}]}]
+    for name, first in (("b01", {"s1_0": ["B", "S"], "s1_1": ["X"]}), ("b02", {"s1_0": ["B", "B"]})):   # b02 = 1차 판독이 덜 끝난 묶음
+        d = tmp_path / "rev" / name; d.mkdir(parents=True)
+        (d / "items.json").write_text(json.dumps(items), encoding="utf-8")
+        (d / "first_pass.json").write_text(json.dumps(first), encoding="utf-8")
+    user = {"batch": "b01", "items": {"s1_0": {"labels": ["B", "SB"], "checked": True}, "s1_1": {"labels": ["S"], "checked": False}}}
+    (tmp_path / "rev" / "b01" / "review_b01_user.json").write_text(json.dumps(user), encoding="utf-8")
+    sheets = tmp_path / "sheets"; sheets.mkdir()
+    pd.DataFrame({"pa": [0, 0, 1], "idx": [0, 1, 0], "game_idx": 1, "team": "가", "number": [17, 17, 18], "inning": 1, "col": 1,
+                  "cat": ["BB", "BB", "K"], "ibb": False}).to_parquet(sheets / "s1.parquet")
+    r = m18.load_readings(tmp_path / "rev", sheets)
+    assert r[["pa", "idx", "label", "source"]].values.tolist() == [[0, 0, "B", "사람"], [0, 1, "SB", "사람"], [1, 0, "S", "AI"]]
+    assert r["number"].tolist() == [17, 17, 18] and r["cat"].tolist() == ["BB", "BB", "K"] and set(r["batch"]) == {"b01"}
 
 
 def test_usual_flag_needs_enough_pitches_and_history():
