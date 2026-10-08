@@ -27,6 +27,32 @@ export function recompute(outings, limits, multiplier = 1) {
   });
 }
 
+// 경보 카드의 특징 이름(src/common/myt.py LABELS와 같게)과 방향 글. 폼 변화 지수는 평소보다 높아져도 낮아져도 커지므로(방향을 가리지 않음)
+// 어느 쪽으로 달라졌는지는 카드에 글로 따로 적는다 (2026-10-08 사용자 결정: 계산은 그대로, 방향만 글로).
+const LABEL = { velo: "구속", rel_z: "수직 릴리스", arm_angle: "팔 각도" };
+const DIRECTION = { velo: ["평소보다 빠름", "평소보다 느림"], rel_z: ["평소보다 높음", "평소보다 낮음"], arm_angle: ["팔이 평소보다 올라감", "팔이 평소보다 내려감"] };
+
+/** 표준화 이탈 z(σ)의 방향 글. |z| < near 이면 '평소 수준'. */
+export function direction(f, z, near = 0.5) {
+  if (z == null || !Number.isFinite(z)) return "";
+  if (Math.abs(z) < near) return "평소 수준";
+  const [up, down] = DIRECTION[f] ?? ["평소보다 높음", "평소보다 낮음"];
+  return z > 0 ? up : down;
+}
+
+function signed(z) {
+  return `${z > 0 ? "+" : z < 0 ? "−" : ""}${Math.abs(z).toFixed(1)}σ`;
+}
+
+/** 폼 변화 경보 카드 머리글: T² 기여 몫(step)이 큰 특징 top개(몫이 없으면 |z| 큰 순)의 부호 있는 표준화 이탈과 방향.
+ *  고르는 법은 myt.card와 같다. 예: '수직 릴리스 −1.8σ(평소보다 낮음), 구속 −1.2σ(평소보다 느림)' */
+export function changeHeadline(alert, top = 2) {
+  const z = alert.z ?? {};
+  const feats = Object.keys(z).filter((f) => z[f] != null);
+  const key = alert.step ? (f) => alert.step[f] ?? 0 : (f) => Math.abs(z[f]);
+  return feats.slice().sort((a, b) => key(b) - key(a)).slice(0, top).map((f) => `${LABEL[f] ?? f} ${signed(z[f])}(${direction(f, z[f])})`).join(", ");
+}
+
 // 배수를 바꿔 새로 생긴 경보의 카드. 설계점(배수 1)의 경보는 내보낸 카드(원인 분해 포함)를 그대로 쓴다.
 export function syntheticAlert(o, data, signal) {
   const velo = signal === "velo";
@@ -39,7 +65,7 @@ export function syntheticAlert(o, data, signal) {
     z: o.u ? Object.fromEntries(Object.entries(o.u).map(([f, v]) => [f, v])) : null,
     card: velo
       ? `구속 하락 지수 ${o.velo_index.toFixed(1)}${delta != null ? `, 이 등판 구속 예상보다 ${delta.toFixed(1)} ${unit}` : ""}`
-      : `폼 변화 지수 ${o.change_index.toFixed(1)} — 표준화 이탈 ${o.u ? Object.entries(o.u).map(([f, v]) => `${f} ${v > 0 ? "+" : ""}${v.toFixed(1)}σ`).join(", ") : ""}`,
+      : `폼 변화 지수 ${o.change_index.toFixed(1)} — ${o.u ? changeHeadline({ z: o.u }, 3) : ""}`,
   };
 }
 

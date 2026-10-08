@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { recompute, syntheticAlert } from "../src/lib/signals.js";
+import { changeHeadline, direction, recompute, syntheticAlert } from "../src/lib/signals.js";
 
 const DIR = new URL("../public/data/replay/", import.meta.url);
 const files = readdirSync(DIR).filter((f) => f.endsWith(".json")).slice(0, 60);     // 앞쪽 60개 투수-시즌으로 확인
@@ -46,4 +46,20 @@ test("synthetic alert cards carry the index, velocity gap and standardized devia
   assert.ok(Math.abs(card.velo_delta - (o.velo - o.exp.velo)) < 1e-9);
   const change = syntheticAlert(o, d, "change");
   assert.ok(change.card.includes("σ") && change.z.velo != null);
+  assert.ok(/평소/.test(change.card), change.card);                       // 방향을 글로 적는다
+});
+
+test("direction words follow the sign of the standardized deviation for each feature", () => {
+  assert.equal(direction("rel_z", -1.8), "평소보다 낮음");
+  assert.equal(direction("rel_z", 1.8), "평소보다 높음");
+  assert.equal(direction("arm_angle", -1.2), "팔이 평소보다 내려감");
+  assert.equal(direction("arm_angle", 2.0), "팔이 평소보다 올라감");
+  assert.equal(direction("velo", -1.0), "평소보다 느림");
+  assert.equal(direction("velo", 0.3), "평소 수준");                         // 0.5σ 안은 방향을 말하지 않는다
+  assert.equal(direction("velo", null), "");
+});
+
+test("form-change headline lists the two largest contributions with their direction", () => {
+  const alert = { z: { velo: -1.2, rel_z: -1.8, arm_angle: 0.2 }, step: { velo: 1.0, rel_z: 3.0, arm_angle: 0.1 } };
+  assert.equal(changeHeadline(alert), "수직 릴리스 −1.8σ(평소보다 낮음), 구속 −1.2σ(평소보다 느림)");
 });

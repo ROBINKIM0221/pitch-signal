@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { FEATURE, FEATURE_HELP, PART, PITCH_NAME, ROLE, fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK, TIP_STYLE } from "../lib/chart.jsx";
-import { recompute, syntheticAlert } from "../lib/signals.js";
+import { changeHeadline, direction, recompute, syntheticAlert } from "../lib/signals.js";
 
 const SIGNAL = { velo: { name: "구속 하락 신호", color: "var(--velo)" }, change: { name: "폼 변화 신호", color: "var(--change)" } };
 const GROUP_NAME = { case: "사례", control: "대조군", other: "그 밖의 투수" };
@@ -369,21 +369,23 @@ export function AlertCard({ alert, onClose }) {
         <h2>경보 카드 · {alert.who} · {alert.date} · {velo ? "구속 하락 신호" : `폼 변화 신호 (${alert.rule})`}</h2>
         <button className="btn" onClick={onClose}>닫기</button>
       </div>
-      <p className="headline">{alert.card}</p>
+      <p className="headline">{!velo && !alert.synthetic && alert.z ? changeHeadline(alert) : alert.card}</p>
       {velo ? (
         <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(delta).toFixed(1)} {unit} {delta < 0 ? "낮았습니다" : "높았습니다"}.
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>
-          <p className="note" style={{ margin: "0 0 8px" }}>세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나 벗어났는지(표준화 이탈, σ){hasStep ? "와 T² 기여 몫" : ""}입니다.{!hasStep && " 원인 분해(기여 몫)는 설계점(배수 1.0)의 경보에서만 제공합니다."}</p>
+          <p className="note" style={{ margin: "0 0 8px" }}>세 특징이 함께 평소와 달라졌습니다. 아래는 어떤 특징이 얼마나, 어느 쪽으로 벗어났는지(표준화 이탈, σ){hasStep ? "와 T² 기여 몫" : ""}입니다.{!hasStep && " 원인 분해(기여 몫)는 설계점(배수 1.0)의 경보에서만 제공합니다."}
+            {" "}폼 변화 지수는 평소보다 높아져도 낮아져도 똑같이 커집니다(방향을 가리지 않음). 어느 쪽인지는 '방향' 칸을 보세요.</p>
           <div className="tbl-wrap">
             <table className="tbl">
-              <thead><tr><th>특징</th><th className="num">표준화 이탈</th>{hasStep && <><th className="num">기여 몫</th><th style={{ width: "40%" }}></th></>}</tr></thead>
+              <thead><tr><th>특징</th><th className="num">표준화 이탈</th><th>방향</th>{hasStep && <><th className="num">기여 몫</th><th style={{ width: "40%" }}></th></>}</tr></thead>
               <tbody>
                 {feats.map((f) => (
                   <tr key={f}>
                     <td>{FEATURE[f]}</td>
                     <td className="num">{alert.z?.[f] > 0 ? "+" : ""}{fmt.num(alert.z?.[f], 1)}σ</td>
+                    <td>{direction(f, alert.z?.[f])}</td>
                     {hasStep && <><td className="num">{fmt.num(alert.step[f], 1)}</td>
                     <td><div className="bar"><span style={{ width: `${total ? (100 * Math.max(0, alert.step[f])) / total : 0}%` }} /></div></td></>}
                   </tr>
