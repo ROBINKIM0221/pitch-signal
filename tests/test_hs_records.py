@@ -238,6 +238,15 @@ def test_payload_carries_ball_rates_per_game_and_pooled_per_pitcher():
     assert pay["totals"]["ball_outings"] == 2 and pay["totals"]["ball_flags"] == 1
 
 
+def test_with_player_names_prefixes_label_with_real_name_for_that_dataset_only():
+    names = pd.DataFrame({"pitcher": ["S01-P01", "S01-P02", "S02-P01"], "label": ["#1", "#17", "#17-2"], "team": ["가나고"] * 2 + ["다라고"]})
+    real = pd.DataFrame({"pitcher": ["S01-P01", "S01-P02", "S01-P01"], "name": ["홍길동", "김철수", "다른대회"],
+                         "dataset": ["korea_2025", "korea_2025", "tournament_2025"]})
+    out = hr.with_player_names(names, real, "korea_2025")
+    assert out["label"].tolist() == ["홍길동 #1", "김철수 #17", "#17-2"]          # 대응표에 없으면 등번호 그대로
+    assert names["label"].tolist() == ["#1", "#17", "#17-2"]                       # 원본 표는 바꾸지 않는다
+
+
 def inning_rows():
     """기록지 투구수 줄 판독(경기·던진 팀·등번호·이닝): 1경기 다라고 #54는 이닝 합 88 = 공식, 2경기 다라고 #13은 합 60 ≠ 공식 65(42+23)."""
     return pd.DataFrame({"game_idx": [1, 1, 1, 2, 2], "team": ["다라고"] * 5, "number": [54, 54, 54, 13, 13], "inning": [1, 2, 3, 6, 7],

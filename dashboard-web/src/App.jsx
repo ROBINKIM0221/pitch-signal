@@ -64,7 +64,7 @@ export default function App() {
             <Route path="/about" element={<About />} />
           </Routes>
           <footer className="foot">
-            데이터 기준일 {meta?.as_of ?? "—"} · 출처: MLB Statcast(Baseball Savant), MLB Stats API, KBSA 기록실(2025 전국 고교 시즌 973경기·전국체전, 선수는 등번호로만 표시). '가상 데이터' 배지가 있는 화면만 실제 기록이 아닙니다.
+            데이터 기준일 {meta?.as_of ?? "—"} · 출처: MLB Statcast(Baseball Savant), MLB Stats API, KBSA 기록실(2025 전국 고교 시즌 973경기·전국체전, 학교·선수 실명과 등번호). '가상 데이터' 배지가 있는 화면만 실제 기록이 아닙니다.
             {" "}이 화면의 신호는 통계적 관리도가 낸 점검 시작 신호이며 부상을 예측하거나 진단하지 않습니다. 판단은 사람이 합니다.
           </footer>
         </main>

@@ -178,6 +178,16 @@ def attach_scoresheet(rows: pd.DataFrame, sheet: pd.DataFrame, names: pd.DataFra
     return out.drop(columns=["_team", "_number"])
 
 
+def with_player_names(names: pd.DataFrame, real: pd.DataFrame, dataset: str) -> pd.DataFrame:
+    """화면 표기에 선수 실명을 붙인다 (2026-10-08 사용자 결정, config_kbsa.yaml show_player_names로 켜고 끔): label '#17' → '홍길동 #17'.
+    real = 저장소 밖 실명 대응표(pitcher·name·dataset). 그 데이터셋에 없는 투수는 등번호 표기 그대로."""
+    r = real[real["dataset"] == dataset] if "dataset" in real.columns else real
+    name_of = r.drop_duplicates("pitcher").set_index("pitcher")["name"]
+    out = names.copy()
+    out["label"] = [f"{name_of[p]} {lab}" if p in name_of.index else lab for p, lab in zip(out["pitcher"], out["label"])]
+    return out
+
+
 def attach_innings(rows: pd.DataFrame, inns: pd.DataFrame, names: pd.DataFrame) -> pd.DataFrame:
     """기록지 투구수 줄 판독(18_scoresheets innings: 경기·던진 팀·등번호·이닝별 투구 수와 볼·스트라이크 추정)을 등판표에 붙인다.
     innings = [[이닝, 투구 수, 스트라이크, 볼, 교체 이닝?], ...] — 볼·스트라이크를 못 믿는 이닝은 None.
@@ -250,7 +260,7 @@ def load_light(max_7d, max_pair3, lights: dict) -> tuple[str, list[str]]:
 
 
 def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, names: pd.DataFrame, rules: dict, info: dict, source: str, lights: dict) -> dict:
-    """대시보드 highschool/<key>.json. 학교는 실명(names의 team), 투수는 등번호 표기(label)만 들어간다.
+    """대시보드 highschool/<key>.json. 학교는 실명(names의 team), 투수는 names의 label(등번호 표기, 실명 표시를 켜면 '이름 #번호' — with_player_names).
     누적 부하 신호등은 절대량(load_lights: 7일 합, 3일 안 두 등판 합)으로 매기고, ACWR은 고교 화면에서 쓰지 않는다(2026-10-07 결정)."""
     kbsa_rules = set(hs.KBSA_RULES)
     school_name = names.drop_duplicates("school").set_index("school")["team"]

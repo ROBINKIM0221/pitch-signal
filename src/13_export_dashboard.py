@@ -188,6 +188,8 @@ def highschool_files(cfg: dict) -> dict:
             continue
         names = pd.read_csv(PROCESSED / f"hs_{key}_names.csv", encoding="utf-8-sig")
         names["name"] = names["pitcher"]                                                   # 실명 없이도 payload가 기대하는 열 모양을 맞춘다
+        if kcfg.get("show_player_names"):                                                  # 선수 실명 표시 (2026-10-08 사용자 결정, 끄면 등번호만)
+            names = hr.with_player_names(names, pd.read_csv(kcfg["name_map"], encoding="utf-8-sig"), key)
         rules = {**rules, "schools": int(names["school"].nunique())}
         outings = pd.read_parquet(rows_path)
         sheet = PROCESSED / "hs_scoresheet_outings.parquet"

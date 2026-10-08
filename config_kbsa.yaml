@@ -3,7 +3,8 @@
 source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail), 2026-10-07 1회 수집
 games_csv: data/raw/kbsa/games_2025.csv            # 2025 고교(18세 이하부) 37개 리그 976경기 목록: 리그·날짜·두 팀·점수
 name_map: C:/work/private/pitchsignal/kbsa_2025_names.csv   # 선수 실명 ↔ 등번호 표기 대응표 (저장소 밖에만 둔다)
-labels: 학교는 실명, 선수는 등번호(#nn)로만 표시한다 (2026-10-07 결정. 선수 실명은 저장소·화면 어디에도 넣지 않는다)
+labels: 학교와 선수 모두 실명으로 표시한다 (선수는 '이름 #등번호'). 2026-10-07에는 등번호만이었다가 2026-10-08 사용자 결정으로 실명 공개 — show_player_names를 false로 하면 등번호만으로 되돌아간다
+show_player_names: true                           # 선수 실명 표시 스위치. 실명은 name_map(저장소 밖)에서 내보낼 때만 붙인다
 seed: 2025
 load_lights:                                      # 고교 '누적 부하' 신호등 (2026-10-07 결정: ACWR 대신 절대량). 규정이 아니라 전국 2025 자료 분위수에 근거한 서술적 눈금
   sum7: {caution: 120, high: 150}                 # 오늘 포함 7일 투구 수 합 — 등판일 기준 상위 5% / 2% (전국 1,024명)
