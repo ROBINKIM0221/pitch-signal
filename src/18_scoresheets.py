@@ -354,13 +354,37 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     marks = pd.concat(parts, ignore_index=True)
     marks["ball"] = (marks["p_ball"] >= 0.5).astype(int)
     marks["number"] = marks["number"].astype(int)
+    marks["filled"] = False
+    fill = ss.implied_pitches(marks, INPLAY)                                  # 띠에 안 그린 '결과가 정해 주는 마지막 공' (4구 넷째 볼 등)
+    log.info("결과가 정해 주는 마지막 공 채움: %d구 (볼 %d · 스트라이크 %d)", len(fill), int(fill["ball"].sum()), int((fill["ball"] == 0).sum()))
+    marks = pd.concat([marks, fill], ignore_index=True)
     off = official_pitchers(sorted(marks["game_idx"].unique()))
     off = off.merge(marks[["game_idx", "team"]].drop_duplicates(), on=["game_idx", "team"])   # 기록지를 읽은 (경기, 던진 팀)만
     o = ss.usual_flags(ss.outing_table(marks, off, tol=sc["gate_tol"]), min_pitches=sc["judge_min_pitches"], z=sc["flag_z"],
                        min_history=sc["flag_min_history"])
     o = o.merge(off[["game_idx", "team", "number", "batters", "bb_hbp"]], on=["game_idx", "team", "number"], how="left")
+    raw = ss.outing_table(marks[~marks["filled"]], off, tol=sc["gate_tol"])[["game_idx", "team", "number", "marks", "balls", "gate", "ball_pct"]]
+    o = o.merge(raw.rename(columns={"marks": "raw_marks", "balls": "raw_balls", "gate": "raw_gate", "ball_pct": "raw_ball_pct"}),
+                on=["game_idx", "team", "number"], how="left")                 # 채우기 전 판독만 (독립 검증용)
     marks.to_parquet(PROCESSED / "hs_scoresheet_marks.parquet", index=False)
     return o
+
+
+def pa_events(game_ids) -> pd.DataFrame:
+    """등판(경기·던진 팀·등번호)별 공식 타석 결과에서 사구·폭투 수 — 채우기(4구·삼진·인플레이)에 안 쓰는 독립 검증용."""
+    rows = []
+    for g in game_ids:
+        if not (RAW / f"record_detail_{g}.html").exists():
+            continue
+        game, teams = game_pas(int(g))
+        for bat, pas in teams.items():
+            pitching = next((t for t in game["teams"] if t != bat), None)
+            for p in pas:
+                if p.get("pitcher") is not None:
+                    rows.append(dict(game_idx=int(g), team=pitching, number=p["pitcher"], hbp=int(kb.pa_category(p["result"]) == "HBP"),
+                                     wp=sum(e == "폭투" for e in p.get("events", []))))
+    t = pd.DataFrame(rows)
+    return t.groupby(["game_idx", "team", "number"], as_index=False)[["hbp", "wp"]].sum() if len(t) else t
 
 
 def _row_one(path: str) -> str | None:
@@ -442,7 +466,8 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
     split = game_split(cfg)
     meta = pd.read_csv(PROCESSED / "scoresheet_read_meta.csv", encoding="utf-8-sig")
     meta = meta[meta["error"].isna()] if "error" in meta else meta
-    marks = pd.read_parquet(PROCESSED / "hs_scoresheet_marks.parquet", columns=["sheet", "number", "inning", "col", "ball"])
+    marks = pd.read_parquet(PROCESSED / "hs_scoresheet_marks.parquet", columns=["sheet", "number", "inning", "col", "ball", "filled"])
+    marks["filled"] = marks["filled"].fillna(False).astype(bool)
     marks_by = dict(tuple(marks.groupby("sheet")))
     proba = lambda F: sr.full_proba(digit_model, F)
     cache: dict = {}
@@ -456,8 +481,8 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         ctx = _sheet_context(int(m.game_idx), m.bat_team, cache)
         if ctx is None:
             continue
-        mk = marks_by.get(m.sheet, pd.DataFrame(columns=["number", "inning", "col", "ball"]))
-        counts = mk.groupby("col").size().to_dict()
+        mk = marks_by.get(m.sheet, pd.DataFrame(columns=["number", "inning", "col", "ball", "filled"]))
+        counts = mk[~mk["filled"].astype(bool)].groupby("col").size().to_dict()   # 숫자 줄 사전은 읽은 표시 수로 맞춘 것 (채운 공 빼고)
         total = sum(ctx["official"].values())
         bd = sr.boundaries(ctx["by_col"], ctx["official"], ctx["last"])
         res = sr.decode(row, total, ctx["last"], proba, counts, lam, anchors=dict(bd), lower=ctx["lower"])
@@ -494,16 +519,27 @@ def summary(o: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     sc = cfg["scoresheets"]
     split = game_split(cfg)
     o = o.assign(split=o["game_idx"].map(split))
+    ev = pa_events(sorted(o.loc[o["split"] == "test", "game_idx"].unique()))
+    o = o.merge(ev, on=["game_idx", "team", "number"], how="left")
     rows = []
     for name, part in [("시범 31경기", o[o["split"] == "pilot"]), ("2차 학습용 경기", o[o["split"] == "label"]),
                        ("시험용 경기 (학습·보정에 안 씀)", o[o["split"] == "test"]), ("전체", o)]:
         big = part[part["pitches"] >= sc["judge_min_pitches"]]
         ok = big[big["gate"]]
         r = spearmanr(ok["ball_pct"], ok["bb_hbp"] / ok["batters"]) if len(ok) > 5 else (np.nan, np.nan)
+        rok = big[big["raw_gate"].fillna(False).astype(bool)]
+        rr = spearmanr(rok["raw_ball_pct"], rok["bb_hbp"] / rok["batters"]) if len(rok) > 5 else (np.nan, np.nan)
+        judged = big[big["z_ball"].notna()]
+        flag, rest = judged[judged["ball_flag"]], judged[~judged["ball_flag"]]
+        rate = lambda d, c: (round(float(d[c].sum() / d.loc[d[c].notna(), "batters"].sum()), 4)          # 사구·폭투는 시험용 경기만 셌다
+                             if c in d and d[c].notna().any() and d.loc[d[c].notna(), "batters"].sum() else np.nan)
         rows.append({"묶음": name, "등판": len(part), f"{sc['judge_min_pitches']}구 이상": len(big), "검산 통과": len(ok),
                      "통과율": round(len(ok) / max(1, len(big)), 3), "볼비율_4사구율_순위상관": round(float(r[0]), 3), "p": float(r[1]),
+                     "채우기 전 판독만_통과율": round(len(rok) / max(1, len(big)), 3), "채우기 전 판독만_순위상관": round(float(rr[0]), 3),
                      "추정 볼 비율 중앙값": round(float(ok["ball_pct"].median()), 3) if len(ok) else np.nan,
-                     "평소보다 볼 많음 표시": int(big["ball_flag"].sum()), "판정한 등판": int(big["z_ball"].notna().sum())})
+                     "평소보다 볼 많음 표시": int(big["ball_flag"].sum()), "판정한 등판": int(len(judged)),
+                     "표시 등판 사구/타자": rate(flag, "hbp"), "안 표시 사구/타자": rate(rest, "hbp"),
+                     "표시 등판 폭투/타자": rate(flag, "wp"), "안 표시 폭투/타자": rate(rest, "wp")})
     return pd.DataFrame(rows)
 
 

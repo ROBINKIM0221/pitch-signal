@@ -305,6 +305,38 @@ def outing_table(marks: pd.DataFrame, official: pd.DataFrame, tol: float = 0.15)
     return o
 
 
+def implied_pitches(marks: pd.DataFrame, inplay: set) -> pd.DataFrame:
+    """타석 결과가 정해 주는 마지막 공 중 띠에 안 그린 것을 채운다 (2026-10-08). 기록원이 4구의 넷째 볼, 삼진의 셋째 스트라이크,
+    인플레이의 타격 공을 결과 기호로 대신하고 띠에는 안 그리는 경우가 있다 — 숫자 줄 이닝 투구 수와 맞춰 보면 그런 타석이 있는 이닝만 1구씩 모자랐다.
+    - 4구(고의 아님): 읽은 볼이 4개보다 적으면 4개까지 볼
+    - 삼진: 마지막 표시가 볼이거나, 볼 아닌 표시가 2개 이하면 스트라이크 1
+    - 인플레이: 마지막 표시가 볼이면 타격(스트라이크) 1
+    반환: 덧붙일 줄 — 그 타석 줄의 타석 단위 열을 그대로 쓰고 idx = 그 타석 마지막 + 1부터, k = 0, filled = True."""
+    if len(marks) == 0:
+        return marks.assign(filled=pd.Series(dtype=bool))
+    m = marks.sort_values(["sheet", "pa", "idx", "piece"])
+    g = m.groupby(["sheet", "pa"], sort=False)
+    pa = g.agg(n=("ball", "size"), balls=("ball", "sum"), last=("ball", "last"), last_idx=("idx", "max"))
+    first = g.head(1).set_index(["sheet", "pa"])
+    cat, ibb = first["cat"].reindex(pa.index), first["ibb"].reindex(pa.index).fillna(False).astype(bool)
+    add_b = np.where((cat == "BB") & ~ibb, np.clip(4 - pa["balls"], 0, 4), 0)
+    add_s = (((cat == "K") & ((pa["last"] == 1) | (pa["n"] - pa["balls"] <= 2))) | (cat.isin(inplay) & (pa["last"] == 1))).astype(int).to_numpy()
+    shape_cols = [c for c in m.columns if c not in ("sheet", "pa", "idx", "piece", "k", "ball", "p_ball")]
+    rows = []
+    for (key, b, s), last_idx in zip(zip(pa.index, add_b, add_s), pa["last_idx"]):
+        if not b and not s:
+            continue
+        base = first.loc[key, shape_cols].to_dict()
+        for j, ball in enumerate([1] * int(b) + [0] * int(s)):
+            rows.append({**base, "sheet": key[0], "pa": key[1], "idx": int(last_idx) + 1 + j, "piece": 0, "k": 0, "ball": ball, "filled": True})
+    cols = [*marks.columns, *(["filled"] if "filled" not in marks.columns else [])]
+    out = pd.DataFrame(rows, columns=cols) if rows else marks.iloc[:0].assign(filled=pd.Series(dtype=bool))
+    for c in ("w", "h", "area", "fill", "elong", "ang", "holes", "enclosed", "solidity", "aspect", "gap_up", "gap_dn", "hr", "wr"):
+        if c in out:
+            out[c] = np.nan                                     # 그린 표시가 아니므로 모양 값은 없다
+    return out
+
+
 def usual_flags(o: pd.DataFrame, min_pitches: int = 40, z: float = 2.0, min_history: int = 3) -> pd.DataFrame:
     """'평소보다 볼이 많았던 등판': 검산 통과한 등판 중 투구 수 min_pitches 이상만 판정.
     평소 = 같은 투수의 다른 검산 통과 등판들의 볼 합 ÷ 표시 합 (그 등판은 뺀다, 다른 등판 min_history개 이상).

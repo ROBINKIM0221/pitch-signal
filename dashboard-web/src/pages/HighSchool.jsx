@@ -99,7 +99,7 @@ function FlowStrip({ flow, innings }) {
           <span key={inn} className="flow-inn">
             <b>{inn}회</b>
             {r && (
-              <span className="inn-count" title={r[2] == null ? "이 이닝은 기록지에서 읽은 표시 수가 투구 수와 많이 달라 스트라이크·볼을 비웠습니다" : "스트라이크·볼은 기록지 표시를 읽은 추정값입니다 (스트라이크 = 볼이 아닌 모든 공)"}>
+              <span className="inn-count" title={r[2] == null ? "이 이닝은 기록지에서 센 공 수가 투구 수와 많이 달라 스트라이크·볼을 비웠습니다" : "스트라이크·볼은 기록지 표시를 읽은 추정값입니다 (스트라이크 = 볼이 아닌 모든 공, 띠에 안 그린 마지막 공은 타석 결과로 채움)"}>
                 {r[1]}구{r[2] != null && <small> (스트라이크 {r[2]}개 · 볼 {r[3]}개)</small>}{r[4] && <small> · 교체 이닝</small>}
               </span>
             )}
@@ -115,7 +115,7 @@ function BallTip({ d }) {
   return (
     <>
       <div><b>{fmt.date(d.date)}</b> · {d.opponent}</div>
-      <div>볼 비율(추정) <b>{fmt.num(d.ball, 0)}%</b> · 읽은 표시 {d.marks}개 / 공식 {d.pitches ?? "?"}구</div>
+      <div>볼 비율(추정) <b>{fmt.num(d.ball, 0)}%</b> · 센 공 {d.marks}개 / 공식 {d.pitches ?? "?"}구</div>
       {d.flag && <div style={{ color: "var(--warn)" }}>평소보다 볼이 많았던 등판</div>}
     </>
   );
@@ -151,7 +151,7 @@ function BallChart({ p }) {
 function BallCell({ g }) {
   if (g.ball_marks == null) return <span style={{ color: "var(--muted)" }}>—</span>;
   if (g.ball_pct == null) {
-    return <span className="light base" title={`기록지에서 읽은 표시 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span>;
+    return <span className="light base" title={`기록지에서 센 공 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span>;
   }
   return (
     <>
@@ -336,7 +336,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           {p.games.some((g) => g.ball_marks != null) && (
             <p className="caption" style={{ marginTop: 0 }}>
               <b>제구 (기록지 판독, 추정)</b>: 볼 비율 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · 볼 비율을 보여 주는 등판 {p.ball_outings}/{p.outings}{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
-              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 읽은 표시 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
+              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 기록원이 띠에 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 공식 타석 결과로 채웁니다. 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
             </p>
           )}
           <BallChart p={p} />

@@ -97,6 +97,41 @@ def test_outing_gate_and_ball_rate():
     assert not o.loc[2, "gate"] and np.isnan(o.loc[2, "ball_pct"])                                      # 6/10 = 40% 차이 → 보여 주지 않음
 
 
+def pa_marks(pa, cat, balls, ibb=False):
+    """타석 하나의 읽은 표시(위→아래 순서의 볼 1/0)."""
+    return pd.DataFrame({"sheet": "s", "game_idx": 1, "team": "가", "number": 17, "inning": 1, "col": 1, "pa": pa, "cat": cat, "ibb": ibb,
+                         "idx": range(len(balls)), "piece": 0, "k": 1, "ball": balls})
+
+
+def test_implied_pitches_fill_ball_four_and_final_strikes_not_drawn():
+    marks = pd.concat([pa_marks(0, "BB", [1, 0, 1, 1]),            # 4구인데 볼 3개 → 볼 1개 채움
+                       pa_marks(1, "BB", [1, 1, 0, 1, 1]),         # 볼 4개 → 그대로
+                       pa_marks(2, "K", [0, 1, 0, 1]),             # 삼진인데 마지막이 볼 → 스트라이크 1
+                       pa_marks(3, "K", [1, 0, 0]),                # 삼진인데 볼 아닌 표시 2개 → 스트라이크 1
+                       pa_marks(4, "OUT", [0, 1]),                 # 인플레이인데 마지막이 볼 → 타격 1
+                       pa_marks(5, "H", [1, 0]),                   # 마지막이 볼 아님 → 그대로
+                       pa_marks(6, "BB", [1], ibb=True)])          # 고의4구는 채우지 않는다
+    add = ss.implied_pitches(marks, inplay={"OUT", "H", "HR", "E", "FC", "SAC"})
+    got = add.groupby("pa")["ball"].agg(list).to_dict()
+    assert got == {0: [1], 2: [0], 3: [0], 4: [0]}
+    assert add["filled"].all() and (add["k"] == 0).all()
+    assert add.set_index("pa").loc[0, "idx"] == 4                  # 그 타석 마지막 공 뒤에 붙인다
+    assert (add[["game_idx", "team", "number", "inning", "col", "cat"]].notna().all().all())
+
+
+def test_implied_pitches_fill_a_walk_up_to_four_balls():
+    add = ss.implied_pitches(pa_marks(0, "BB", [0, 1]), inplay=set())
+    assert add["ball"].tolist() == [1, 1, 1] and add["idx"].tolist() == [2, 3, 4]
+
+
+def test_implied_pitches_can_be_appended_to_a_table_that_already_has_the_filled_column():
+    marks = pa_marks(0, "BB", [1, 1, 0]).assign(filled=False)      # 점수 단계는 읽은 표시에 filled=False를 먼저 붙인다
+    add = ss.implied_pitches(marks, inplay=set())
+    assert not add.columns.duplicated().any()
+    both = pd.concat([marks, add], ignore_index=True)
+    assert both["filled"].tolist() == [False, False, False, True, True]
+
+
 def test_usual_flag_needs_enough_pitches_and_history():
     o = pd.DataFrame({"team": ["가"] * 5, "number": [17] * 5, "game_idx": range(1, 6),
                       "pitches": [60, 60, 60, 60, 35], "marks": [60, 60, 60, 60, 35],
