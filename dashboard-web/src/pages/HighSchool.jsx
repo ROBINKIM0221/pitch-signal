@@ -83,17 +83,28 @@ function flowSummary(flow) {
   return { pa: flow.length, k, bb, h, wild, walkInnings: Object.entries(walks).filter(([, n]) => n >= 2).map(([i]) => Number(i)) };
 }
 
-/** 이닝별 타석 띠: 결과 글자를 범주 색의 작은 칩으로. 사건(폭투·도루 등)은 툴팁에. */
-function FlowStrip({ flow }) {
-  const innings = [...new Set(flow.map((f) => f[0]))];
+/** 이닝별 띠: 이닝 투구 수와 스트라이크·볼(기록지 투구수 줄 + 표시 판독, 추정), 그 뒤에 타석 결과 칩(범주 색, 사건은 툴팁).
+ *  innings 항목 = [이닝, 투구 수, 스트라이크, 볼, 교체 이닝?] — 스트라이크·볼을 못 믿는 이닝은 null. */
+function FlowStrip({ flow, innings }) {
+  const pas = flow || [];
+  const count = new Map((innings || []).map((r) => [r[0], r]));
+  const list = [...new Set([...pas.map((f) => f[0]), ...count.keys()])].sort((a, b) => a - b);
   return (
     <div className="flow">
-      {innings.map((inn) => (
-        <span key={inn} className="flow-inn">
-          <b>{inn}회</b>
-          {flow.filter((f) => f[0] === inn).map(([, res, cat, ev], i) => <i key={i} className={`pa ${CAT[cat]?.[1] || "out"}`} title={`${CAT[cat]?.[0] || cat}${ev?.length ? ` · ${ev.join(", ")}` : ""}`}>{res}</i>)}
-        </span>
-      ))}
+      {list.map((inn) => {
+        const r = count.get(inn);
+        return (
+          <span key={inn} className="flow-inn">
+            <b>{inn}회</b>
+            {r && (
+              <span className="inn-count" title={r[2] == null ? "이 이닝은 기록지에서 읽은 표시 수가 투구 수와 많이 달라 스트라이크·볼을 비웠습니다" : "스트라이크·볼은 기록지 표시를 읽은 추정값입니다 (스트라이크 = 볼이 아닌 모든 공)"}>
+                {r[1]}구{r[2] != null && <small> (스트라이크 {r[2]}개 · 볼 {r[3]}개)</small>}{r[4] && <small> · 교체 이닝</small>}
+              </span>
+            )}
+            {pas.filter((f) => f[0] === inn).map(([, res, cat, ev], i) => <i key={i} className={`pa ${CAT[cat]?.[1] || "out"}`} title={`${CAT[cat]?.[0] || cat}${ev?.length ? ` · ${ev.join(", ")}` : ""}`}>{res}</i>)}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -152,10 +163,11 @@ function GamesTable({ p, withCompetition }) {
   const [open, setOpen] = useState(null);
   const hasResults = p.games.some((g) => g.batters != null);
   const hasBall = p.games.some((g) => g.ball_marks != null);
+  const hasDetail = hasResults || p.games.some((g) => g.innings);
   return (
     <div className="tbl-wrap">
       <table className="tbl">
-        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}{hasBall && <th className="num" title="협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 추정값">볼 비율(추정)</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasResults && <th>흐름</th>}</tr></thead>
+        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}{hasBall && <th className="num" title="협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 추정값">볼 비율(추정)</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasDetail && <th>흐름</th>}</tr></thead>
         <tbody>
           {p.games.map((g) => {
             const sum = g.flow ? flowSummary(g.flow) : null;
@@ -174,13 +186,14 @@ function GamesTable({ p, withCompetition }) {
                 {hasBall && <td className="num"><BallCell g={g} /></td>}
                 <td>{restText(g)}</td>
                 <td className="num">{g.cum_pitches == null ? "—" : g.cum_pitches}</td>
-                {hasResults && <td>{g.flow ? <button className="pill" onClick={() => setOpen(open === g.game_no ? null : g.game_no)}>{open === g.game_no ? "닫기" : "타석별 보기"}</button> : <span style={{ color: "var(--muted)" }}>—</span>}</td>}
+                {hasDetail && <td>{g.flow || g.innings ? <button className="pill" onClick={() => setOpen(open === g.game_no ? null : g.game_no)}>{open === g.game_no ? "닫기" : g.innings ? "이닝별 보기" : "타석별 보기"}</button> : <span style={{ color: "var(--muted)" }}>—</span>}</td>}
               </tr>,
-              open === g.game_no && g.flow && (
+              open === g.game_no && (g.flow || g.innings) && (
                 <tr key={`${g.game_no}-flow`} className="flow-row">
                   <td colSpan={16} style={{ whiteSpace: "normal" }}>
-                    <FlowStrip flow={g.flow} />
-                    <div className="caption" style={{ marginTop: 6 }}>타석 {sum.pa} · 삼진 {sum.k} · 4구+사구 {sum.bb} · 안타 {sum.h}{sum.wild > 0 && ` · 폭투·보크·포일 ${sum.wild}`}{sum.walkInnings.length > 0 && ` · 4사구가 몰린 이닝 ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`} — 상대 타격표의 타석을 투수 타자 수대로 배정해 복원한 순서입니다(합이 맞는 경기만).</div>
+                    <FlowStrip flow={g.flow} innings={g.innings} />
+                    {sum && <div className="caption" style={{ marginTop: 6 }}>타석 {sum.pa} · 삼진 {sum.k} · 4구+사구 {sum.bb} · 안타 {sum.h}{sum.wild > 0 && ` · 폭투·보크·포일 ${sum.wild}`}{sum.walkInnings.length > 0 && ` · 4사구가 몰린 이닝 ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`} — 상대 타격표의 타석을 투수 타자 수대로 배정해 복원한 순서입니다(합이 맞는 경기만).</div>}
+                    {g.innings && <div className="caption" style={{ marginTop: 4 }}>이닝별 투구 수는 협회 기록지 맨 아래 '투구수' 줄을 읽은 값입니다(이닝 합이 공식 투구 수와 맞는 등판만). 스트라이크·볼은 그 이닝 기록지 표시의 볼 비율로 나눈 추정값이고(스트라이크 = 볼이 아닌 모든 공), 표시 수가 투구 수와 많이 다른 이닝은 비웠습니다. 교체 이닝은 공식 투구 수에서 나머지 이닝을 뺀 몫입니다.</div>}
                   </td>
                 </tr>
               ),

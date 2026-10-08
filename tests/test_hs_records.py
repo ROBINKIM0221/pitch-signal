@@ -236,3 +236,28 @@ def test_payload_carries_ball_rates_per_game_and_pooled_per_pitcher():
     hong = next(p for s in pay["schools"] for p in s["pitchers"] if s["name"] == "가나고")
     assert hong["ball_season"] is None and hong["ball_outings"] == 0 and hong["games"][0]["ball_marks"] == 70
     assert pay["totals"]["ball_outings"] == 2 and pay["totals"]["ball_flags"] == 1
+
+
+def inning_rows():
+    """기록지 투구수 줄 판독(경기·던진 팀·등번호·이닝): 1경기 다라고 #54는 이닝 합 88 = 공식, 2경기 다라고 #13은 합 60 ≠ 공식 65(42+23)."""
+    return pd.DataFrame({"game_idx": [1, 1, 1, 2, 2], "team": ["다라고"] * 5, "number": [54, 54, 54, 13, 13], "inning": [1, 2, 3, 6, 7],
+                         "pitches": [30, 40, 18, 30, 30], "shared": [False, False, True, False, False], "marks": [29, 38, 15, 30, 30],
+                         "balls": [11, 15, None, 12, 10], "strikes": [19, 25, None, 18, 20]})
+
+
+def test_attach_innings_adds_per_inning_list_only_when_it_adds_up_to_the_official_count():
+    t, names, rows = prepared()
+    out = hr.attach_innings(rows, inning_rows(), names).set_index(["game_idx", "pitcher"])
+    assert out.loc[(1, "S02-P02"), "innings"] == [[1, 30, 19, 11, False], [2, 40, 25, 15, False], [3, 18, None, None, True]]
+    assert out.loc[(2, "S02-P01"), "innings"] is None             # 이닝 합 60 ≠ 공식 65 → 붙이지 않는다
+    assert out.loc[(1, "S01-P01"), "innings"] is None             # 판독 없음
+    assert len(out) == len(rows)
+
+
+def test_payload_carries_innings_per_game():
+    t, names, rows = prepared()
+    outings = hr.annotate_outings(hr.attach_innings(rows, inning_rows(), names), RULES["kbsa"])
+    daily = hs.daily_table(rows, RULES); violated = hs.violations(rows, daily, RULES)
+    pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "-"}, "시험", LIGHTS)
+    ace = next(p for s in pay["schools"] for p in s["pitchers"] if s["name"] == "다라고" and p["label"] == "#54")
+    assert ace["games"][0]["innings"][0] == [1, 30, 19, 11, False] and ace["games"][1]["innings"] is None

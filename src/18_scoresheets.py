@@ -8,6 +8,9 @@
     python -m src.18_scoresheets train-count  # 맞닿은 표시 개수 모형 (합성 견본, 시험용 경기 제외) → data/processed/scoresheet_count_model.pkl
     python -m src.18_scoresheets train      # 볼 판정 분류기 (시범 학습 자료, 저장소 밖) → data/processed/scoresheet_ball_model.pkl
     python -m src.18_scoresheets score      # 볼 판정 → 등판별 검산·볼 비율·'평소보다 볼이 많았던 등판' → data/processed/hs_scoresheet_outings.parquet
+    python -m src.18_scoresheets rows       # 기록지마다 맨 아래 '투구수' 줄의 숫자 덩어리 → data/processed/scoresheet_rows/<사진>.pkl (이미 한 것은 건너뜀)
+    python -m src.18_scoresheets train-digits  # 투구수 줄 숫자 분류기 (학습 자료 저장소 밖) → data/processed/scoresheet_digit_model.pkl
+    python -m src.18_scoresheets innings    # 투구수 줄 풀기 → 등판별 이닝 투구 수·볼·스트라이크(추정) → data/processed/hs_scoresheet_innings.parquet
 """
 from __future__ import annotations
 
@@ -27,11 +30,13 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 
 from src.common import kbsa_boxscore as kb
 from src.common import scoresheet as ss
+from src.common import scoresheet_row as sr
 from src.common.config import ROOT
 
 RAW = ROOT / "data" / "raw" / "kbsa"
 PROCESSED = ROOT / "data" / "processed"
 SHEET_OUT = PROCESSED / "scoresheets"
+ROWS_OUT = PROCESSED / "scoresheet_rows"
 TABLES = ROOT / "reports" / "tables"
 log = logging.getLogger("pitchsignal.scoresheets")
 
@@ -358,6 +363,132 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     return o
 
 
+def _row_one(path: str) -> str | None:
+    """기록지 한 장의 투구수 줄 숫자 덩어리 → scoresheet_rows/<사진>.pkl. 실패하면 오류 글."""
+    try:
+        im, g = ss.detect_grid(ss.load(Path(path)))
+        row = sr.extract(im, g, ss.ink_mask(im))
+        with open(ROWS_OUT / f"{Path(path).stem}.pkl", "wb") as fh:
+            pickle.dump(row, fh)
+        return None
+    except Exception as e:                                       # 한 장이 실패해도 나머지는 계속
+        return f"{Path(path).stem}: {type(e).__name__}: {str(e)[:120]}"
+
+
+def read_rows(cfg: dict, workers: int = 4) -> None:
+    ROWS_OUT.mkdir(parents=True, exist_ok=True)
+    photos = sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg"))
+    todo = [str(p) for p in photos if not (ROWS_OUT / f"{p.stem}.pkl").exists()]
+    log.info("투구수 줄: 사진 %d장 · 이번에 읽을 것 %d장", len(photos), len(todo))
+    errors = []
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        for i, err in enumerate(ex.map(_row_one, todo, chunksize=4), 1):
+            if err:
+                errors.append(err)
+            if i % 100 == 0 or i == len(todo):
+                log.info("%d/%d", i, len(todo))
+    for e in errors:
+        log.warning("투구수 줄 읽기 실패 %s", e)
+
+
+def train_digits(cfg: dict) -> HistGradientBoostingClassifier:
+    """투구수 줄 숫자 분류기 (숫자 0~9). 학습 자료: 투수 칸 숫자(무게 1) + 확인된 줄 숫자(무게 2), 시험용 경기 없음."""
+    d = np.load(cfg["scoresheets"]["digit_train_set"])
+    clf = HistGradientBoostingClassifier(max_iter=400, learning_rate=0.08, max_leaf_nodes=31, random_state=0)
+    clf.fit(d["X"], d["y"], sample_weight=d["w"])
+    log.info("숫자 분류기: 숫자 %d개 (투수 칸 %d · 줄 %d)", len(d["y"]), int((d["src"] == "box").sum()), int((d["src"] == "row").sum()))
+    return clf
+
+
+def _sheet_context(game_idx: int, bat_team: str, cache: dict) -> dict | None:
+    """기록지 한 장(한 팀 타격)의 공식 맥락: 이닝별 열·이닝별 던진 투수·열별 투수·상대 투수진 공식 투구 수,
+    열마다 최소 투구 수(그 열에만 있는 이닝의 타석 수 — 타석마다 공이 1개 이상, 자동 고의4구는 빼고)."""
+    if game_idx not in cache:
+        cache.clear(); cache[game_idx] = game_pas(game_idx)
+    game, teams = cache[game_idx]
+    pas = teams.get(bat_team)
+    if not pas:
+        return None
+    pitching = next((t for t in game["teams"] if t != bat_team), None)
+    off = {}
+    for p in game["pitchers"]:
+        if p["team"] == pitching:
+            if p["pitches"] is None:
+                return None
+            off[p["number"]] = off.get(p["number"], 0) + int(p["pitches"])
+    inning_cols, by_inning, by_col, n_pa = {}, {}, {}, {}
+    for p, c in zip(pas, ss.cells_for(pas)):
+        if not c or c[0] > 12:
+            continue
+        inning_cols.setdefault(p["inning"], set()).add(c[0])
+        if "고의" not in p["result"]:
+            n_pa[c[0]] = n_pa.get(c[0], 0) + 1
+        if p.get("pitcher") is not None:
+            by_inning.setdefault(p["inning"], set()).add(p["pitcher"])
+            by_col.setdefault(c[0], set()).add(p["pitcher"])
+    if not inning_cols or not off:
+        return None
+    lower = {c: n_pa.get(c, 0) for cs in inning_cols.values() if len(cs) == 1 for c in cs}
+    return dict(team=pitching, official=off, inning_cols=inning_cols, by_inning=by_inning, by_col=by_col, lower=lower,
+                last=max(c for cs in inning_cols.values() for c in cs))
+
+
+def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """기록지마다 투구수 줄을 풀어 (열별 이닝 투구 수) → 등판별 이닝 투구 수·볼·스트라이크(추정).
+    풀 때는 그 열 기록지 표시 수(사전)와 공식 기록으로 아는 누적(투수 교체가 이닝 경계인 곳)을 쓴다.
+    정직한 평가는 따로: 시험용 경기에서 고정점 없이 풀어 교체 경계 누적이 공식과 맞는지."""
+    sc = cfg["scoresheets"]
+    lam, tol = float(sc["row_prior_lambda"]), tuple(sc["inning_check"])
+    split = game_split(cfg)
+    meta = pd.read_csv(PROCESSED / "scoresheet_read_meta.csv", encoding="utf-8-sig")
+    meta = meta[meta["error"].isna()] if "error" in meta else meta
+    marks = pd.read_parquet(PROCESSED / "hs_scoresheet_marks.parquet", columns=["sheet", "number", "inning", "col", "ball"])
+    marks_by = dict(tuple(marks.groupby("sheet")))
+    proba = lambda F: sr.full_proba(digit_model, F)
+    cache: dict = {}
+    col_rows, inn_rows, evals = [], [], []
+    for m in meta.sort_values("game_idx").itertuples():
+        path = ROWS_OUT / f"{m.sheet}.pkl"
+        if not path.exists():
+            continue
+        with open(path, "rb") as fh:
+            row = pickle.load(fh)
+        ctx = _sheet_context(int(m.game_idx), m.bat_team, cache)
+        if ctx is None:
+            continue
+        mk = marks_by.get(m.sheet, pd.DataFrame(columns=["number", "inning", "col", "ball"]))
+        counts = mk.groupby("col").size().to_dict()
+        total = sum(ctx["official"].values())
+        bd = sr.boundaries(ctx["by_col"], ctx["official"], ctx["last"])
+        res = sr.decode(row, total, ctx["last"], proba, counts, lam, anchors=dict(bd), lower=ctx["lower"])
+        part = split.get(int(m.game_idx))
+        if part == "test":                                       # 정직한 평가: 고정점 없이
+            free = sr.decode(row, total, ctx["last"], proba, counts, lam, lower=ctx["lower"])
+            cums = np.cumsum(free["inns"]) if free else None
+            evals += [dict(split=part, err=None if cums is None else int(cums[c - 1]) - t, fixed=None if free is None else free["fixed"]) for c, t in bd]
+        if res is None:
+            continue
+        cums = np.cumsum(res["inns"])
+        col_rows += [dict(game_idx=int(m.game_idx), sheet=m.sheet, team=ctx["team"], col=k + 1, pitches=int(v), cum=int(cv),
+                          raw_inn=r[0], raw_cum=r[1], fixed=res["fixed"]) for k, (v, cv, r) in enumerate(zip(res["inns"], cums, res["raws"]))]
+        T = {i: int(sum(res["inns"][c - 1] for c in cs)) for i, cs in ctx["inning_cols"].items()}
+        mk = mk.dropna(subset=["number"]).assign(number=lambda x: x["number"].astype(int))
+        for number, official in ctx["official"].items():
+            for r in sr.outing_innings(number, official, T, ctx["by_inning"], mk, tol):
+                inn_rows.append(dict(game_idx=int(m.game_idx), team=ctx["team"], number=int(number), **r))
+    cols, inns = pd.DataFrame(col_rows), pd.DataFrame(inn_rows)
+    e = pd.DataFrame(evals)
+    outs = inns.groupby(["game_idx", "team", "number"]).size() if len(inns) else pd.Series(dtype=int)
+    s = pd.DataFrame([{
+        "기록지(풀림)": int(cols["sheet"].nunique()) if len(cols) else 0,
+        "이닝별 투구 수가 붙은 등판": int(len(outs)),
+        "볼·스트라이크까지 보이는 이닝 비율": round(float(inns["balls"].notna().mean()), 3) if len(inns) else np.nan,
+        "시험용 교체 경계(고정점 없이)": int(len(e)),
+        "누적 = 공식": round(float((e["err"] == 0).mean()), 3) if len(e) else np.nan,
+        "±2 이내": round(float((e["err"].abs() <= 2).mean()), 3) if len(e) else np.nan}])
+    return cols, inns, s
+
+
 def summary(o: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     """검증 요약 (집계만): 검산 통과율, 볼 비율과 공식 4사구율의 순위상관 — 시범 경기와 그 밖 경기를 나눠서."""
     sc = cfg["scoresheets"]
@@ -379,7 +510,7 @@ def summary(o: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["select", "list", "read", "train-count", "train", "score"])
+    ap.add_argument("step", choices=["select", "list", "read", "train-count", "train", "score", "rows", "train-digits", "innings"])
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args()
     cfg = load_cfg()
@@ -407,6 +538,19 @@ def main() -> None:
         s = summary(o, cfg)
         s.to_csv(TABLES / "hs_scoresheet_summary.csv", index=False, encoding="utf-8-sig")
         log.info("등판 %d개\n%s", len(o), s.to_string(index=False))
+    if a.step == "rows":
+        read_rows(cfg, a.workers)
+    if a.step == "train-digits":
+        with open(PROCESSED / "scoresheet_digit_model.pkl", "wb") as fh:
+            pickle.dump(train_digits(cfg), fh)
+    if a.step == "innings":
+        with open(PROCESSED / "scoresheet_digit_model.pkl", "rb") as fh:
+            dm = pickle.load(fh)
+        cols, inns, s = innings(cfg, dm)
+        cols.to_parquet(PROCESSED / "hs_scoresheet_rows.parquet", index=False)
+        inns.to_parquet(PROCESSED / "hs_scoresheet_innings.parquet", index=False)
+        s.to_csv(TABLES / "hs_scoresheet_rows_summary.csv", index=False, encoding="utf-8-sig")
+        log.info("투구수 줄\n%s", s.T.to_string(header=False))
 
 
 if __name__ == "__main__":

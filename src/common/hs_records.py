@@ -178,6 +178,28 @@ def attach_scoresheet(rows: pd.DataFrame, sheet: pd.DataFrame, names: pd.DataFra
     return out.drop(columns=["_team", "_number"])
 
 
+def attach_innings(rows: pd.DataFrame, inns: pd.DataFrame, names: pd.DataFrame) -> pd.DataFrame:
+    """기록지 투구수 줄 판독(18_scoresheets innings: 경기·던진 팀·등번호·이닝별 투구 수와 볼·스트라이크 추정)을 등판표에 붙인다.
+    innings = [[이닝, 투구 수, 스트라이크, 볼, 교체 이닝?], ...] — 볼·스트라이크를 못 믿는 이닝은 None.
+    이닝 합이 그 등판 공식 투구 수와 다르거나, 같은 경기·팀·등번호 등판이 둘이면(어느 쪽인지 모름) 붙이지 않는다."""
+    key = names[["pitcher", "team", "number"]].drop_duplicates("pitcher").rename(columns={"team": "_team", "number": "_number"})
+    r = rows.merge(key, on="pitcher", how="left")
+    lists = {}
+    for (g, team, num), d in inns.sort_values("inning").groupby(["game_idx", "team", "number"]):
+        lists[(int(g), team, int(num))] = [[int(i), int(p), None if pd.isna(s) else int(s), None if pd.isna(b) else int(b), bool(sh)]
+                                           for i, p, s, b, sh in zip(d["inning"], d["pitches"], d["strikes"], d["balls"], d["shared"])]
+    dup = (r.duplicated(["game_idx", "_team", "_number"], keep=False) & r["_team"].notna()).to_numpy()
+    vals = []
+    for g, team, num, pitches, d in zip(r["game_idx"], r["_team"], r["_number"], r["pitches"], dup):
+        lst = None if d or pd.isna(team) or pd.isna(num) else lists.get((int(g), team, int(num)))
+        if lst is not None and (pd.isna(pitches) or sum(i[1] for i in lst) != int(pitches)):
+            lst = None
+        vals.append(lst)
+    out = r.drop(columns=["_team", "_number"])
+    out["innings"] = pd.Series(vals, index=out.index, dtype=object)
+    return out
+
+
 def _ball_fields(g: pd.DataFrame) -> dict:
     """투수 시즌 볼 비율(추정): 검산 통과 등판의 볼 합 ÷ 읽은 표시 합. 등판 비율의 평균이 아니라 합친 비율."""
     ok = g[g["ball_pct"].notna()]
@@ -257,6 +279,9 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                 for rec, raw in zip(games_out, g["flow"]):
                     flow = json.loads(raw) if isinstance(raw, str) else None
                     rec["flow"] = [[pa["inn"], pa["res"], pa["cat"], *([pa["ev"]] if pa["ev"] else [])] for pa in flow] if flow else None   # 요약은 화면이 계산
+            if "innings" in g.columns:                                                       # 기록지 투구수 줄: [이닝, 투구 수, 스트라이크, 볼, 교체 이닝?]
+                for rec, val in zip(games_out, g["innings"]):
+                    rec["innings"] = val if isinstance(val, list) else None
             batters = g["batters"].sum(min_count=1) if "batters" in g else np.nan
             season_results = {c: _clean(g[c].sum(min_count=1)) for c in ("k", "bb_hbp", "hits", "hr") if c in g}
             pitchers.append({"code": code, "label": label_of[code], "rule_status": status, "load_status": load_status, "load_reasons": reasons,

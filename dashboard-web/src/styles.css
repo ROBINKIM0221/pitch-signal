@@ -281,6 +281,8 @@ table.tbl.board th.cal small { display: block; font-weight: 500; font-size: 10.5
 .flow { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .flow-inn { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 .flow-inn b { font-size: 11.5px; color: var(--muted); margin-right: 3px; font-weight: 600; }
+.flow-inn .inn-count { font-size: 12px; font-weight: 600; color: var(--ink); margin-right: 4px; white-space: nowrap; }
+.flow-inn .inn-count small { font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
 .flow i.pa { font-style: normal; font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: var(--panel); color: var(--ink-2); border: 1px solid var(--line); white-space: nowrap; }
 .flow i.pa.k { background: var(--velo-bg); color: #1f5aa6; border-color: transparent; }
 .flow i.pa.bb { background: var(--warn-bg); color: #8a4d12; border-color: transparent; }

@@ -193,6 +193,9 @@ def highschool_files(cfg: dict) -> dict:
         sheet = PROCESSED / "hs_scoresheet_outings.parquet"
         if d.get("mode") == "season" and sheet.exists():                                   # 기록지 판독 볼 비율(추정)과 '평소보다 볼이 많았던 등판' (src/18_scoresheets.py)
             outings = hr.attach_scoresheet(outings, pd.read_parquet(sheet), names)
+        inns = PROCESSED / "hs_scoresheet_innings.parquet"
+        if d.get("mode") == "season" and inns.exists():                                    # 기록지 투구수 줄: 이닝별 투구 수·스트라이크·볼(추정)
+            outings = hr.attach_innings(outings, pd.read_parquet(inns), names)
         daily = pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet")
         violated = pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
         whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, kcfg["source"], kcfg["load_lights"])
