@@ -46,15 +46,17 @@ function useSelection(data, params, setParams, region) {
   return { schools, s, pitchers, p, setSchool, setCode, keep };
 }
 
+/** 직전 등판 뒤: 첫 줄 = 쉰 날 + 표시(연투·미달·휴식 뒤 첫날), 둘째 줄 = 의무 휴식일 (표가 한 화면에 들어가게 두 줄로). */
 function restText(g) {
   if (g.gap_days == null) return <span style={{ color: "var(--muted)" }}>첫 등판</span>;
   const gap = `${g.gap_days}일 휴식`;
-  if (g.required_rest == null) return <>{gap} <span style={{ color: "var(--muted)" }}>· 직전 투구 수 미공개</span></>;
+  const sub = (text) => <small className="sub">{text}</small>;
+  if (g.required_rest == null) return <>{gap}{sub("직전 투구 수 미공개")}</>;
   const need = g.required_rest === 0 ? "의무 휴식 없음" : `의무 ${g.required_rest}일`;
-  if (g.rest_ok === false) return <>{gap} <span className="light alarm">{need} 미달</span></>;
-  if (g.gap_days === 0) return <>{gap} <span className="light warn">연투</span> <span style={{ color: "var(--muted)" }}>· {need}</span></>;
-  if (g.min_rest_exact) return <>{gap} <span className="light warn">{need} 뒤 첫날</span></>;
-  return <>{gap} <span style={{ color: "var(--muted)" }}>· {need}</span></>;
+  if (g.rest_ok === false) return <>{gap} <span className="light alarm" title={`${need} 미달`}>미달</span>{sub(need)}</>;
+  if (g.gap_days === 0) return <>{gap} <span className="light warn">연투</span>{sub(need)}</>;
+  if (g.min_rest_exact) return <>{gap} <span className="light warn" title={`${need}이 끝난 첫날 등판`}>휴식 뒤 첫날</span>{sub(need)}</>;
+  return <>{gap}{sub(need)}</>;
 }
 
 function innings(outs) { return `${Math.floor(outs / 3)}${outs % 3 ? `.${outs % 3}` : ""}`; }
@@ -154,7 +156,7 @@ function BallCell({ g }) {
   return (
     <>
       {fmt.num(100 * g.ball_pct, 0)}%
-      {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(읽은 투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">평소보다 볼 많음</span>}
+      {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="평소보다 볼이 많았던 등판: 그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(읽은 투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">볼 많음</span>}
     </>
   );
 }
@@ -166,25 +168,25 @@ function GamesTable({ p, withCompetition }) {
   const hasDetail = hasResults || p.games.some((g) => g.innings);
   return (
     <div className="tbl-wrap">
-      <table className="tbl">
+      <table className="tbl games">
         <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}{hasBall && <th className="num" title="협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 추정값">볼 비율(추정)</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasDetail && <th>흐름</th>}</tr></thead>
         <tbody>
           {p.games.map((g) => {
             const sum = g.flow ? flowSummary(g.flow) : null;
             return [
               <tr key={g.game_no} className={open === g.game_no ? "hl" : ""}>
-                <td>{g.date.slice(5).replace("-", "/")}</td><td>{withCompetition ? g.competition : g.round}</td><td>{g.opponent}</td>
+                <td>{g.date.slice(5).replace("-", "/")}</td><td className="wrap">{withCompetition ? g.competition : g.round}</td><td>{g.opponent}</td>
                 <td>{g.role}{g.result !== "-" && <span style={{ color: "var(--muted)" }}> · {g.result}</span>}</td>
                 <td className="num">{innings(g.outs)}</td>
                 <td className="num">{g.pitches == null ? <span className="light base">미공개</span> : g.pitches}</td>
                 {hasResults && <>
                   <td className="num">{g.batters ?? "—"}</td><td className="num">{g.k ?? "—"}</td>
-                  <td className="num">{g.bb_hbp ?? "—"}{sum?.walkInnings.length > 0 && <span className="light warn" style={{ marginLeft: 6 }} title={`4구·사구 2개 이상 몰린 이닝: ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`}>{sum.walkInnings.map((i) => `${i}회`).join("·")} 몰림</span>}</td>
+                  <td className="num wrap">{g.bb_hbp ?? "—"}{sum?.walkInnings.length > 0 && <span className="light warn" style={{ marginLeft: 6 }} title={`4구·사구 2개 이상 몰린 이닝: ${sum.walkInnings.map((i) => `${i}회`).join(", ")}`}>{sum.walkInnings.map((i) => `${i}회`).join("·")} 몰림</span>}</td>
                   <td className="num">{g.hits ?? "—"}{g.hr > 0 && <span style={{ color: "var(--muted)" }}> (홈런 {g.hr})</span>}</td>
                   <td className="num">{g.pitches != null && g.batters ? fmt.num(g.pitches / g.batters, 1) : "—"}</td>
                 </>}
-                {hasBall && <td className="num"><BallCell g={g} /></td>}
-                <td>{restText(g)}</td>
+                {hasBall && <td className="num wrap"><BallCell g={g} /></td>}
+                <td className="wrap">{restText(g)}</td>
                 <td className="num">{g.cum_pitches == null ? "—" : g.cum_pitches}</td>
                 {hasDetail && <td>{g.flow || g.innings ? <button className="pill" onClick={() => setOpen(open === g.game_no ? null : g.game_no)}>{open === g.game_no ? "닫기" : g.innings ? "이닝별 보기" : "타석별 보기"}</button> : <span style={{ color: "var(--muted)" }}>—</span>}</td>}
               </tr>,
