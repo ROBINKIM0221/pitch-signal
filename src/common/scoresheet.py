@@ -90,8 +90,9 @@ def comb_x(v: np.ndarray) -> tuple[float, float, float, float]:
     return a, b, score, score - float(sc[far].max())
 
 
-def row_window(v: np.ndarray, h: np.ndarray, X: np.ndarray, a: float) -> tuple[int, int, float]:
-    """띠 경계선이 있는 9줄 창: 안쪽의 띠 경계선 양은 많고 바로 위(머리 줄)·아래(10번째 줄)는 적은 곳. 위·아래는 가로선에 붙인다."""
+def row_window(v: np.ndarray, h: np.ndarray, X: np.ndarray, a: float, spacing: tuple[float, float] = (0.96, 1.04)) -> tuple[int, int, float]:
+    """띠 경계선이 있는 9줄 창: 안쪽의 띠 경계선 양은 많고 바로 위(머리 줄)·아래(10번째 줄)는 적은 곳. 위·아래는 가로선에 붙인다.
+    spacing = 줄 간격 찾는 범위(가로 배율 a 대비). 세로로 늘어난 사진은 detect_grid 가 넓은 범위로 다시 찾는다."""
     H, W = v.shape
     r = np.zeros(H)
     for c in [int(round(x)) for x in X[1:24:2]]:
@@ -100,7 +101,7 @@ def row_window(v: np.ndarray, h: np.ndarray, X: np.ndarray, a: float) -> tuple[i
     x0, x1 = int(X[0]) + 3, int(X[-1]) - 3
     hp = uniform_filter1d(h[:, x0:x1].sum(1).astype(float) / 255, 3)
     best = None
-    for sp in np.arange(0.96, 1.041, 0.01) * ROW_H * a:
+    for sp in np.arange(spacing[0], spacing[1] + 0.001, 0.01) * ROW_H * a:
         n = int(9 * sp); s1 = int(sp)
         tops = np.arange(s1, H - n - s1)
         if len(tops) == 0:
@@ -139,17 +140,27 @@ def detect_grid(im: np.ndarray) -> tuple[np.ndarray, dict]:
     im = rotate(im, ang, (255, 255, 255)); h = rotate(h, ang, 0); v = rotate(v, ang, 0)
     a, b, score, margin = comb_x(v)
     X0 = a * TX + b
+    def rows(top, bot):
+        Y0 = top + np.arange(10) * (bot - top) / 9
+        Yc = np.zeros((12, 10)); hy = []
+        for k in range(12):
+            xa, xb = int(X0[2 * k]) + 3, int(X0[2 * k + 2]) - 3
+            Yc[k], ht = snap(h[:, xa:xb].sum(1).astype(float) / 255, Y0, 6, 0.5 * (xb - xa)); hy.append(ht.mean())
+        return Y0, Yc, float(np.mean(hy))
+
     top, bot, wscore = row_window(v, h, X0, a)
-    Y0 = top + np.arange(10) * (bot - top) / 9
-    Xr = np.zeros((9, 25)); Yc = np.zeros((12, 10)); hx, hy = [], []
+    Y0, Yc, hy = rows(top, bot)
+    if hy < 0.6:                       # 가로선이 거의 안 맞음 = 사진이 세로로 늘거나 줄어 줄 간격이 다르다 → 넓은 간격 범위로 다시 (2026-10-09)
+        t2, b2, _ = row_window(v, h, X0, a, spacing=(0.85, 1.20))
+        y2, c2, hy2 = rows(t2, b2)
+        if hy2 >= hy + 0.1:
+            top, bot, Y0, Yc, hy = t2, b2, y2, c2, hy2
+    Xr = np.zeros((9, 25)); hx = []
     for k in range(9):
         ya, yb = int(Y0[k]) + 4, int(Y0[k + 1]) - 4
         Xr[k], ht = snap(v[ya:yb].sum(0).astype(float) / 255, X0, 4, 0.5 * (yb - ya)); hx.append(ht.mean())
-    for k in range(12):
-        xa, xb = int(X0[2 * k]) + 3, int(X0[2 * k + 2]) - 3
-        Yc[k], ht = snap(h[:, xa:xb].sum(1).astype(float) / 255, Y0, 6, 0.5 * (xb - xa)); hy.append(ht.mean())
     return im, dict(angle=ang, a=a, b=b, score=score, margin=margin, top=top, bot=bot,
-                    n_rows=int(round((bot - top) / (ROW_H * a))), Xr=Xr, Yc=Yc, hx=float(np.mean(hx)), hy=float(np.mean(hy)))
+                    n_rows=int(round((bot - top) / (ROW_H * a))), Xr=Xr, Yc=Yc, hx=float(np.mean(hx)), hy=hy)
 
 
 def strip_box(g: dict, k: int, r: int) -> tuple[int, int, int, int]:

@@ -60,6 +60,12 @@ def test_row_window_finds_the_nine_strip_rows():
     assert abs(top - 230) <= 2 and abs(bottom - bot) <= 2
 
 
+def test_row_window_finds_rows_of_a_vertically_stretched_photo_when_allowed_a_wider_spacing():
+    h, v, bot = synthetic_grid(a=1.0, b=0.0, top=217, row_h=65.9)    # 사진이 세로로 9% 늘어난 기록지 (35197_96978)
+    top, bottom, _ = ss.row_window(v, h, 1.0 * ss.TX, 1.0, spacing=(0.85, 1.20))
+    assert abs(top - 217) <= 3 and abs(bottom - bot) <= 3          # 합성 선은 1px이라 가로선 붙이기가 안 걸려 ±3
+
+
 def blob(img, y, x, r=3):
     yy, xx = np.ogrid[:img.shape[0], :img.shape[1]]
     img[(yy - y) ** 2 + (xx - x) ** 2 <= r * r] = 255
