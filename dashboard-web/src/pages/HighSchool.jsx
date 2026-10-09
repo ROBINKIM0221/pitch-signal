@@ -147,9 +147,10 @@ function BallChart({ p }) {
   );
 }
 
-/** 다시 읽은 등판 표시 (2026-10-08 밤, 시험 중 — 문구는 사용자 결정 대기). */
+/** 다시 읽은 등판 표시 — 2026-10-09 사용자 "꼭 표시할 필요는 없다"로 숨김(데이터의 ball_reread는 남김). 되살리려면 SHOW_REREAD = true. */
+const SHOW_REREAD = false;
 function RereadMark({ g }) {
-  if (!(g.ball_reread > 0)) return null;
+  if (!SHOW_REREAD || !(g.ball_reread > 0)) return null;
   return <span className="light base" style={{ marginLeft: 6 }} title={`자동 판독이 어려운 기록지라 다시 읽은 등판입니다 — 그린 표시의 ${fmt.num(100 * g.ball_reread, 0)}%를 AI가 다시 읽었습니다(일부는 사람이 확인).`}>다시 읽음</span>;
 }
 
