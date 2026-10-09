@@ -197,6 +197,22 @@ def test_load_readings_prefers_the_person_checked_file_and_takes_pa_columns_from
     assert r["number"].tolist() == [17, 17, 18] and r["cat"].tolist() == ["BB", "BB", "K"] and set(r["batch"]) == {"b01"}
 
 
+def test_load_readings_lets_a_later_batch_replace_a_whole_pa_and_drops_readings_that_no_longer_fit_the_sheet(tmp_path):
+    m18 = importlib.import_module("src.18_scoresheets")
+    old = [{"id": "s1_0", "sheet": "s1", "pa": 0, "blobs": [{"idx": 0}, {"idx": 1}, {"idx": 2}]},
+           {"id": "s1_1", "sheet": "s1", "pa": 1, "blobs": [{"idx": 0}, {"idx": 1}]}]
+    new = [{"id": "s1_0", "sheet": "s1", "pa": 0, "blobs": [{"idx": 0}, {"idx": 1}]}]      # 격자를 다시 찾아 덩어리가 2개로 바뀐 타석
+    for name, items, first in (("b01", old, {"s1_0": ["B", "S", "B"], "s1_1": ["S", "S"]}), ("z01", new, {"s1_0": ["S", "B"]})):
+        d = tmp_path / "rev" / name; d.mkdir(parents=True)
+        (d / "items.json").write_text(json.dumps(items), encoding="utf-8")
+        (d / "first_pass.json").write_text(json.dumps(first), encoding="utf-8")
+    sheets = tmp_path / "sheets"; sheets.mkdir()
+    pd.DataFrame({"pa": [0, 0, 1, 1, 1], "idx": [0, 1, 0, 1, 2], "game_idx": 1, "team": "가", "number": 17, "inning": 1, "col": 1,
+                  "cat": "BB", "ibb": False}).to_parquet(sheets / "s1.parquet")     # 지금 기록지: 타석 0은 2개, 타석 1은 3개
+    r = m18.load_readings(tmp_path / "rev", sheets)
+    assert r[["pa", "idx", "label", "batch"]].values.tolist() == [[0, 0, "S", "z01"], [0, 1, "B", "z01"]]   # 타석 1은 2개로 읽혀 지금 3개와 안 맞아 버림
+
+
 def test_usual_flag_needs_enough_pitches_and_history():
     o = pd.DataFrame({"team": ["가"] * 5, "number": [17] * 5, "game_idx": range(1, 6),
                       "pitches": [60, 60, 60, 60, 35], "marks": [60, 60, 60, 60, 35],

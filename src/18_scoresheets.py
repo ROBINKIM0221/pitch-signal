@@ -355,12 +355,23 @@ def load_readings(review_dir: Path, sheet_dir: Path = SHEET_OUT) -> pd.DataFrame
     cols = ["sheet", "pa", "idx", "label", "source", "batch", *ss.READ_PA_COLUMNS]
     if not parts:
         return pd.DataFrame(columns=cols)
-    rd = pd.concat(parts, ignore_index=True).drop_duplicates(["sheet", "pa", "idx"], keep="last")
-    info = [pd.read_parquet(Path(sheet_dir) / f"{s}.parquet", columns=["pa", *ss.READ_PA_COLUMNS]).drop_duplicates("pa").assign(sheet=s)
-            for s in rd["sheet"].unique() if (Path(sheet_dir) / f"{s}.parquet").exists()]
+    rd = pd.concat(parts, ignore_index=True)
+    last = rd.groupby(["sheet", "pa"])["batch"].transform("max")              # 같은 타석은 나중(이름순) 묶음이 통째로 덮는다
+    rd = rd[rd["batch"] == last]
+    info = []
+    for s in rd["sheet"].unique():
+        f = Path(sheet_dir) / f"{s}.parquet"
+        if f.exists():
+            t = pd.read_parquet(f, columns=["pa", *ss.READ_PA_COLUMNS])
+            first = t.drop_duplicates("pa")
+            info.append(first.assign(sheet=s, n_blobs=first["pa"].map(t.groupby("pa").size()).to_numpy()))
     if not info:
         return pd.DataFrame(columns=cols)
-    return rd.merge(pd.concat(info, ignore_index=True), on=["sheet", "pa"], how="inner")[cols].reset_index(drop=True)
+    rd = rd.merge(pd.concat(info, ignore_index=True), on=["sheet", "pa"], how="inner")
+    fit = rd.groupby(["sheet", "pa"])["idx"].transform("size") == rd["n_blobs"]   # 기록지를 다시 읽어 덩어리 수가 바뀐 타석의 옛 판독은 버린다
+    if (~fit).any():
+        log.info("기록지와 덩어리 수가 안 맞아 버린 판독 타석 %d", rd.loc[~fit, ["sheet", "pa"]].drop_duplicates().shape[0])
+    return rd[fit][cols].reset_index(drop=True)
 
 
 def score(cfg: dict, clf) -> pd.DataFrame:
