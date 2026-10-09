@@ -47,7 +47,7 @@ function CareerChart({ pitcher }) {
       <ComposedChart data={rows} margin={{ top: 18, right: 12, left: 0, bottom: 4 }}>
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="i" type="number" domain={[0.5, rows.length + 0.5]} ticks={starts.map((s) => s.i)} tickFormatter={(i) => starts.find((s) => s.i === i)?.label ?? ""} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
-        <YAxis domain={["auto", "auto"]} tickFormatter={(v) => v.toFixed(0)} tick={TICK} width={34} axisLine={false} tickLine={false} />
+        <YAxis domain={["auto", "auto"]} allowDecimals={false} tickFormatter={(v) => v.toFixed(0)} tick={TICK} width={34} axisLine={false} tickLine={false} />
         <Tooltip content={<ChartTip render={(payload, label) => { const r = rows[Math.round(label) - 1]; return r ? <><div><b>{r.date}</b> · {r.league} {r.season} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div><div>평균 구속 {fmt.num(r.velo, 1)} mph{r.velo_index != null && <> · 구속 하락 지수 {fmt.num(r.velo_index)}</>}{r.alarm && <span className="alarm"> · 경보</span>}</div></> : null; }} />} cursor={{ stroke: "var(--line-2)" }} />
         {starts.slice(1).map((s) => <ReferenceLine key={s.i} x={s.i - 0.5} stroke="var(--line-2)" />)}
         {ilMarks.map((il) => <ReferenceLine key={il.date} x={il.i} stroke={ARM.has(il.part) ? "var(--alarm)" : "var(--base)"} strokeWidth={1.2} strokeDasharray={ARM.has(il.part) ? undefined : "4 3"} label={{ value: `IL ${fmt.date(il.date)} ${PART[il.part] || il.part}`, position: "insideTopLeft", ...LABEL, fill: ARM.has(il.part) ? "var(--alarm)" : "var(--muted)" }} />)}

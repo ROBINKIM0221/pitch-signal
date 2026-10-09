@@ -74,6 +74,8 @@ b, strong { font-weight: 650; }
 .toolbar { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; padding: 12px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; box-shadow: var(--shadow); }
 .toolbar label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 13px; min-width: 0; }
 .toolbar label > span { white-space: nowrap; }
+.toolbar label.mult { flex-wrap: wrap; }
+.toolbar label.mult > .caption { white-space: normal; flex: 1 1 220px; }   /* 한계 배수 설명은 좁은 화면에서 줄바꿈 (넘쳐 잘리던 것) */
 
 /* ---------- 카드 ---------- */
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--shadow); min-width: 0; }
