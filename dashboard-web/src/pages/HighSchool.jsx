@@ -163,7 +163,7 @@ function BallCell({ g }) {
   return (
     <>
       {fmt.num(100 * g.ball_pct, 0)}%
-      {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="평소보다 볼이 많았던 등판: 그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(읽은 투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">볼 많음</span>}
+      {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="평소보다 볼이 많았던 등판: 그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">볼 많음</span>}
       <RereadMark g={g} />
     </>
   );
@@ -342,9 +342,12 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             </p>
           )}
           {p.games.some((g) => g.ball_marks != null) && (
+            <p className="caption" style={{ marginTop: 0 }}>※ 볼·스트라이크 비율은 손으로 쓴 협회 기록지를 모델이 읽고 판정한 값이라 약간의 오차가 있을 수 있습니다.</p>
+          )}
+          {p.games.some((g) => g.ball_marks != null) && (
             <p className="caption" style={{ marginTop: 0 }}>
               <b>제구 (기록지 판독, 추정)</b>: 볼 비율 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · 볼 비율을 보여 주는 등판 {p.ball_outings}/{p.outings}{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
-              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 기록원이 띠에 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 공식 타석 결과로 채웁니다. 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
+              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 기록원이 띠에 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 공식 타석 결과로 채웁니다. 볼 비율은 공식 투구 수에 대한 볼 수이고, 기록지에서 읽지 못한 공은 볼이 아닌 것으로 셉니다. 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
             </p>
           )}
           <BallChart p={p} />
