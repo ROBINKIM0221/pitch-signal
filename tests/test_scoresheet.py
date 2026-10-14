@@ -2,6 +2,7 @@
 import importlib
 import json
 
+import cv2
 import numpy as np
 import pandas as pd
 
@@ -102,7 +103,7 @@ def test_outing_gate_and_ball_rate():
                           "ball": [1, 0, 0, 1, 0, 0, 0, 1, 0, 0] + [1, 1, 0, 0, 0, 0]})
     official = pd.DataFrame({"game_idx": [1, 2], "team": ["가", "가"], "number": [17, 17], "pitches": [11, 10]})
     o = ss.outing_table(marks, official, tol=0.15).set_index("game_idx")
-    assert o.loc[1, "marks"] == 10 and o.loc[1, "gate"] and abs(o.loc[1, "ball_pct"] - 0.3) < 1e-9   # 10/11 = 9% 차이 → 통과
+    assert o.loc[1, "marks"] == 10 and o.loc[1, "gate"] and abs(o.loc[1, "ball_pct"] - 3 / 11) < 1e-9   # 10/11 = 9% 차이 → 통과, 볼 비율 = 볼 3 ÷ 공식 11
     assert not o.loc[2, "gate"] and np.isnan(o.loc[2, "ball_pct"])                                      # 6/10 = 40% 차이 → 보여 주지 않음
 
 
@@ -282,3 +283,51 @@ def test_stack_marks_handles_tiny_marks_without_overflow():
     for _ in range(50):
         st = ss.stack_marks(tiny, rng)
         assert st is None or (st[0].shape == st[1].shape and st[0].sum() > 0)
+
+
+def test_snap_chain_follows_lines_drifting_away_from_even_spacing_and_keeps_lines_snap_found():
+    pred = np.arange(10) * 60.0 + 100
+    true = pred + np.array([0, 0, 3, 7, 11, 15, 19, 23, 27, 31])   # 사진이 휘어 아래로 갈수록 밀린 선
+    prof = np.zeros(800)
+    for t in true.astype(int):
+        prof[t - 1:t + 2] = 40                                    # 3px 두께 선
+    snapped, found = ss.snap(prof, pred, 6, 20)
+    assert found[:4].all() and not found[6:].any()               # 예전 snap은 6px 넘게 밀린 선을 못 찾는다
+    out, hit = ss.snap_chain(prof, pred, width=40, fixed=(snapped, found))
+    assert hit.all() and np.allclose(out, true, atol=1)
+    assert (out[found] == snapped[found]).all()                 # 예전에 찾은 선은 그대로
+
+
+def test_snap_chain_never_puts_a_line_on_top_of_the_next_fixed_line():
+    pred = np.arange(10) * 60.0 + 100
+    prof = np.zeros(800); prof[[100, 160, 220, 280, 340, 400, 460, 520, 640]] = 40
+    prof[628] = 60                                                # 9번째 선 자리엔 선이 없고, 다음 고정 선 바로 위에 진한 획
+    fixed = (pred.copy(), np.array([True] * 8 + [False, True]))
+    fixed[0][9] = 640
+    out, _ = ss.snap_chain(prof, pred, width=40, fixed=fixed)
+    assert np.diff(out).min() >= 30                              # 간격 절반 이상은 떨어진다
+
+
+def test_cell_marks_with_joined_ink_drops_a_mark_mostly_in_the_cell_above_and_keeps_one_mostly_inside():
+    ink = np.zeros((200, 200), np.uint8)
+    ink[40:52, 52:62] = 255                                       # 띠 안 표시
+    ink[18:32, 52:62] = 255                                       # 위 칸에서 내려와 경계에 걸친 표시(대부분 띠 위)
+    ink[112:122, 52:62] = 255                                     # 아래 경계에 걸쳤지만 대부분 띠 안
+    box = (50, 30, 66, 120)
+    plain = ss.cell_marks(ink, box)
+    owned = ss.cell_marks(ink, box, joined=ink, ext=4, min_inside=0.5)
+    assert len(plain) == 3
+    assert [m["y"] for m in owned] == [10, 82]
+
+
+def test_overflow_marks_reads_round_marks_right_of_a_full_strip_but_not_the_result_text():
+    ink = np.zeros((300, 400), np.uint8)
+    Xr = np.tile(np.arange(25) * 40.0 + 100, (9, 1)); Xr[0, 1] = 120   # 띠 100~120, 본문 120~180
+    Yc = np.tile(np.arange(10) * 100.0 + 50, (12, 1))
+    g = {"Xr": Xr, "Yc": Yc}
+    for x in (124, 136):
+        cv2.circle(ink, (x + 5, 135), 5, 255, 1)                  # 칸 아래쪽, 띠 바로 오른쪽에 이어 그린 동그라미 둘
+    ink[125:145, 165:175] = 255                                   # 띠에서 떨어진 결과 글씨
+    out = ss.overflow_marks(ink, g, 0, 0, h_med=11, w_med=11)
+    assert len(out) == 2 and all(m["ovf"] for m in out)
+    assert [m["x"] for m in out] == sorted(m["x"] for m in out)

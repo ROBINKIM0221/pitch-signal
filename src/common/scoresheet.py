@@ -133,6 +133,39 @@ def snap(prof: np.ndarray, pred: np.ndarray, tol: int, min_val: float) -> tuple[
     return out, hit
 
 
+def snap_chain(prof: np.ndarray, pred: np.ndarray, tol_frac: float = 0.2, min_frac: float = 0.3, width: float = 1.0,
+               smooth: int = 5, fixed: tuple[np.ndarray, np.ndarray] | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """가로선을 위에서부터 차례로 찾는다 (2026-10-15): 다음 선 예측 = 앞에서 찾은 선 + 예측 간격, ±tol_frac×간격 안에서
+    smooth줄로 부드럽게 한 단면(조금 기운 선도 잡힘)이 width×min_frac 이상인 가장 진한 곳. 못 찾으면 예측 그대로.
+    사진이 휘거나 비스듬해 일부 구역 선이 등간격 예측에서 6px 넘게 벗어나던 것(영상 대조에서 칸이 줄 높이 15~20% 밀림)을 바로잡는다.
+    fixed = (예전 snap 위치, 찾음 여부): 예전 방식이 찾은 선은 그대로 두고 못 찾은 선만 사슬로 찾는다(잘 맞던 장을 흔들지 않게).
+    찾는 범위는 앞 선과 다음 고정 선에서 간격의 절반 넘게 떨어진 곳만 — 선이 겹치거나 순서가 뒤집히지 않게 (2026-10-15 전체 적용 때 4장)"""
+    pred = np.asarray(pred, float); gaps = np.diff(pred)
+    sm = uniform_filter1d(np.asarray(prof, float), smooth) * smooth
+    out = pred.copy(); hit = np.zeros(len(pred), bool)
+    for i in range(len(pred)):
+        if fixed is not None and fixed[1][i]:
+            out[i], hit[i] = fixed[0][i], True
+            continue
+        p = pred[i] if i == 0 or not hit[i - 1] else out[i - 1] + gaps[i - 1]
+        tol = tol_frac * (gaps[i - 1] if i > 0 else gaps[0])
+        lo, hi = int(max(0, round(p - tol))), int(min(len(sm), round(p + tol) + 1))
+        if i > 0:
+            lo = max(lo, int(np.ceil(out[i - 1] + 0.5 * gaps[i - 1])))
+        if fixed is not None and i + 1 < len(pred) and fixed[1][i + 1]:
+            hi = min(hi, int(np.floor(fixed[0][i + 1] - 0.5 * gaps[i])))
+        if hi > lo:
+            j = lo + int(np.argmax(sm[lo:hi]))
+            if sm[j] >= min_frac * width:
+                out[i], hit[i] = j, True
+                continue
+        out[i] = p
+    return out, hit
+
+
+GRID_CHAIN = __import__("os").environ.get("GRID_CHAIN", "1") == "1"                        # 2026-10-15 가로선 사슬 맞춤 (False면 예전 snap)
+
+
 def detect_grid(im: np.ndarray) -> tuple[np.ndarray, dict]:
     """기울기를 바로잡은 사진과 격자: Xr[줄 0..8][25 세로선], Yc[칸 0..11][10 가로선]과 맞춤 품질."""
     h, v = line_masks(im)
@@ -145,7 +178,13 @@ def detect_grid(im: np.ndarray) -> tuple[np.ndarray, dict]:
         Yc = np.zeros((12, 10)); hy = []
         for k in range(12):
             xa, xb = int(X0[2 * k]) + 3, int(X0[2 * k + 2]) - 3
-            Yc[k], ht = snap(h[:, xa:xb].sum(1).astype(float) / 255, Y0, 6, 0.5 * (xb - xa)); hy.append(ht.mean())
+            pk = h[:, xa:xb].sum(1).astype(float) / 255
+            Yc[k], ht = snap(pk, Y0, 6, 0.5 * (xb - xa))
+            hy.append(ht.mean())                                      # 맞춤 품질은 예전 snap 기준 (사슬이 아래 간격 범위 재시도 판단을 바꾸지 않게)
+            if GRID_CHAIN:
+                yc, _ = snap_chain(pk, Y0, width=xb - xa, fixed=(Yc[k], ht))
+                if np.diff(yc).min() >= 0.5 * np.diff(Y0).min():       # 줄 간격이 반 넘게 줄어든 결과는 버린다
+                    Yc[k] = yc
         return Y0, Yc, float(np.mean(hy))
 
     top, bot, wscore = row_window(v, h, X0, a)
@@ -184,6 +223,19 @@ def ink_mask(im: np.ndarray) -> np.ndarray:
     return ink
 
 
+def ink_joined(im: np.ndarray, ink: np.ndarray, gap: int = 3) -> np.ndarray:
+    """인쇄선을 지우면 그 선을 가로지르는 손글씨가 두 조각으로 끊긴다. 선 자리에서 양쪽(위아래 또는 좌우) gap px 안에
+    잉크가 있으면 다시 잇는다 (2026-10-15: 칸 경계에 걸친 표시가 어느 칸 것인지 가리려고)."""
+    h, v = line_masks(im)
+    lines_h = cv2.dilate(h, np.ones((3, 3), np.uint8)) > 0
+    lines_v = cv2.dilate(v, np.ones((3, 3), np.uint8)) > 0
+    k = ink > 0
+    up = np.zeros_like(k); dn = np.zeros_like(k); lf = np.zeros_like(k); rt = np.zeros_like(k)
+    up[gap:] = k[:-gap]; dn[:-gap] = k[gap:]; lf[:, gap:] = k[:, :-gap]; rt[:, :-gap] = k[:, gap:]
+    j = k | (lines_h & up & dn) | (lines_v & lf & rt)
+    return j.astype(np.uint8) * 255
+
+
 def split_stack(m: dict) -> list[dict]:
     """위아래로 맞닿은 표시를 가는 이음매(행 잉크 1px 이하)에서 자른다. 양쪽 모두 굵은 행(3px 이상)이 있을 때만."""
     mk = m["mask"]; prof = mk.sum(1)
@@ -200,10 +252,29 @@ def split_stack(m: dict) -> list[dict]:
     return [m]
 
 
-def cell_marks(ink: np.ndarray, box: tuple[int, int, int, int], min_area: int = 3) -> list[dict]:
-    """띠 칸 하나의 투구 표시들 (위에서 아래 순). x, y는 띠 칸 안 좌표, mask는 표시 모양."""
+def _owned(joined: np.ndarray, box: tuple[int, int, int, int], ext: int, min_inside: float) -> np.ndarray:
+    """띠보다 ext px 넓게 이은 잉크로 덩어리를 찾고, 면적의 min_inside 이상이 띠 안에 있는 덩어리만 남긴 띠 안 잉크.
+    위·아래 칸에서 넘어온 표시 조각과 옆 본문에서 띠로 삐져나온 조각이 빠진다. ext 밖은 보지 않으므로
+    띠를 가로로 길게 지나가는 선은 띠 안 비율이 높게 나와 걸러지지 않는다."""
     x0, y0, x1, y1 = box
-    n, lab, st, cen = cv2.connectedComponentsWithStats(np.ascontiguousarray(ink[y0:y1, x0:x1]), 8)
+    H, W = joined.shape
+    X0, Y0, X1, Y1 = max(0, x0 - ext), max(0, y0 - ext), min(W, x1 + ext), min(H, y1 + ext)
+    n, lab = cv2.connectedComponents(np.ascontiguousarray(joined[Y0:Y1, X0:X1]), connectivity=8)
+    inner = lab[y0 - Y0:y1 - Y0, x0 - X0:x1 - X0]
+    tot = np.bincount(lab.ravel(), minlength=n); ins = np.bincount(inner.ravel(), minlength=n)
+    ok = ins >= min_inside * np.maximum(tot, 1); ok[0] = False
+    return (ok[inner]).astype(np.uint8) * 255
+
+
+def cell_marks(ink: np.ndarray, box: tuple[int, int, int, int], min_area: int = 3, joined: np.ndarray | None = None,
+               ext: int = 8, min_inside: float = 0.5) -> list[dict]:
+    """띠 칸 하나의 투구 표시들 (위에서 아래 순). x, y는 띠 칸 안 좌표, mask는 표시 모양.
+    joined(ink_joined)를 주면 칸 경계·띠 밖으로 이어진 덩어리를 가려낸다 (2026-10-15)."""
+    x0, y0, x1, y1 = box
+    cell = ink[y0:y1, x0:x1]
+    if joined is not None:
+        cell = cv2.bitwise_and(cell, _owned(joined, box, ext, min_inside))
+    n, lab, st, cen = cv2.connectedComponentsWithStats(np.ascontiguousarray(cell), 8)
     comps = sorted((dict(x=int(st[i, 0]), y=int(st[i, 1]), w=int(st[i, 2]), h=int(st[i, 3]), a=int(st[i, 4]), ids=[i])
                     for i in range(1, n) if st[i, 4] >= min_area), key=lambda c: c["y"])
     marks: list[dict] = []
@@ -223,6 +294,34 @@ def cell_marks(ink: np.ndarray, box: tuple[int, int, int, int], min_area: int = 
     out = []
     for m in marks:
         out += split_stack(m)
+    return out
+
+
+def overflow_marks(ink: np.ndarray, g: dict, k: int, r: int, h_med: float, w_med: float,
+                   x_frac: float = 0.5, y_frac: float = 0.68, max_n: int = 2) -> list[dict]:
+    """띠가 차서 칸 아래쪽에 가로로 이어 그린 표시 (2026-10-15, 중계 영상 대조에서 놓친 공의 약 1/3).
+    띠 오른쪽 선부터 본문 폭의 x_frac까지, 줄 높이의 y_frac 아래 띠 안에서, 보통 표시 크기의 덩어리를 왼쪽부터 이어진 것만 고른다
+    (띠에서 멀리 떨어진 결과 기록 '6-3'·'F8' 같은 글씨는 빼려고). 좌표는 strip_box 기준(띠 왼쪽 위)."""
+    xl, xs = g["Xr"][r][2 * k], g["Xr"][r][2 * k + 1]
+    xr = g["Xr"][r][2 * k + 2] if 2 * k + 2 < len(g["Xr"][r]) else xs + 3 * (xs - xl)
+    yt, yb = g["Yc"][k][r], g["Yc"][k][r + 1]
+    bx0, by0 = int(round(xl)) + 2, int(round(yt)) + 2
+    x0, x1 = int(round(xs)) + 2, int(round(xs + x_frac * (xr - xs)))
+    y0, y1 = int(round(yt + y_frac * (yb - yt))), int(round(yb)) - 2
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return []
+    n, lab, st, _ = cv2.connectedComponentsWithStats(np.ascontiguousarray(ink[y0:y1, x0:x1]), 8)
+    comps = sorted((i for i in range(1, n) if st[i, 4] >= 4), key=lambda i: st[i, 0])
+    out, right = [], 0.0
+    for i in comps:
+        x, y, w, h, a = (int(v) for v in st[i])
+        if not (0.6 * h_med <= h <= 1.35 * h_med and 0.5 * h <= w <= 1.4 * h) or x - right > 0.5 * max(w_med, 0.6 * h_med) or y == 0:
+            break                                        # 동그란 표시 크기가 아니거나(아웃 기호 가로획·결과 글씨), 띠·앞 표시에서 떨어졌거나, 영역 위로 이어진 획이면 멈춘다
+        if len(out) >= max_n:
+            break
+        out.append(dict(x=x0 - bx0 + x, y=y0 - by0 + y, w=w, h=h, a=a, ovf=True,
+                        mask=(lab[y:y + h, x:x + w] == i).astype(np.uint8)))
+        right = x + w
     return out
 
 
@@ -307,12 +406,14 @@ def ball_matrix(df: pd.DataFrame) -> np.ndarray:
 # ---------- 등판 단위: 검산·볼 비율·평소 비교 ----------
 
 def outing_table(marks: pd.DataFrame, official: pd.DataFrame, tol: float = 0.15) -> pd.DataFrame:
-    """등판(경기·팀·등번호)마다 읽은 표시 수·볼 수와 공식 투구 수. 표시 수가 공식 투구 수와 tol 넘게 다르면 볼 비율을 비운다."""
+    """등판(경기·팀·등번호)마다 읽은 표시 수·볼 수와 공식 투구 수. 표시 수가 공식 투구 수와 tol 넘게 다르면 볼 비율을 비운다.
+    볼 비율 = 읽은 볼 ÷ 공식 투구 수 (2026-10-15). 중계 영상 19경기 대조에서 기록지 볼은 영상과 ±3% 안이었고
+    공식 투구 수보다 덜 읽힌 공은 대부분 볼이 아니었다 — 읽은 표시 수로 나누면 볼 비율이 부푼다."""
     keys = ["game_idx", "team", "number"]
     got = marks.groupby(keys).agg(marks=("ball", "size"), balls=("ball", "sum")).reset_index()
     o = official[keys + ["pitches"]].merge(got, on=keys, how="left").fillna({"marks": 0, "balls": 0})
     o["gate"] = (o["pitches"] > 0) & ((o["marks"] / o["pitches"].where(o["pitches"] > 0) - 1).abs() <= tol)
-    o["ball_pct"] = np.where(o["gate"], o["balls"] / o["marks"].where(o["marks"] > 0), np.nan)
+    o["ball_pct"] = np.where(o["gate"], np.minimum(o["balls"] / o["pitches"].where(o["pitches"] > 0), 1.0), np.nan)
     return o
 
 
@@ -375,7 +476,8 @@ def apply_readings(marks: pd.DataFrame, readings: pd.DataFrame) -> pd.DataFrame:
     if len(readings) == 0:
         return m
     reread = set(zip(readings["sheet"], readings["pa"]))
-    m = m[[key not in reread for key in zip(m["sheet"], m["pa"])]]
+    ovf = m["ovf"].fillna(False).astype(bool) if "ovf" in m else pd.Series(False, index=m.index)
+    m = m[[key not in reread for key in zip(m["sheet"], m["pa"])] | ovf]       # 칸 아래로 넘친 표시(2026-10-15)는 다시 읽기 대상이 아니었으므로 모델 판독을 남긴다
     rows = []
     for r in readings.itertuples(index=False):
         label = str(r.label).upper()
@@ -390,20 +492,20 @@ def apply_readings(marks: pd.DataFrame, readings: pd.DataFrame) -> pd.DataFrame:
 
 def usual_flags(o: pd.DataFrame, min_pitches: int = 40, z: float = 2.0, min_history: int = 3) -> pd.DataFrame:
     """'평소보다 볼이 많았던 등판': 검산 통과한 등판 중 투구 수 min_pitches 이상만 판정.
-    평소 = 같은 투수의 다른 검산 통과 등판들의 볼 합 ÷ 표시 합 (그 등판은 뺀다, 다른 등판 min_history개 이상).
-    (볼 비율 − 평소) ÷ √(평소(1−평소)/읽은 표시 수) ≥ z 이면 표시. 원인은 해석하지 않는다."""
+    평소 = 같은 투수의 다른 검산 통과 등판들의 볼 합 ÷ 공식 투구 합 (그 등판은 뺀다, 다른 등판 min_history개 이상).
+    (볼 비율 − 평소) ÷ √(평소(1−평소)/공식 투구 수) ≥ z 이면 표시. 원인은 해석하지 않는다."""
     o = o.copy()
     o["usual"] = np.nan; o["z_ball"] = np.nan; o["ball_flag"] = False
     ok = o["gate"].astype(bool)
     for _, g in o[ok].groupby(["team", "number"]):
-        tb, tm = g["balls"].sum(), g["marks"].sum()
+        tb, tp = g["balls"].sum(), g["pitches"].sum()
         for i, r in g.iterrows():
             if len(g) - 1 < min_history:
                 continue
-            usual = (tb - r["balls"]) / (tm - r["marks"])
+            usual = (tb - r["balls"]) / (tp - r["pitches"])
             o.at[i, "usual"] = usual
             if r["pitches"] >= min_pitches and 0 < usual < 1:
-                zz = (r["ball_pct"] - usual) / np.sqrt(usual * (1 - usual) / r["marks"])
+                zz = (r["ball_pct"] - usual) / np.sqrt(usual * (1 - usual) / r["pitches"])
                 o.at[i, "z_ball"] = zz
                 o.at[i, "ball_flag"] = bool(zz >= z)
     return o

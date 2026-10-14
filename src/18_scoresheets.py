@@ -100,24 +100,38 @@ def game_pas(game_idx: int) -> tuple[dict, dict]:
     return game, teams
 
 
-def read_sheet(path: Path) -> tuple[pd.DataFrame, dict]:
-    """기록지 사진 한 장 → 공식 타석 칸마다 투구 표시(모양 특징·가운데 그림). 선수 이름은 담지 않는다."""
+def read_sheet(path: Path, overflow: bool = True, own: bool = True, own_ext: int = 4, own_min: float = 0.5,
+               legacy_pas: set | None = None) -> tuple[pd.DataFrame, dict]:
+    """기록지 사진 한 장 → 공식 타석 칸마다 투구 표시(모양 특징·가운데 그림). 선수 이름은 담지 않는다.
+    overflow: 띠가 차서 칸 아래쪽에 이어 그린 표시도 읽는다 (ovf=True, 띠 표시 뒤 순서) (2026-10-15).
+    own: 띠보다 own_ext px 넓게 본 덩어리 중 면적의 own_min 이상이 띠 안인 것만 그 칸 표시로 (칸 경계에 걸친 이웃 칸 표시) (2026-10-15).
+    legacy_pas: 사람·AI가 이미 다시 읽은 타석(이 기록지의 pa 번호) — 그 판독이 덩어리 순서에 묶여 있으므로 예전 방식(own 없이)으로 자른다."""
+    legacy_pas = legacy_pas or set()
     game_idx = int(path.stem.split("_")[0])
     im, g = ss.detect_grid(ss.load(path))
     ink = ss.ink_mask(im)
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     padded = cv2.copyMakeBorder(gray, 12, 12, 12, 12, cv2.BORDER_REPLICATE)
-    raw = {(k + 1, r + 1): ss.cell_marks(ink, ss.strip_box(g, k, r)) for k in range(12) for r in range(9)}
+    raw_old = {(k + 1, r + 1): ss.cell_marks(ink, ss.strip_box(g, k, r)) for k in range(12) for r in range(9)}
+    joined = ss.ink_joined(im, ink) if own else None
+    raw = {(k + 1, r + 1): ss.cell_marks(ink, ss.strip_box(g, k, r), joined=joined, ext=own_ext, min_inside=own_min)
+           for k in range(12) for r in range(9)} if own else raw_old
     game, teams = game_pas(game_idx)
-    ranking = ss.match_team({c for c, v in raw.items() if v}, teams)
+    ranking = ss.match_team({c for c, v in raw_old.items() if v}, teams)
     team = ranking[0][1]
     pitch_team = next((t for t in game["teams"] if t != team), None)
+    kept = [m for v in raw_old.values() for m in v if ss.keep(m)]
+    h_med = float(np.median([m["h"] for m in kept])) if kept else 0.0
+    w_med = float(np.median([m["w"] for m in kept])) if kept else 0.0
     rows = []
     for pa_i, (p, c) in enumerate(zip(teams[team], ss.cells_for(teams[team]))):
         if not c or c[0] > 12:
             continue
         box = ss.strip_box(g, c[0] - 1, c[1] - 1)
-        ms = [m for m in raw[c] if ss.keep(m)]
+        ms = [m for m in (raw_old if pa_i in legacy_pas else raw)[c] if ss.keep(m)]
+        full = bool(ms) and (ms[-1]["y"] + ms[-1]["h"] >= (box[3] - box[1]) - 1.2 * h_med)   # 띠가 아래 끝까지 찼을 때만 넘친다
+        if overflow and h_med > 0 and full:
+            ms += [m for m in ss.overflow_marks(ink, g, c[0] - 1, c[1] - 1, h_med, w_med) if ss.keep(m)]
         for i, m in enumerate(ms):
             f = ss.shape_features(m)
             Y, X = box[1] + m["y"], box[0] + m["x"]
@@ -125,6 +139,7 @@ def read_sheet(path: Path) -> tuple[pd.DataFrame, dict]:
             gctx = padded[Y:Y + m["h"] + 24, X:X + m["w"] + 24]                 # 덩어리 둘레 12px까지 회색 (덩어리는 (12, 12)에서 시작)
             rows.append(dict(game_idx=game_idx, sheet=path.stem, team=pitch_team, bat_team=team, pa=pa_i, inning=p["inning"], slot=p["slot"],
                              cat=kb.pa_category(p["result"]), ibb="고의" in p["result"], number=p.get("pitcher"), idx=i, n=len(ms), col=c[0],
+                             ovf=bool(m.get("ovf", False)),
                              **{k: v for k, v in f.items() if k != "pix"}, pix=np.asarray(f["pix"], np.float32).tobytes(),
                              crop=crop.astype(np.uint8).tobytes(), mask=m["mask"].astype(np.uint8).tobytes(), gctx=gctx.astype(np.uint8).tobytes(),
                              gap_up=m["y"] - (ms[i - 1]["y"] + ms[i - 1]["h"]) if i > 0 else 99,
@@ -139,10 +154,24 @@ def read_sheet(path: Path) -> tuple[pd.DataFrame, dict]:
     return df, meta
 
 
-def _read_one(path: str) -> dict:
+def reread_keys(review_dir: Path | None) -> dict[str, set]:
+    """다시 읽기 묶음에 들어 있던 타석: 기록지 → pa 번호 집합 (판독이 다 된 묶음만)."""
+    out: dict[str, set] = {}
+    if not review_dir or not Path(review_dir).exists():
+        return out
+    for b in Path(review_dir).iterdir():
+        if not (b / "items.json").exists() or not ((b / f"review_{b.name}_user.json").exists() or (b / "first_pass.json").exists()):
+            continue
+        for it in json.loads((b / "items.json").read_text(encoding="utf-8")):
+            out.setdefault(it["sheet"], set()).add(int(it["pa"]))
+    return out
+
+
+def _read_one(args) -> dict:
+    path, legacy = args
     out = SHEET_OUT / f"{Path(path).stem}.parquet"
     try:
-        df, meta = read_sheet(Path(path))
+        df, meta = read_sheet(Path(path), legacy_pas=legacy)
         df.to_parquet(out, index=False)
         return meta
     except Exception as e:                                       # 한 장이 실패해도 나머지는 계속
@@ -154,9 +183,10 @@ def read_all(cfg: dict, workers: int = 4) -> pd.DataFrame:
     photos = sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg"))
     todo = [str(p) for p in photos if not (SHEET_OUT / f"{p.stem}.parquet").exists()]
     log.info("기록지 사진 %d장 · 이번에 읽을 것 %d장", len(photos), len(todo))
+    keys = reread_keys(cfg["scoresheets"].get("readings_dir"))
     metas = []
     with ProcessPoolExecutor(max_workers=workers) as ex:
-        for i, meta in enumerate(ex.map(_read_one, todo, chunksize=4), 1):
+        for i, meta in enumerate(ex.map(_read_one, [(p, keys.get(Path(p).stem, set())) for p in todo], chunksize=4), 1):
             metas.append(meta)
             if i % 100 == 0 or i == len(todo):
                 log.info("%d/%d", i, len(todo))
@@ -362,7 +392,10 @@ def load_readings(review_dir: Path, sheet_dir: Path = SHEET_OUT) -> pd.DataFrame
     for s in rd["sheet"].unique():
         f = Path(sheet_dir) / f"{s}.parquet"
         if f.exists():
-            t = pd.read_parquet(f, columns=["pa", *ss.READ_PA_COLUMNS])
+            t = pd.read_parquet(f)
+            if "ovf" in t:                                                   # 칸 아래로 넘친 표시는 다시 읽기 묶음에 없던 덩어리 — 띠 덩어리 수로 맞춘다
+                t = t[~t["ovf"].astype(bool)]
+            t = t[["pa", *ss.READ_PA_COLUMNS]]
             first = t.drop_duplicates("pa")
             info.append(first.assign(sheet=s, n_blobs=first["pa"].map(t.groupby("pa").size()).to_numpy()))
     if not info:
