@@ -490,16 +490,17 @@ def apply_readings(marks: pd.DataFrame, readings: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["sheet", "pa", "idx", "piece"]).reset_index(drop=True)
 
 
-def apply_sequences(marks: pd.DataFrame, seqs: pd.DataFrame) -> pd.DataFrame:
-    """타석 칸 전체를 다시 읽은 투구 순서로 그 타석 표시를 통째로 바꾼다 (2026-10-15). seqs = 표시마다 한 줄(타석 열 + sheet·pa·idx·ball·read_by·unsure).
+def apply_sequences(marks: pd.DataFrame, seqs: pd.DataFrame, read: set) -> pd.DataFrame:
+    """타석 칸 전체를 다시 읽은 투구 순서로 그 타석 표시를 통째로 바꾼다 (2026-10-15). seqs = 표시마다 한 줄(타석 열 + sheet·pa·idx·ball·read_by·unsure),
+    read = 다시 읽은 타석 (sheet, pa) 전부 — 표시가 하나도 없다고 읽은 타석(seqs에 줄 없음)도 모델 표시를 지운다.
     덩어리와 상관없이(띠 밖으로 넘친 표시까지) 바꾸되, 사람이 확인한 타석은 그대로 둔다."""
     if "read_by" not in marks:
         marks = marks.assign(read_by="모델", unsure=False)
-    if len(seqs) == 0:
+    if not read:
         return marks
     human = set(zip(marks.loc[marks["read_by"] == "사람", "sheet"], marks.loc[marks["read_by"] == "사람", "pa"]))
     seqs = seqs[[k not in human for k in zip(seqs["sheet"], seqs["pa"])]]
-    done = set(zip(seqs["sheet"], seqs["pa"]))
+    done = set(read) - human
     m = marks[[k not in done for k in zip(marks["sheet"], marks["pa"])]]
     return pd.concat([m, seqs], ignore_index=True).sort_values(["sheet", "pa", "idx", "piece"]).reset_index(drop=True)
 

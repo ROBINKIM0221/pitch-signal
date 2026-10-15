@@ -338,6 +338,7 @@ def test_load_sequences_reads_whole_pa_orders_and_takes_pa_columns_from_items_or
     pa_cols = {"game_idx": 1, "team": "가", "number": 17, "inning": 2, "col": 2, "cat": "K", "ibb": False}
     batches = {"sq0001": ([{"id": "s1_0", "sheet": "s1", "pa": 0}, {"id": "s1_5", "sheet": "s1", "pa": 5, **pa_cols}],
                           {"s1_0": ["BS?S"], "s1_5": ["SSS"]}),
+               "sq0003": ([{"id": "s1_7", "sheet": "s1", "pa": 7, **pa_cols}], {"s1_7": [""]}),             # 칸에 표시가 없다고 읽은 타석
                "sq0002": ([{"id": "s1_1", "sheet": "s1", "pa": 1}, {"id": "s1_2", "sheet": "s1", "pa": 2}], {"s1_1": ["B"]})}   # 덜 끝난 묶음
     for name, (items, first) in batches.items():
         d = tmp_path / "seq" / name; d.mkdir(parents=True)
@@ -346,18 +347,20 @@ def test_load_sequences_reads_whole_pa_orders_and_takes_pa_columns_from_items_or
     sheets = tmp_path / "sheets"; sheets.mkdir()
     pd.DataFrame({"pa": [0, 0], "idx": [0, 1], "game_idx": 1, "team": "가", "number": 11, "inning": 1, "col": 1,
                   "cat": "OUT", "ibb": False}).to_parquet(sheets / "s1.parquet")
-    r = m18.load_sequences(tmp_path / "seq", sheets)
+    r, read = m18.load_sequences(tmp_path / "seq", sheets)
+    assert read == {("s1", 0), ("s1", 5), ("s1", 7)}
     assert r[["pa", "idx", "ball", "number"]].values.tolist() == [[0, 0, 1, 11], [0, 1, 0, 11], [0, 2, 0, 11], [5, 0, 0, 17], [5, 1, 0, 17], [5, 2, 0, 17]]
     assert r.loc[r.pa == 0, "unsure"].all() and not r.loc[r.pa == 5, "unsure"].any()   # 표시를 못 읽은 타석 5도 items의 타석 열로 들어온다
 
 
-def test_apply_sequences_replaces_every_mark_of_the_pa_but_keeps_person_checked_pas():
+def test_apply_sequences_replaces_every_mark_of_the_pa_but_keeps_person_checked_pas_and_clears_pas_read_as_empty():
     cols = {"game_idx": 1, "team": "가", "number": 17, "inning": 1, "col": 1, "cat": "OUT", "ibb": False, "piece": 0, "k": 1}
     marks = pd.DataFrame([{**cols, "sheet": "s1", "pa": p, "idx": i, "ball": b, "read_by": rb, "ovf": o}
                           for p, i, b, rb, o in [(0, 0, 1, "모델", False), (0, 1, 0, "모델", True), (1, 0, 0, "사람", False), (2, 0, 1, "모델", False)]])
     seqs = pd.DataFrame([{**cols, "sheet": "s1", "pa": p, "idx": i, "ball": b, "read_by": "AI", "unsure": False}
                          for p, i, b in [(0, 0, 0), (0, 1, 0), (0, 2, 1), (1, 0, 1)]])
-    out = ss.apply_sequences(marks, seqs)
+    out = ss.apply_sequences(marks, seqs, {("s1", 0), ("s1", 1), ("s1", 2)})
     assert out[out.pa == 0][["ball", "read_by"]].values.tolist() == [[0, "AI"], [0, "AI"], [1, "AI"]]   # 넘친 표시까지 통째로 바뀜
     assert out[out.pa == 1][["ball", "read_by"]].values.tolist() == [[0, "사람"]]
-    assert out[out.pa == 2][["ball", "read_by"]].values.tolist() == [[1, "모델"]]
+    assert (out.pa == 2).sum() == 0                                                              # 표시가 없다고 읽은 타석은 모델 표시도 지운다
+    assert ss.apply_sequences(marks, seqs.iloc[:0], set()).equals(marks)
