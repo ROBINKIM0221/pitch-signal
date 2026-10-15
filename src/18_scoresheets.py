@@ -407,6 +407,39 @@ def load_readings(review_dir: Path, sheet_dir: Path = SHEET_OUT) -> pd.DataFrame
     return rd[fit][cols].reset_index(drop=True)
 
 
+def load_sequences(seq_dir: Path, sheet_dir: Path = SHEET_OUT) -> pd.DataFrame:
+    """타석 칸 전체 다시 읽기 묶음(<묶음>/items.json + 다 채운 first_pass.json, 2026-10-15) → 표시 줄 (scoresheet.apply_sequences에 넣는다).
+    first_pass 값 = 그 칸의 투구 순서('BS?SB', 위→아래, 띠 밖으로 이어 그린 표시 포함, ? = 앞 글자 확신 없음).
+    타석 열은 items.json에 있으면 그것(표시를 하나도 못 읽은 타석도 됨), 없으면 그 기록지 판독 파일에서. 같은 타석은 나중(이름순) 묶음이 덮는다."""
+    cols = [*ss.READ_PA_COLUMNS, "sheet", "pa", "idx", "piece", "k", "ball", "p_ball", "read_by", "unsure"]
+    seq, info = {}, {}
+    for b in sorted(p for p in Path(seq_dir).iterdir() if (p / "items.json").exists() and (p / "first_pass.json").exists()):
+        items = json.loads((b / "items.json").read_text(encoding="utf-8"))
+        fp = json.loads((b / "first_pass.json").read_text(encoding="utf-8"))
+        if len(fp) < len(items):
+            log.info("타석 판독 묶음 %s: 덜 끝나 뺌 (%d/%d타석)", b.name, len(fp), len(items))
+            continue
+        for it in items:
+            key = (it["sheet"], int(it["pa"]))
+            seq[key] = fp[it["id"]][0]
+            if all(c in it for c in ss.READ_PA_COLUMNS):
+                info[key] = {c: it[c] for c in ss.READ_PA_COLUMNS}
+    for s in {k[0] for k in seq if k not in info}:
+        f = Path(sheet_dir) / f"{s}.parquet"
+        if f.exists():
+            t = pd.read_parquet(f, columns=["pa", *ss.READ_PA_COLUMNS]).drop_duplicates("pa")
+            info.update({(s, int(r["pa"])): {c: r[c] for c in ss.READ_PA_COLUMNS} for r in t.to_dict("records")})
+    rows = []
+    for key, v in seq.items():
+        if key not in info:
+            continue
+        letters = [c for c in v.upper() if c in "BS"]
+        rows += [{**info[key], "sheet": key[0], "pa": key[1], "idx": j, "piece": 0, "k": 1, "ball": int(c == "B"), "p_ball": float(c == "B"),
+                  "read_by": "AI", "unsure": "?" in v} for j, c in enumerate(letters)]
+    log.info("타석 전체 다시 읽기 %d타석 (타석 열을 못 붙여 뺀 것 %d)", len({k for k in seq if k in info}), sum(k not in info for k in seq))
+    return pd.DataFrame(rows, columns=cols)
+
+
 def score(cfg: dict, clf) -> pd.DataFrame:
     sc = cfg["scoresheets"]
     cm_path = PROCESSED / "scoresheet_count_model.pkl"
@@ -435,6 +468,9 @@ def score(cfg: dict, clf) -> pd.DataFrame:
         marks["number"] = marks["number"].astype(int)
         pas = rd.drop_duplicates(["sheet", "pa"])
         log.info("다시 읽은 타석 %d (사람 확인 %d · AI %d)", len(pas), int((pas["source"] == "사람").sum()), int((pas["source"] == "AI").sum()))
+    if sc.get("seq_readings_dir") and Path(sc["seq_readings_dir"]).exists():  # 타석 칸 전체 다시 읽기가 있으면 그 타석은 그것으로 (2026-10-15, 사용자 결정)
+        marks = ss.apply_sequences(marks, load_sequences(Path(sc["seq_readings_dir"])))
+        marks["number"] = marks["number"].astype(int)
     marks["filled"] = False
     fill = ss.implied_pitches(marks, INPLAY)                                  # 띠에 안 그린 '결과가 정해 주는 마지막 공' (4구 넷째 볼 등)
     log.info("결과가 정해 주는 마지막 공 채움: %d구 (볼 %d · 스트라이크 %d)", len(fill), int(fill["ball"].sum()), int((fill["ball"] == 0).sum()))
