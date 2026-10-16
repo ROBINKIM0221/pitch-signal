@@ -23,10 +23,11 @@ def _date(ts) -> str:
 
 
 def team_payload(team: str, season: int, outings: pd.DataFrame, team_map: pd.DataFrame, alarms: pd.DataFrame, labels: pd.DataFrame,
-                 names: pd.Series, limits: pd.Series) -> dict:
-    """한 팀-시즌의 불펜(role == RP) 투수마다 그 시즌 등판 전부(날짜, 투구 수, 품질 경보, 이 팀 소속 여부), 7일 투구 한계값, 첫 팔 부상 IL.
+                 names: pd.Series, limits: pd.Series, ends: pd.Series) -> dict:
+    """한 팀-시즌의 불펜(role == RP) 투수마다 그 시즌 등판 전부(날짜, 투구 수, 품질 경보, 이 팀 소속 여부), 7일 투구 한계값과
+    그 표시를 켜기 시작하는 기준선 마지막 등판일(p7d_from, 그날 뒤부터), 첫 팔 부상 IL.
     outings: outings.parquet의 그 시즌 줄. team_map: team_of_outing 결과. alarms: monitor 표의 (pitcher, season, game_pk, velo_alarm, change_alarm).
-    limits: (pitcher, season) → p7d_limit."""
+    limits: (pitcher, season) → p7d_limit. ends: (pitcher, season) → baseline_end."""
     season_outings = outings[outings["season"] == season].merge(team_map, on=["pitcher", "game_pk"], how="left")
     here = season_outings[season_outings["team"] == team]
     relievers = sorted(here.loc[here["role"] == "RP", "pitcher"].unique())
@@ -43,9 +44,11 @@ def team_payload(team: str, season: int, outings: pd.DataFrame, team_map: pd.Dat
                 signals = [s for s in SIGNALS if bool(a[f"{s}_alarm"])]
             rows.append({"date": _date(o.game_date), "pitches": int(o.n_all), "signals": signals, "here": o.team == team})
         limit = limits.get((pitcher, season), float("nan"))
+        end = ends.get((pitcher, season), pd.NaT)
         il = arm_il.loc[pitcher] if pitcher in arm_il.index else None
         pitchers.append({"id": f"{pitcher}_{season}", "name": names.get(pitcher, str(pitcher)), "outings": rows,
                          "p7d_limit": None if pd.isna(limit) else round(float(limit), 1),
+                         "p7d_from": None if pd.isna(limit) or pd.isna(end) else _date(end),
                          "il": None if il is None else {"date": _date(il["il_date"]), "part": il["part"]}})
     dates = sorted(here["game_date"].map(_date).unique())
     return {"team": team, "season": int(season), "dates": dates, "pitchers": pitchers}

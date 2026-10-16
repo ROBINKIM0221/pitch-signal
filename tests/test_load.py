@@ -54,6 +54,14 @@ def test_seven_day_flag_uses_the_pitchers_own_baseline_percentile():
     assert not metrics(rows)["flag_p7d"].any()              # 기준선이 없으면 표시하지 않음
 
 
+def test_seven_day_flag_stays_off_while_the_baseline_is_being_learned():
+    # 기준선 기간의 가장 큰 7일 합은 그 기간 백분위(95)를 넘을 수 있다 — 기준을 만드는 등판이 자기 기준을 넘었다고 표시하면 안 된다 (2026-10-16)
+    rows = [("2023-04-01", 60), ("2023-04-10", 10), ("2023-04-20", 10), ("2023-05-01", 70)]
+    m = metrics(rows, baseline_end="2023-04-20")
+    assert m["p7d"].iloc[0] > ld.p7d_limit(log(rows), RULES, pd.Timestamp("2023-04-20"))
+    assert list(m["flag_p7d"]) == [False, False, False, True]
+
+
 def test_flag_rates_count_outings_after_the_baseline_of_the_chosen_pitcher_seasons():
     load = pd.DataFrame({
         "pitcher": [1, 1, 1, 1, 2, 2, 3], "season": 2023,
@@ -75,4 +83,4 @@ def test_p7d_limit_is_the_baseline_percentile_of_pitched_days_and_nan_without_a_
     assert abs(limit - np.percentile(p7d_on_pitched_days, 95)) < 1e-9
     assert np.isnan(ld.p7d_limit(log(rows), RULES, pd.NaT))
     m = metrics(rows, "2023-04-07")
-    assert list(m["flag_p7d"]) == list(m["p7d"] > limit)             # load_metrics와 같은 한계값
+    assert list(m["flag_p7d"]) == list((m["p7d"] > limit) & (m.index > pd.Timestamp("2023-04-07")))   # load_metrics와 같은 한계값, 기준선 뒤에만

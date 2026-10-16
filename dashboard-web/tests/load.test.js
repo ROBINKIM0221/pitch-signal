@@ -11,7 +11,7 @@ test("on every outing date the browser reproduces the pipeline's load metrics an
   let checked = 0;
   for (const s of sample) {
     for (const e of s.expected) {
-      const st = dayState(s.outings, e.date, rules, s.p7d_limit);
+      const st = dayState(s.outings, e.date, rules, s.p7d_limit, s.p7d_from);
       assert.equal(st.apps3d, e.apps_3d, `${s.pitcher} ${e.date} apps_3d`);
       assert.ok(Math.abs(st.p7d - e.p7d) < 1e-9, `${s.pitcher} ${e.date} p7d ${st.p7d} vs ${e.p7d}`);
       if (e.acwr == null) assert.equal(st.acwr, null, `${s.pitcher} ${e.date} acwr should be null`);

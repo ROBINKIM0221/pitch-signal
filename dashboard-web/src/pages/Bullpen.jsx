@@ -44,7 +44,7 @@ export default function Bullpen() {
         return here.length > 0 && !p.outings.some((o) => !o.here && o.date > here.at(-1) && o.date <= date);   // 그 뒤 다른 팀에서 던졌으면 떠난 것
       })
       .map((p) => {
-        const st = dayState(p.outings, date, index.rules, p.p7d_limit);
+        const st = dayState(p.outings, date, index.rules, p.p7d_limit, p.p7d_from);
         const recent = p.outings.filter((o) => o.date >= from && o.date <= date);
         const alarms = recent.filter((o) => o.signals.length);
         const onIl = p.il && p.il.date <= date && !p.outings.some((o) => o.date > p.il.date && o.date <= date);
@@ -174,7 +174,7 @@ function Strip({ p, days, teamDates }) {
 function Detail({ row, rules, date }) {
   const { p } = row;
   const rows = p.outings.map((o) => {
-    const st = dayState(p.outings, o.date, rules, p.p7d_limit);
+    const st = dayState(p.outings, o.date, rules, p.p7d_limit, p.p7d_from);
     return { ...o, acwr: st.acwr, apps3d: st.apps3d, p7d: st.p7d, flags: st.flags, marker: o.signals.length ? o.pitches : null };
   });
   let ilX = p.il ? rows.find((r) => r.date >= p.il.date)?.date : null;

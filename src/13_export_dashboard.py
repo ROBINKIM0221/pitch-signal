@@ -166,7 +166,7 @@ def team_files(cfg: dict, outings: pd.DataFrame, splits: list[str], names: pd.Se
     for season in seasons:
         season_map = tmap.loc[tmap["season"] == season, ["pitcher", "game_pk", "team"]]
         for team in sorted(season_map["team"].unique()):
-            pay = tm.team_payload(team, season, outings, season_map, alarms, labels, names, limits)
+            pay = tm.team_payload(team, season, outings, season_map, alarms, labels, names, limits, ends)
             if not pay["pitchers"]:
                 continue
             sizes[f"teams/{team}_{season}.json"] = dump(f"teams/{team}_{season}.json", pay)

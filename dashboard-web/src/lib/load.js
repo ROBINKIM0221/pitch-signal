@@ -2,7 +2,7 @@
 //   3일 등판 수 = 오늘 포함 3일의 등판 횟수, 7일 투구 = 오늘 포함 7일 합,
 //   ACWR = 최근 7일 합 ÷ (그 앞 21일 합 ÷ 3) — 시즌 첫 등판일부터 28일이 쌓인 뒤에만,
 //   연투 = 어제도 오늘도 등판, 연속 등판일 = 오늘로 끝나는 연속 등판 일수(오늘 안 던졌으면 0),
-//   표시(flag): 3일 연속 ≥ 3일, 3일 등판 ≥ 3회, 7일 투구 > 투수별 기준선 95백분위, ACWR > 기준, 긴 등판(≥30구) 뒤 쉰 날 ≤ 1일에 등판.
+//   표시(flag): 3일 연속 ≥ 3일, 3일 등판 ≥ 3회, 7일 투구 > 투수별 기준선 95백분위(기준선 마지막 등판일 뒤에만), ACWR > 기준, 긴 등판(≥30구) 뒤 쉰 날 ≤ 1일에 등판.
 // 날짜 계산은 UTC 날짜 수(일)로 한다.
 
 const DAY = 86400000;
@@ -28,9 +28,10 @@ function sum(map, from, to) {
 
 /**
  * date 기준 한 투수의 부하 상태.
- * outings: [{date, pitches}] (그 시즌 전부, 소속과 무관), rules: config load 블록, p7dLimit: 투수별 7일 투구 한계(없으면 null).
+ * outings: [{date, pitches}] (그 시즌 전부, 소속과 무관), rules: config load 블록, p7dLimit: 투수별 7일 투구 한계(없으면 null),
+ * p7dFrom: 기준선 마지막 등판일 — 7일 투구 표시는 그 뒤에만 켠다(기준을 만드는 등판이 자기 기준을 넘었다고 표시하지 않도록, 2026-10-16).
  */
-export function dayState(outings, date, rules, p7dLimit) {
+export function dayState(outings, date, rules, p7dLimit, p7dFrom = null) {
   const { pitches, apps } = daily(outings);
   const today = num(date);
   const days = [...pitches.keys()].sort((a, b) => a - b);
@@ -54,7 +55,7 @@ export function dayState(outings, date, rules, p7dLimit) {
   const flags = [];
   if (pitchedToday && consecutive >= rules.consecutive_days_flag) flags.push("consecutive");
   if (apps3d >= rules.apps_3d_flag) flags.push("apps_3d");
-  if (p7dLimit != null && p7d > p7dLimit) flags.push("p7d");
+  if (p7dLimit != null && p7dFrom != null && today > num(p7dFrom) && p7d > p7dLimit) flags.push("p7d");
   if (acwr != null && acwr > rules.acwr_flag) flags.push("acwr");
   if (pitchedToday && prevPitches != null && prevPitches >= rules.long_outing_pitches && restDays <= rules.short_rest_days) flags.push("long_short");
   return {

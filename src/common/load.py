@@ -11,7 +11,7 @@ def load_metrics(outings: pd.DataFrame, rules: dict, baseline_end) -> pd.DataFra
     """한 투수-시즌의 등판(game_pk, game_date, n_all)마다 부하 지표와 표시(flag_*)를 붙여 돌려준다.
 
     같은 날 두 번 던졌으면 그날 값을 합쳐 계산한다. baseline_end는 그 투수의 기준선 마지막 등판일이며,
-    7일 투구 수 표시는 그날까지의 본인 값 백분위를 넘을 때만 켠다(기준선이 없으면 켜지 않음).
+    7일 투구 수 표시는 기준선 기간 본인 값의 백분위를 넘을 때, 기준선 기간이 끝난 뒤에만 켠다(기준선이 없으면 켜지 않음).
     """
     log = outings.rename(columns={"game_date": "date", "n_all": "pitches"})
     daily = kr.daily_series(log)                                       # 날짜별 투구 수, 등판 없는 날은 0
@@ -30,7 +30,7 @@ def load_metrics(outings: pd.DataFrame, rules: dict, baseline_end) -> pd.DataFra
     limit = _p7d_limit(day["p7d"], pitched, rules, baseline_end)
     day["flag_consecutive"] = day["consecutive_days"] >= rules["consecutive_days_flag"]
     day["flag_apps_3d"] = day["apps_3d"] >= rules["apps_3d_flag"]
-    day["flag_p7d"] = day["p7d"] > limit
+    day["flag_p7d"] = (day["p7d"] > limit) & (day.index > baseline_end)    # 기준선을 만드는 등판에는 켜지 않음 (2026-10-16)
     day["flag_acwr"] = day["acwr"] > rules["acwr_flag"]
     day["flag_long_short"] = ((day["prev_pitches"] >= rules["long_outing_pitches"])
                               & (day["rest_days"] <= rules["short_rest_days"]))
