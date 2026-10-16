@@ -353,6 +353,19 @@ def test_load_sequences_reads_whole_pa_orders_and_takes_pa_columns_from_items_or
     assert r.loc[r.pa == 0, "unsure"].all() and not r.loc[r.pa == 5, "unsure"].any()   # 표시를 못 읽은 타석 5도 items의 타석 열로 들어온다
 
 
+def test_load_sequences_drops_empty_readings_on_sheets_where_most_bands_came_out_empty(tmp_path):
+    m18 = importlib.import_module("src.18_scoresheets")
+    pa_cols = {"game_idx": 1, "team": "가", "number": 17, "inning": 2, "col": 2, "cat": "OUT", "ibb": False}
+    reads = {"bad": ["", "", "BS", "S", "SS"], "ok": ["", "BS", "S", "SS", "B", "BB"]}   # 5장 중 2장(40%) 비면 버림, 6장 중 1장은 둠
+    items = [{"id": f"{s}_{p}", "sheet": s, "pa": p, **pa_cols} for s, v in reads.items() for p in range(len(v))]
+    d = tmp_path / "seq" / "sr0001"; d.mkdir(parents=True)
+    (d / "items.json").write_text(json.dumps(items), encoding="utf-8")
+    (d / "first_pass.json").write_text(json.dumps({f"{s}_{p}": [x] for s, v in reads.items() for p, x in enumerate(v)}), encoding="utf-8")
+    _, read = m18.load_sequences(tmp_path / "seq", tmp_path)
+    assert {k for k in read if k[0] == "bad"} == {("bad", 2), ("bad", 3), ("bad", 4)}
+    assert ("ok", 0) in read and len([k for k in read if k[0] == "ok"]) == 6
+
+
 def test_apply_sequences_replaces_every_mark_of_the_pa_but_keeps_person_checked_pas_and_clears_pas_read_as_empty():
     cols = {"game_idx": 1, "team": "가", "number": 17, "inning": 1, "col": 1, "cat": "OUT", "ibb": False, "piece": 0, "k": 1}
     marks = pd.DataFrame([{**cols, "sheet": "s1", "pa": p, "idx": i, "ball": b, "read_by": rb, "ovf": o}

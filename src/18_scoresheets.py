@@ -429,6 +429,15 @@ def load_sequences(seq_dir: Path, sheet_dir: Path = SHEET_OUT) -> tuple[pd.DataF
         if f.exists():
             t = pd.read_parquet(f, columns=["pa", *ss.READ_PA_COLUMNS]).drop_duplicates("pa")
             info.update({(s, int(r["pa"])): {c: r[c] for c in ss.READ_PA_COLUMNS} for r in t.to_dict("records")})
+    # 칸 선을 잘못 잡은 장은 그림 띠가 비어 '표시 없음'이 몰린다 (2026-10-16: 1,473장 중 8장이 40% 이상, 그다음이 18%).
+    # 그런 장의 '표시 없음'만 버리고 그 타석은 원래 판독을 둔다.
+    empty = {k for k in seq if k in info and not info[k]["ibb"] and not [c for c in seq[k].upper() if c in "BS"]}
+    per = pd.Series([k[0] for k in seq if k in info and not info[k]["ibb"]]).value_counts()
+    bad = {s for s, n in per.items() if n >= 5 and sum(k[0] == s for k in empty) / n >= 0.3}
+    for k in [k for k in empty if k[0] in bad]:
+        del seq[k]
+    if bad:
+        log.info("칸 선을 잘못 잡은 장 %d장의 '표시 없음' 판독은 버림: %s", len(bad), sorted(bad))
     rows = []
     for key, v in seq.items():
         if key not in info:
