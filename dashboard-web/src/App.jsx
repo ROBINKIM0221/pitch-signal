@@ -12,6 +12,7 @@ import About from "./pages/About.jsx";
 const GROUPS = [
   // 고교 아랫단은 자료(연도·대회)별 — 주소 ?d= 로 고른다 (현황판 안의 탭을 올림)
   { key: "hs", label: "고교 야구", items: [
+    { to: "/", d: "korea_2026", label: "2026 전국 고교 시즌", file: "highschool.json" },
     { to: "/", d: "korea_2025", label: "2025 전국 고교 시즌", file: "highschool.json" },
     { to: "/", d: "tournament_2025", label: "2025 전국체전", file: "highschool.json" },
   ] },
@@ -19,7 +20,7 @@ const GROUPS = [
     { to: "/replay", label: "리플레이 · 경보 카드", file: "pitchers.json" },
     { to: "/bullpen", label: "팀 불펜 현황판", file: "teams.json" },
     { to: "/kbo", label: "KBO 영입 전 점검", file: "kbo_case.json" },
-    { to: "/watch", label: "시즌 감시 현황", file: "watchlist.json" },
+    { to: "/watch", label: "시즌 경보 현황", file: "watchlist.json" },
     { to: "/performance", label: "검증 결과표", file: "performance.json", hidden: true },
   ] },
   { key: "about", label: "소개", items: [{ to: "/about", label: "소개", file: null }] },
@@ -29,6 +30,7 @@ ROUTES.push({ to: "/highschool", label: "고교 투구수 현황판", file: "hig
 
 export default function App() {
   const { data: meta } = useJson("meta.json");
+  const { data: hsIndex } = useJson("highschool.json");          // 고교 아랫단은 실제로 있는 자료(연도·대회)만
   const location = useLocation();
   const current = ROUTES.find((m) => m.to === location.pathname) || ROUTES[0];
   const group = GROUPS.find((g) => g.key === current.group);
@@ -54,7 +56,7 @@ export default function App() {
         <div className="subbar-in">
           {group.key !== "about" && (
             <nav className="subnav" aria-label="화면">
-              {group.items.filter((m) => !m.hidden || m.to === current.to).map((m) => m.d ? (
+              {group.items.filter((m) => (!m.hidden || m.to === current.to) && (!m.d || !hsIndex || hsIndex.datasets?.some((d) => d.key === m.d))).map((m) => m.d ? (
                 <Link key={m.d} to={{ pathname: m.to, search: `?d=${m.d}` }} className={m.d === hsKey ? "active" : ""}>{m.label}</Link>
               ) : (
                 <NavLink key={m.to} to={m.to} end className={({ isActive }) => (isActive || m.to === current.to ? "active" : "")}>{m.label}</NavLink>
@@ -63,7 +65,7 @@ export default function App() {
           )}
           <span className="subbar-right">
             {synthetic && <span className="badge synthetic">가상 데이터</span>}
-            {group.key === "hs" && !synthetic && <span className="badge real">KBSA 기록실 2025 실제 기록</span>}
+            {group.key === "hs" && !synthetic && <span className="badge real">KBSA 기록실 실제 기록</span>}
             {group.key === "pro" && <span className="badge real">MLB Statcast · 트리플A 공개 기록</span>}
           </span>
         </div>

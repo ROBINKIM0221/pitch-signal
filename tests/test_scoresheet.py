@@ -226,6 +226,15 @@ def test_usual_flag_needs_enough_pitches_and_history():
     assert abs(f.loc[4, "usual"] - (21 + 20 + 22 + 30) / (60 * 3 + 35)) < 1e-9   # 평소 = 그 등판을 뺀 나머지 합
 
 
+def test_usual_flag_treats_the_same_number_in_another_season_as_another_pitcher():
+    # 2025 #17 네 등판(볼 35%)과 2026 #17 한 등판(60%) — 연도를 나누면 2026 등판은 비교할 등판이 없어 판정하지 않는다
+    o = pd.DataFrame({"team": ["가"] * 5, "number": [17] * 5, "game_idx": range(1, 6), "season": [2025] * 4 + [2026],
+                      "pitches": [60] * 5, "marks": [60] * 5, "balls": [21, 20, 22, 21, 36], "gate": [True] * 5})
+    o["ball_pct"] = o["balls"] / o["marks"]
+    f = ss.usual_flags(o, min_pitches=40, z=2.0).set_index("game_idx")
+    assert not bool(f.loc[5, "ball_flag"]) and np.isnan(f.loc[5, "usual"])
+    assert bool(ss.usual_flags(o.drop(columns="season"), min_pitches=40, z=2.0).set_index("game_idx").loc[5, "ball_flag"])
+
 def two_blob_stack():
     mk = np.zeros((40, 12), np.uint8)
     yy, xx = np.ogrid[:40, :12]

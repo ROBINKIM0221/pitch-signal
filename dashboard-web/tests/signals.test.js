@@ -61,5 +61,5 @@ test("direction words follow the sign of the standardized deviation for each fea
 
 test("form-change headline lists the two largest contributions with their direction", () => {
   const alert = { z: { velo: -1.2, rel_z: -1.8, arm_angle: 0.2 }, step: { velo: 1.0, rel_z: 3.0, arm_angle: 0.1 } };
-  assert.equal(changeHeadline(alert), "수직 릴리스 −1.8σ(평소보다 낮음), 구속 −1.2σ(평소보다 느림)");
+  assert.equal(changeHeadline(alert), "공 놓는 높이 −1.8σ(평소보다 낮음), 구속 −1.2σ(평소보다 느림)");
 });

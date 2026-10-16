@@ -7,7 +7,7 @@ const SCREENS = [
   { to: "/replay", name: "리플레이 · 경보 카드", text: "MLB 투수 시즌을 등판 단위로 되감아 경보가 언제, 왜 울렸는지와 검증 결과 요약" },
   { to: "/bullpen", name: "팀 불펜 현황판", text: "MLB 팀과 날짜를 고르면 불펜 투수마다 연투·최근 투구량 신호등과 품질 경보" },
   { to: "/kbo", name: "KBO 영입 전 점검", text: "2026 KBO 외국인 투수의 MLB·트리플A 지난 시즌에서 달라진 흐름과 IL 이력" },
-  { to: "/watch", name: "시즌 감시 현황", text: "고른 날짜까지 4주 안에 경보가 울린 MLB 투수와 그 뒤 팔 부상 IL" },
+  { to: "/watch", name: "시즌 경보 현황", text: "고른 날짜까지 4주 안에 경보가 울린 MLB 투수와 그 뒤 팔 부상 IL" },
 ];
 
 export default function About() {

@@ -54,7 +54,7 @@ def parse_games(game_ids: list[int]) -> pd.DataFrame:
 
 def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, dict[str, str]]:
     """시즌 모드(전국): 경기 목록(games_csv)의 모든 경기와 대회 이름, 팀 → 권역(주말리그 참가 리그 기준, 없으면 '기타')."""
-    games = pd.read_csv(ROOT / cfg["games_csv"], encoding="utf-8-sig")
+    games = pd.read_csv(ROOT / d.get("games_csv", cfg["games_csv"]), encoding="utf-8-sig")      # 데이터셋마다 경기 목록 (2026-10-16 연도 추가)
     region_of: dict[str, str] = {}
     for region, leagues in d["region_leagues"].items():
         for team in set(games.loc[games["lig_idx"].isin(leagues), ["team1", "team2"]].stack()):

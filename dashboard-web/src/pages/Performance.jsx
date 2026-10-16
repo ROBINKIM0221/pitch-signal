@@ -102,7 +102,7 @@ export default function Performance() {
       {followup.length > 0 && (
         <div className="card">
           <h2>경보가 울린 뒤 실제로 어떻게 됐나 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 사후 지표 (사전 등록 아님)</span></h2>
-          <p className="caption">구속 하락 경보가 울린 등판 뒤 30일 안에 그 투수가 팔꿈치·어깨 부상으로 IL에 오른 비율과, 경보가 없던 등판의 같은 비율입니다. 모든 감시 등판(사례·대조군 아닌 투수 포함)을 셉니다.</p>
+          <p className="caption">구속 하락 경보가 울린 등판 뒤 30일 안에 그 투수가 팔꿈치·어깨 부상으로 IL에 오른 비율과, 경보가 없던 등판의 같은 비율입니다. 분석한 모든 등판(사례·대조군 아닌 투수 포함)을 셉니다.</p>
           <div className="kpi">
             {followup.map((f) => (
               <div key={f.split}>
@@ -142,7 +142,7 @@ export function ValidationSummary() {
             {" "}미리 정한 주 지표(일치도: 부상 투수의 경보 지수가 짝지은 부상 없는 투수보다 클 확률)로 둘을 구별한 방법은 구속 하락 신호뿐이었습니다({fmt.num(velo?.concordance, 2)}, 95% 구간 하한 {fmt.num(velo?.concordance_lo, 2)}). 기존 방법(WHIP 관리도, 다변량 거리, 양방향 구속)은 구간이 0.5를 포함했습니다.</li>
           <li><b>경보가 울린 뒤 30일 안에 팔 부상으로 IL에 오른 비율은 {fmt.pct(100 * (val?.alarm_rate ?? 0))}로, 경보 없는 등판({fmt.pct(100 * (val?.other_rate ?? 0))})의 {fmt.num(val?.lift, 1)}배입니다.</b>
             {sealed && ` 봉인해 둔 2026 시즌에서도 ${fmt.num(sealed.lift, 1)}배였습니다.`} 그래도 열 번 중 아홉 번은 부상으로 이어지지 않으므로, 경보는 점검을 시작할 때이지 부상 판정이 아닙니다.</li>
-          <li><b>한계도 그대로 밝힙니다.</b> 흔히 쓰는 '구속 1mph 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
+          <li><b>한계도 그대로 밝힙니다.</b> 흔히 쓰는 '구속 1mph(1.6km/h) 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
             {" "}폼 변화 신호(일치도 {fmt.num(form?.concordance, 2)})는 부상 전조로 확인되지 않아 '무엇이 달라졌나' 설명용으로만 씁니다.
             {sealedH1 && ` 2026 봉인 시즌에서는 구속 하락 신호의 순위 비교(일치도 ${fmt.num(sealedH1.value, 2)})가 재현되지 않았습니다.`}</li>
         </ol>

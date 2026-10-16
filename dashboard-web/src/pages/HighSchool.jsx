@@ -248,8 +248,8 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
   const ruleCounts = Object.entries(totals.violations_by_rule).filter(([k]) => k !== "unknown").map(([k, v]) => `${RULE_NAME[k] || k} ${v}`).join(" · ");
   return (
     <div className="page">
-      <h1>2025 전국 고교 투구수 현황판</h1>
-      <p className="lead">2025년 전국 고교 공식 경기 {dataset.games}경기의 투구 수로, 투수마다 KBSA 투구수 규정을 지켰는지와 규정이 보지 못하는 누적 부하를 봅니다.</p>
+      <h1>{dataset.season} 전국 고교 투구수 현황판</h1>
+      <p className="lead">{dataset.season}년 전국 고교 공식 경기 {dataset.games}경기의 투구 수로, 투수마다 KBSA 투구수 규정을 지켰는지와 규정이 보지 못하는 누적 부하를 봅니다.</p>
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>규정</b>: 하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 지켰는지.<br />
@@ -483,7 +483,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
   const chart = days.map((d) => { const g = p?.games.find((x) => x.date === d); return { date: d, pitches: g ? g.pitches : null, unknown: g && g.pitches == null ? kbsa.daily_max : null, cum: g ? g.cum_pitches : null }; });
   return (
     <div className="page">
-      <h1>2025 전국체전 투구수 현황판</h1>
+      <h1>{ds.short} 투구수 현황판</h1>
       <p className="lead">{ds.name}({ds.dates}, 15개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
       <div className="kpi">
         <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반</div></div>

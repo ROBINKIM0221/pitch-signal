@@ -29,7 +29,7 @@ export function recompute(outings, limits, multiplier = 1) {
 
 // 경보 카드의 특징 이름(src/common/myt.py LABELS와 같게)과 방향 글. 폼 변화 지수는 평소보다 높아져도 낮아져도 커지므로(방향을 가리지 않음)
 // 어느 쪽으로 달라졌는지는 카드에 글로 따로 적는다 (2026-10-08 사용자 결정: 계산은 그대로, 방향만 글로).
-const LABEL = { velo: "구속", rel_z: "수직 릴리스", arm_angle: "팔 각도" };
+const LABEL = { velo: "구속", rel_z: "공 놓는 높이", arm_angle: "팔 각도" };
 const DIRECTION = { velo: ["평소보다 빠름", "평소보다 느림"], rel_z: ["평소보다 높음", "평소보다 낮음"], arm_angle: ["팔이 평소보다 올라감", "팔이 평소보다 내려감"] };
 
 /** 표준화 이탈 z(σ)의 방향 글. |z| < near 이면 '평소 수준'. */

@@ -508,11 +508,12 @@ def apply_sequences(marks: pd.DataFrame, seqs: pd.DataFrame, read: set) -> pd.Da
 def usual_flags(o: pd.DataFrame, min_pitches: int = 40, z: float = 2.0, min_history: int = 3) -> pd.DataFrame:
     """'평소보다 볼이 많았던 등판': 검산 통과한 등판 중 투구 수 min_pitches 이상만 판정.
     평소 = 같은 투수의 다른 검산 통과 등판들의 볼 합 ÷ 공식 투구 합 (그 등판은 뺀다, 다른 등판 min_history개 이상).
-    (볼 비율 − 평소) ÷ √(평소(1−평소)/공식 투구 수) ≥ z 이면 표시. 원인은 해석하지 않는다."""
+    (볼 비율 − 평소) ÷ √(평소(1−평소)/공식 투구 수) ≥ z 이면 표시. 원인은 해석하지 않는다. season 열이 있으면 연도별로 따로 본다."""
     o = o.copy()
     o["usual"] = np.nan; o["z_ball"] = np.nan; o["ball_flag"] = False
     ok = o["gate"].astype(bool)
-    for _, g in o[ok].groupby(["team", "number"]):
+    who = ["season", "team", "number"] if "season" in o else ["team", "number"]   # 연도가 다르면 같은 등번호도 다른 투수로 본다 (2026-10-16)
+    for _, g in o[ok].groupby(who):
         tb, tp = g["balls"].sum(), g["pitches"].sum()
         for i, r in g.iterrows():
             if len(g) - 1 < min_history:

@@ -74,9 +74,9 @@ def select_pilot(cfg: dict) -> pd.DataFrame:
     return pick[["game_idx", "date", "league", "lig_idx", "team1", "team2", "seqs"]]
 
 
-def list_all(cfg: dict) -> pd.DataFrame:
-    """경기 기록 페이지에 기록지 사진 링크가 있는 2025 경기 전부."""
-    games = pd.read_csv(ROOT / cfg["games_csv"], encoding="utf-8-sig")
+def list_all(cfg: dict, games_csv: str | None = None) -> pd.DataFrame:
+    """경기 기록 페이지에 기록지 사진 링크가 있는 경기 전부 (기본 2025, games_csv를 주면 그 연도 — 2026-10-16)."""
+    games = pd.read_csv(ROOT / (games_csv or cfg["games_csv"]), encoding="utf-8-sig")
     games["seqs"] = games["game_idx"].map(sheet_links)
     games = games[games["seqs"].map(len) > 0].copy()
     log.info("기록지가 있는 경기 %d개 · 기록지 %d장", len(games), games["seqs"].map(len).sum())
@@ -203,11 +203,17 @@ INPLAY = {"OUT", "H", "HR", "E", "FC", "SAC"}
 
 
 def game_split(cfg: dict) -> dict:
-    """경기 → 'pilot'/'label'/'test'. 시험용(test) 경기는 어떤 모형 학습·보정에도 쓰지 않는다 (2026-10-08)."""
+    """경기 → 'pilot'/'label'/'test' (2025), 다른 연도 시즌 데이터셋의 경기는 'y<연도>'.
+    시험용(test)과 다른 연도 경기는 어떤 모형 학습·보정에도 쓰지 않는다 (2026-10-08, 연도 추가 2026-10-16)."""
     sc = cfg["scoresheets"]
     games = pd.read_csv(PROCESSED / "scoresheet_all.csv", encoding="utf-8-sig")["game_idx"]
     pilot = set(pd.read_csv(PROCESSED / "scoresheet_pilot.csv", encoding="utf-8-sig")["game_idx"]) | set(sc.get("dev_games", []))
-    return ss.holdout_split(games, pilot, seed=sc["holdout_seed"])
+    split = ss.holdout_split(games, pilot, seed=sc["holdout_seed"])
+    for d in cfg["datasets"].values():
+        if d.get("games_csv") and d["games_csv"] != cfg["games_csv"]:
+            for g in pd.read_csv(ROOT / d["games_csv"], encoding="utf-8-sig")["game_idx"]:
+                split.setdefault(int(g), f"y{d['season']}")
+    return split
 
 
 def _blobs(df: pd.DataFrame) -> list[dict]:
@@ -488,7 +494,9 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     marks = pd.concat([marks, fill], ignore_index=True)
     off = official_pitchers(sorted(marks["game_idx"].unique()))
     off = off.merge(marks[["game_idx", "team"]].drop_duplicates(), on=["game_idx", "team"])   # 기록지를 읽은 (경기, 던진 팀)만
-    o = ss.usual_flags(ss.outing_table(marks, off, tol=sc["gate_tol"]), min_pitches=sc["judge_min_pitches"], z=sc["flag_z"],
+    split = game_split(cfg)
+    season = lambda t: t.assign(season=[int(str(split.get(int(g), "y2025"))[1:]) if str(split.get(int(g), "")).startswith("y") else 2025 for g in t["game_idx"]])
+    o = ss.usual_flags(season(ss.outing_table(marks, off, tol=sc["gate_tol"])), min_pitches=sc["judge_min_pitches"], z=sc["flag_z"],
                        min_history=sc["flag_min_history"])
     o = o.merge(off[["game_idx", "team", "number", "batters", "bb_hbp"]], on=["game_idx", "team", "number"], how="left")
     raw = ss.outing_table(marks[~marks["filled"]], off, tol=sc["gate_tol"])[["game_idx", "team", "number", "marks", "balls", "gate", "ball_pct"]]
@@ -619,7 +627,7 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         bd = sr.boundaries(ctx["by_col"], ctx["official"], ctx["last"])
         res = sr.decode(row, total, ctx["last"], proba, counts, lam, anchors=dict(bd), lower=ctx["lower"])
         part = split.get(int(m.game_idx))
-        if part == "test":                                       # 정직한 평가: 고정점 없이
+        if part == "test" or str(part).startswith("y"):           # 정직한 평가: 고정점 없이 (2025 시험용 · 다른 연도)
             free = sr.decode(row, total, ctx["last"], proba, counts, lam, lower=ctx["lower"])
             cums = np.cumsum(free["inns"]) if free else None
             evals += [dict(split=part, err=None if cums is None else int(cums[c - 1]) - t, fixed=None if free is None else free["fixed"]) for c, t in bd]
@@ -634,7 +642,8 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
             for r in sr.outing_innings(number, official, T, ctx["by_inning"], mk, tol):
                 inn_rows.append(dict(game_idx=int(m.game_idx), team=ctx["team"], number=int(number), **r))
     cols, inns = pd.DataFrame(col_rows), pd.DataFrame(inn_rows)
-    e = pd.DataFrame(evals)
+    e_all = pd.DataFrame(evals)
+    e = e_all[e_all["split"] == "test"] if len(e_all) else e_all
     outs = inns.groupby(["game_idx", "team", "number"]).size() if len(inns) else pd.Series(dtype=int)
     s = pd.DataFrame([{
         "기록지(풀림)": int(cols["sheet"].nunique()) if len(cols) else 0,
@@ -643,6 +652,9 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
         "시험용 교체 경계(고정점 없이)": int(len(e)),
         "누적 = 공식": round(float((e["err"] == 0).mean()), 3) if len(e) else np.nan,
         "±2 이내": round(float((e["err"].abs() <= 2).mean()), 3) if len(e) else np.nan}])
+    for part, g in (e_all.groupby("split") if len(e_all) else []):                 # 다른 연도: 따로 (학습에 안 쓴 연도)
+        if part != "test":
+            s[f"{part[1:]} 교체 경계 누적 = 공식"] = round(float((g["err"] == 0).mean()), 3)
     return cols, inns, s
 
 
@@ -651,11 +663,15 @@ def summary(o: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     sc = cfg["scoresheets"]
     split = game_split(cfg)
     o = o.assign(split=o["game_idx"].map(split))
-    ev = pa_events(sorted(o.loc[o["split"] == "test", "game_idx"].unique()))
+    ev = pa_events(sorted(o.loc[(o["split"] == "test") | o["split"].astype(str).str.startswith("y"), "game_idx"].unique()))
     o = o.merge(ev, on=["game_idx", "team", "number"], how="left")
     rows = []
-    for name, part in [("시범 31경기", o[o["split"] == "pilot"]), ("2차 학습용 경기", o[o["split"] == "label"]),
-                       ("시험용 경기 (학습·보정에 안 씀)", o[o["split"] == "test"]), ("전체", o)]:
+    years = sorted(x for x in o["split"].dropna().unique() if str(x).startswith("y"))
+    base = o[~o["split"].astype(str).str.startswith("y")]
+    groups = [("시범 31경기", o[o["split"] == "pilot"]), ("2차 학습용 경기", o[o["split"] == "label"]),
+              ("시험용 경기 (학습·보정에 안 씀)", o[o["split"] == "test"]), ("전체" if not years else "2025 전체", base)]
+    groups += [(f"{y[1:]} 시즌 (학습·보정에 안 씀)", o[o["split"] == y]) for y in years]
+    for name, part in groups:
         big = part[part["pitches"] >= sc["judge_min_pitches"]]
         ok = big[big["gate"]]
         r = spearmanr(ok["ball_pct"], ok["bb_hbp"] / ok["batters"]) if len(ok) > 5 else (np.nan, np.nan)
@@ -681,6 +697,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("step", choices=["select", "list", "read", "train-count", "train", "score", "rows", "train-digits", "innings"])
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--games", help="list: 이 경기 목록(csv)의 기록지 (기본 2025)")
+    ap.add_argument("--out", help="list: 저장 파일 이름 (data/processed 안)")
     a = ap.parse_args()
     cfg = load_cfg()
     if a.step == "select":
@@ -688,8 +706,8 @@ def main() -> None:
         select_pilot(cfg).to_csv(out, index=False, encoding="utf-8-sig")
         log.info("→ %s", out)
     if a.step == "list":
-        out = PROCESSED / "scoresheet_all.csv"
-        list_all(cfg).to_csv(out, index=False, encoding="utf-8-sig")
+        out = PROCESSED / (a.out or "scoresheet_all.csv")
+        list_all(cfg, a.games).to_csv(out, index=False, encoding="utf-8-sig")
         log.info("→ %s", out)
     if a.step == "read":
         read_all(cfg, a.workers)

@@ -33,7 +33,7 @@ export default function Watch() {
   const setDate = (d) => d && setParams({ d }, { replace: true });
   return (
     <div className="page">
-      <h1>{data.season} 시즌 감시 현황</h1>
+      <h1>{data.season} 시즌 경보 현황</h1>
       <p className="lead">구단 분석 파트가 등판 다음 날 아침에 보는 화면입니다. 고른 날짜까지 최근 {data.weeks}주 안에 경보가 울린 MLB 투수와, 그 뒤 팔 부상 IL에 올랐는지를 보여 줍니다.</p>
       <div className="toolbar">
         <label><span>기준일</span>
@@ -47,7 +47,7 @@ export default function Watch() {
         <div><div className="v">{rows.length}<span className="sub"> 명</span></div><div className="l">최근 {data.weeks}주 경보가 울린 투수</div></div>
         <div><div className="v">{withIl}<span className="sub"> 명</span></div><div className="l">그 뒤 팔 부상 IL에 오른 투수</div></div>
         <div><div className="v">{t.velo}<span className="sub"> / {t.change}</span></div><div className="l">시즌 전체 경보 · 구속 하락 / 폼 변화</div></div>
-        <div><div className="v">{t.pitcher_seasons.toLocaleString()}<span className="sub"> 명</span></div><div className="l">시즌 감시 투수</div></div>
+        <div><div className="v">{t.pitcher_seasons.toLocaleString()}<span className="sub"> 명</span></div><div className="l">시즌에 분석한 투수</div></div>
       </div>
       <div className="card">
         <div className="card-head">

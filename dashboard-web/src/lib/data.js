@@ -39,7 +39,12 @@ export const fmt = {
 
 export const ROLE = { SP: "선발", RP: "불펜" };
 export const PART = { elbow: "팔꿈치", shoulder: "어깨" };
-export const FEATURE = { velo: "평균 구속 (mph)", rel_z: "수직 릴리스 높이 (ft)", arm_angle: "팔 각도 (도)" };
+export const FEATURE = { velo: "평균 구속 (km/h)", rel_z: "공 놓는 높이 (cm)", arm_angle: "팔 각도 (도)" };
+// MLB 자료는 mph — 화면에는 km/h로 보이고 mph는 괄호로 (2026-10-16 외부 검토: "야구빠 아니면 바로 계산 안 됨")
+export const KMH = 1.609344;
+export const kmhText = (mph, d = 1) => (mph == null || Number.isNaN(mph) ? "—" : `${(mph * KMH).toFixed(d)} km/h (${Number(mph).toFixed(d)} mph)`);
+/** 지수(1 넘으면 경보)를 말로 */
+export const indexWord = (v) => (v == null ? "" : v >= 1 ? "경보" : v >= 0.7 ? "경보 기준에 가까움" : v >= 0.3 ? "평소와 조금 다름" : "평소 그대로");
 export const FEATURE_HELP = {
   velo: "그 등판에서 던진 주력 패스트볼의 평균 구속. 최고 구속이 아닙니다 (최고 구속은 부상 전 변화가 없어 쓰지 않습니다).",
   rel_z: "공을 놓는 높이의 등판 평균 (구장 보정 뒤).",

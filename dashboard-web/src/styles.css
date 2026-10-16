@@ -328,3 +328,18 @@ ol.findings b { color: var(--ink); }
 .menu-grid a:hover { background: var(--navy-bg); }
 ul.plain { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
 ul.plain b { color: var(--ink); }
+
+/* 리플레이 '이 화면 읽는 법' (2026-10-16) */
+.guide { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--navy); margin-bottom: 16px; }
+.guide > div { padding: 12px 16px; border-right: 1px solid var(--line); }
+.guide > div:last-child { border-right: 0; }
+.guide b { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--navy); }
+.guide b i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.guide p { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); }
+.guide .lv { display: inline-block; padding: 0 6px; border-radius: 3px; font-weight: 700; font-size: 12px; }
+.guide .lv.ok { background: var(--ok-bg); color: #1d6b41; }
+.guide .lv.mid { background: var(--base-bg); color: var(--ink-2); }
+.guide .lv.near { background: var(--warn-bg); color: #8a4d12; }
+.guide .lv.al { background: var(--alarm-bg); color: #9b2a25; }
+@media (max-width: 1000px) { .guide { grid-template-columns: repeat(2, minmax(0, 1fr)); } .guide > div:nth-child(2n) { border-right: 0; } .guide > div:nth-child(n+3) { border-top: 1px solid var(--line); } }
+@media (max-width: 600px) { .guide { grid-template-columns: minmax(0, 1fr); } .guide > div { border-right: 0; border-top: 1px solid var(--line); } .guide > div:first-child { border-top: 0; } }

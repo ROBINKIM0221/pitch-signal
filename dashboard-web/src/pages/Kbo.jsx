@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
-import { PITCH_NAME, ROLE, fmt, useJson } from "../lib/data.js";
+import { PITCH_NAME, ROLE, fmt, useJson, KMH, kmhText, indexWord } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK } from "../lib/chart.jsx";
 import { analyze, parseInput } from "../lib/engine.js";
 import { AlertCard, MultiplierControl, Pitcher } from "./Replay.jsx";
@@ -36,7 +36,7 @@ function AlarmDot({ cx, cy, payload }) {
 
 // 여러 시즌의 등판 구속을 한 줄로: 시즌 사이는 끊고, 리그별 색, 경보 점, IL 세로선
 function CareerChart({ pitcher }) {
-  const rows = pitcher.timeline.map((t, i) => ({ ...t, i: i + 1, [`velo_${t.league}_${t.season}`]: t.velo, alarm_y: t.alarm ? t.velo : null }));   // 경보 점은 별도 data 없이 열로 (툴팁이 모든 등판에 뜨게)
+  const rows = pitcher.timeline.map((t, i) => ({ ...t, i: i + 1, [`velo_${t.league}_${t.season}`]: t.velo * KMH, alarm_y: t.alarm ? t.velo * KMH : null }));   // km/h로 그림   // 경보 점은 별도 data 없이 열로 (툴팁이 모든 등판에 뜨게)
   const seriesKeys = [...new Set(pitcher.timeline.map((t) => `velo_${t.league}_${t.season}`))];
   const starts = [];
   pitcher.timeline.forEach((t, i) => { if (i === 0 || t.season !== pitcher.timeline[i - 1].season || t.league !== pitcher.timeline[i - 1].league) starts.push({ i: i + 1, label: `${t.league} ${t.season}` }); });
@@ -48,7 +48,7 @@ function CareerChart({ pitcher }) {
         <CartesianGrid vertical={false} stroke={GRID} />
         <XAxis dataKey="i" type="number" domain={[0.5, rows.length + 0.5]} ticks={starts.map((s) => s.i)} tickFormatter={(i) => starts.find((s) => s.i === i)?.label ?? ""} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
         <YAxis domain={["auto", "auto"]} allowDecimals={false} tickFormatter={(v) => v.toFixed(0)} tick={TICK} width={34} axisLine={false} tickLine={false} />
-        <Tooltip content={<ChartTip render={(payload, label) => { const r = rows[Math.round(label) - 1]; return r ? <><div><b>{r.date}</b> · {r.league} {r.season} · {r.phase === "baseline" ? "시작 구간" : "감시"}</div><div>평균 구속 {fmt.num(r.velo, 1)} mph{r.velo_index != null && <> · 구속 하락 지수 {fmt.num(r.velo_index)}</>}{r.alarm && <span className="alarm"> · 경보</span>}</div></> : null; }} />} cursor={{ stroke: "var(--line-2)" }} />
+        <Tooltip content={<ChartTip render={(payload, label) => { const r = rows[Math.round(label) - 1]; return r ? <><div><b>{r.date}</b> · {r.league} {r.season} · {r.phase === "baseline" ? "평소를 배우는 중" : "분석"}</div><div>평균 구속 {kmhText(r.velo)}{r.velo_index != null && <> · 구속 하락 지수 {fmt.num(r.velo_index)} → {indexWord(r.velo_index)}</>}{r.alarm && <span className="alarm"> · 경보</span>}</div></> : null; }} />} cursor={{ stroke: "var(--line-2)" }} />
         {starts.slice(1).map((s) => <ReferenceLine key={s.i} x={s.i - 0.5} stroke="var(--line-2)" />)}
         {ilMarks.map((il) => <ReferenceLine key={il.date} x={il.i} stroke={ARM.has(il.part) ? "var(--alarm)" : "var(--base)"} strokeWidth={1.2} strokeDasharray={ARM.has(il.part) ? undefined : "4 3"} label={{ value: `IL ${fmt.date(il.date)} ${PART[il.part] || il.part}`, position: "insideTopLeft", ...LABEL, fill: ARM.has(il.part) ? "var(--alarm)" : "var(--muted)" }} />)}
         {seriesKeys.map((k) => <Line key={k} type="monotone" dataKey={k} stroke={LEAGUE_COLOR[k.split("_")[1]]} strokeWidth={1.6} dot={{ r: 2, strokeWidth: 0, fill: LEAGUE_COLOR[k.split("_")[1]] }} connectNulls={false} isAnimationActive={false} />)}
@@ -79,16 +79,16 @@ function ScoutCard({ p }) {
           <CareerChart pitcher={p} />
           <div className="tbl-wrap" style={{ marginTop: 6 }}>
             <table className="tbl">
-              <thead><tr><th>시즌</th><th>역할 · 주력</th><th className="num">등판 / 감시</th><th className="num">시작 구간 구속</th><th className="num">마지막 5등판</th><th className="num">변화</th><th className="num">경보 (구속/폼)</th><th>IL 등재</th><th></th></tr></thead>
+              <thead><tr><th>시즌</th><th>역할 · 주력</th><th className="num">등판 / 분석</th><th className="num">시즌 초 구속 (km/h)</th><th className="num">마지막 5등판</th><th className="num">변화</th><th className="num">경보 (구속/폼)</th><th>IL 등재</th><th></th></tr></thead>
               <tbody>
                 {p.seasons.map((s) => (
                   <tr key={`${s.league}${s.season}`}>
                     <td><span className="pill" style={{ margin: 0 }}><span className="dot" style={{ background: LEAGUE_COLOR[s.league] }} />{s.league} {s.season}</span></td>
                     <td>{ROLE[s.role]} · {PITCH_NAME[s.fb] || s.fb || "—"}</td>
                     <td className="num">{s.outings} / {s.monitored}{s.monitored === 0 && <span style={{ color: "var(--muted)" }}> (시작 구간 못 채움)</span>}</td>
-                    <td className="num">{fmt.num(s.velo_start, 1)}</td>
-                    <td className="num">{fmt.num(s.velo_last5, 1)}</td>
-                    <td className="num" style={{ color: s.velo_change != null && s.velo_change <= -1 ? "var(--alarm)" : "inherit" }}>{s.velo_change == null ? "—" : `${s.velo_change > 0 ? "+" : ""}${fmt.num(s.velo_change, 1)}`}</td>
+                    <td className="num" title={s.velo_start != null ? `${fmt.num(s.velo_start, 1)} mph` : undefined}>{s.velo_start == null ? "—" : fmt.num(s.velo_start * KMH, 1)}</td>
+                    <td className="num" title={s.velo_last5 != null ? `${fmt.num(s.velo_last5, 1)} mph` : undefined}>{s.velo_last5 == null ? "—" : fmt.num(s.velo_last5 * KMH, 1)}</td>
+                    <td className="num" style={{ color: s.velo_change != null && s.velo_change <= -1 ? "var(--alarm)" : "inherit" }}>{s.velo_change == null ? "—" : `${s.velo_change > 0 ? "+" : ""}${fmt.num(s.velo_change * KMH, 1)}`}</td>
                     <td className="num">{s.alarms_velo} / {s.alarms_change}</td>
                     <td>{s.il ? <span className={`light ${ARM.has(s.il.part) ? "alarm" : "base"}`} title={s.il.reason || undefined}>{fmt.date(s.il.date)} {PART[s.il.part] || s.il.part}{s.il.count > 1 && ` · ${s.il.count}회`}</span> : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
                     <td>{s.replay && <Link to={`/replay?p=${s.replay}`}>리플레이 →</Link>}</td>
@@ -209,7 +209,7 @@ export default function Kbo() {
         {result && (
           <>
             <div className="toolbar"><MultiplierControl value={mult} onChange={setMult} /></div>
-            <p className="caption">등판 {result.data.outings.length}개 중 시작 구간 {result.nStart}개, 감시 {result.monitored}개 · 경보 {result.alerts.length}건. 시작 구간은 {role === "SP" ? "선발 첫 8등판" : "불펜 첫 15등판과 직구 120구 중 늦은 시점"}입니다.{mult !== 1 && ` 한계 배수 ${mult.toFixed(2)} (설계점 1.0이 아닌 조정값).`}</p>
+            <p className="caption">등판 {result.data.outings.length}개 중 시작 구간 {result.nStart}개, 분석 {result.monitored}개 · 경보 {result.alerts.length}건. 시작 구간은 {role === "SP" ? "선발 첫 8등판" : "불펜 첫 15등판과 직구 120구 중 늦은 시점"}입니다.{mult !== 1 && ` 한계 배수 ${mult.toFixed(2)} (설계점 1.0이 아닌 조정값).`}</p>
             <Pitcher data={result.data} shown={result.data.outings.length} alerts={result.alerts} setPicked={setPicked} features={["velo"]} signals={["velo"]} unit={unit} />
           </>
         )}

@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Area, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { FEATURE, FEATURE_HELP, PART, PITCH_NAME, ROLE, fmt, useJson } from "../lib/data.js";
+import { FEATURE, FEATURE_HELP, KMH, PART, PITCH_NAME, ROLE, fmt, indexWord, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK, TIP_STYLE } from "../lib/chart.jsx";
 import { changeHeadline, direction, recompute, syntheticAlert } from "../lib/signals.js";
 
@@ -13,20 +13,25 @@ const GROUP_NAME = { case: "사례", control: "대조군", other: "그 밖의 �
 const SEASON_OPTIONS = ["all", 2026, 2025, 2024, 2023, 2022, 2021];
 const KIND = { all: "전체", case: "사례(팔 부상 IL)", alarm: "경보가 있던 투수", control: "대조군" };
 
-function splitTail(p) {
-  if (p.league === "AAA" || p.split === "aaa") return " · 트리플A(구장 보정 없음 · 참고용)";
-  if (p.split === "dev" || p.season <= 2023) return " · 개발셋(한계를 맞춘 시즌)";
-  if (p.split === "sealed" || p.season >= 2026) return " · 봉인 2026(계획 고정 뒤 1회 평가)";
-  return "";
-}
-
+// 투수 이름 옆 한 줄 (2026-10-16 외부 검토: 전문 용어를 풀어 씀)
 function who(p) {
   if (p.manual) return "직접 입력 · 간이 분석(참고용)";
-  if (p.league === "AAA" || p.split === "aaa") return "트리플A · 구장 보정 없음 · MLB 한계값 차용 (참고용) · IL 기록은 MLB만 수집";
-  const tail = splitTail(p);
-  if (p.group === "case") return `사례 · ${PART[p.part]} · IL ${p.il_date}${p.detected ? " · 신호 있음" : " · 신호 없음"}${tail}`;
-  if (p.group === "control") return `대조군 · 짝지은 사례의 IL 등재일 ${p.il_date}${tail}`;
-  return (p.il_date ? `팔 부상 IL ${p.il_date} (사례 기준 미충족)` : "팔 부상 IL 없음") + tail;
+  if (p.league === "AAA" || p.split === "aaa") return "트리플A 기록 · 참고용";
+  if (p.group === "case") return `팔 부상(${PART[p.part]})으로 ${fmt.date(p.il_date)} IL 등재 · ${p.detected ? "직전에 경보가 울림" : "직전에 경보 없음"}`;
+  if (p.group === "control") return `비교용 투수(그 시즌 팔 부상 없음) · 짝지은 부상 투수의 IL 날짜 ${fmt.date(p.il_date)}`;
+  return p.il_date ? `팔 부상 IL ${fmt.date(p.il_date)}` : "팔 부상 IL 없음";
+}
+
+/** '이 화면 읽는 법' — 지수 숫자가 무슨 뜻인지 (2026-10-16 외부 검토: "1.07이면 뭔지, 0.61이면 뭔 상태인지") */
+function ReadingGuide() {
+  return (
+    <div className="guide">
+      <div><b>신호 지수 읽는 법</b><p><span className="lv ok">0 근처</span> 평소 그대로 · <span className="lv mid">0.3~0.7</span> 평소와 조금 다름 · <span className="lv near">0.7~1</span> 경보에 가까움 · <span className="lv al">1 이상</span> 경보 — 한번 점검해 볼 때. 경보가 울리면 0에서 다시 셉니다.</p></div>
+      <div><b><i style={{ background: "var(--velo)" }} />구속 하락 지수</b><p>시즌 초 등판으로 배운 '평소 구속'보다 느린 등판이 이어질수록 올라갑니다. 한 번 느린 것보다 여러 번 이어질 때 크게 오릅니다. 구속이 빨라지는 쪽은 세지 않습니다.</p></div>
+      <div><b><i style={{ background: "var(--change)" }} />폼 변화 지수</b><p>구속·공 놓는 높이·팔 각도 세 가지가 평소와 함께 달라질수록 올라갑니다. 높아져도 낮아져도 오르며, 부상과의 관계는 확인되지 않아 '무엇이 달라졌나' 설명용입니다.</p></div>
+      <div><b>아래 세 그래프</b><p>검은 선이 그 등판 값, 파란 띠가 그 투수의 평소 범위입니다. 선이 띠 밖으로 나간 등판이 평소와 다른 등판입니다. 마우스를 올리면 숫자와 해석이 나옵니다.</p></div>
+    </div>
+  );
 }
 
 function AlarmDot({ cx, cy, payload, onPick }) {
@@ -177,6 +182,7 @@ export default function Replay() {
       {mult !== 1 && <p className="notice">한계 배수 <b>{mult.toFixed(2)}</b> — 고정한 평가 계획의 설계점(1.0, 정상 상태 100등판에 1회)이 아닌 <b>사후 조정</b>입니다. 모든 한계(구속 k, 폼 T²·h)에 같은 배수를 곱했습니다.
         {farAt(perf, mult) && <> 검증셋 대조군 기준 오경보는 100등판당 구속 하락 신호 약 <b>{farAt(perf, mult).velo}</b>회, 폼 변화 신호 약 <b>{farAt(perf, mult).change}</b>회입니다(운영 곡선에서 보간).</>}
         {" "}이 배수에서 새로 생긴 경보의 카드는 원인 분해 없이 표준화 이탈만 보여 줍니다.</p>}
+      <ReadingGuide />
       {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} setPicked={setPicked} multiplier={mult} />}
       {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} setPicked={setPicked} compact multiplier={mult} />}
       {picked && <AlertCard alert={picked} onClose={() => setPicked(null)} />}
@@ -188,9 +194,16 @@ export default function Replay() {
 export function Pitcher({ data, shown, alerts, setPicked, compact, features = Object.keys(FEATURE), signals = ["velo", "change"], unit = "mph", multiplier = 1 }) {
   const n = data.outings.length;
   // 한계 배수가 1이 아니면 내보낸 표준화 오차로 신호를 다시 계산한다 (배수 1이면 내보낸 값 그대로)
-  const source = multiplier === 1 || !data.limits?.velo_k ? data.outings : recompute(data.outings, data.limits, multiplier);
+  const base = multiplier === 1 || !data.limits?.velo_k ? data.outings : recompute(data.outings, data.limits, multiplier);
+  // mph 자료는 km/h로 바꿔 그린다 (원래 mph는 mph 열에 남겨 툴팁에 괄호로)
+  const K = unit === "mph" ? KMH : 1;
+  const shownUnit = unit === "mph" ? "km/h" : unit;
+  const CM = 30.48;                                                    // 공 놓는 높이 ft → cm
+  const source = base.map((o) => ({ ...o, mph: K === 1 ? undefined : o.velo, velo: o.velo == null ? null : o.velo * K, rel_z: o.rel_z == null ? null : o.rel_z * CM,
+    exp: o.exp ? { ...o.exp, velo: o.exp.velo * K, rel_z: o.exp.rel_z == null ? null : o.exp.rel_z * CM } : o.exp,
+    sd: o.sd ? { ...o.sd, velo: o.sd.velo * K, rel_z: o.sd.rel_z == null ? null : o.sd.rel_z * CM } : o.sd }));
   const withChange = signals.includes("change");
-  const featureName = (f) => (f === "velo" && unit !== "mph" ? FEATURE[f].replace("mph", unit) : FEATURE[f]);
+  const featureName = (f) => (f === "velo" ? `평균 구속 (${shownUnit})` : FEATURE[f]);
   // IL 등재(기준일) 위치: 그 날짜 전 등판 수 + 0.5. 시즌 마지막 등판 뒤라면 축을 한 칸 늘려 오른쪽에 그린다.
   const before = data.il_date ? data.outings.filter((o) => o.date < data.il_date).length : null;
   const ilAt = before == null ? null : before + 0.5;
@@ -215,7 +228,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
   const baseline = rows.filter((r) => r.phase === "baseline").length;
   const myAlerts = multiplier === 1 || !data.limits?.velo_k
     ? (alerts || []).filter((a) => a.id === data.id)
-    : source.flatMap((o) => [...(o.velo_alarm ? [syntheticAlert(o, { ...data, unit }, "velo")] : []), ...(o.change_alarm ? [syntheticAlert(o, { ...data, unit }, "change")] : [])]);
+    : source.flatMap((o) => [...(o.velo_alarm ? [syntheticAlert(o, { ...data, unit: shownUnit }, "velo")] : []), ...(o.change_alarm ? [syntheticAlert(o, { ...data, unit: shownUnit }, "change")] : [])]);
   const visibleAlerts = myAlerts.filter((a) => a.date <= (rows.at(-1)?.date ?? ""));
   const openAlert = (row) => {
     const hit = myAlerts.filter((a) => a.date === row.date);
@@ -235,7 +248,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
   const gaps = data.outings.slice(1).map((o, i) => ({ from: data.outings[i].date, to: o.date, days: Math.round((new Date(o.date) - new Date(data.outings[i].date)) / 86400000) }))
     .filter((g) => g.days > 30);
   const notes = [];
-  if (monitored <= 3) notes.push(`감시 등판이 ${monitored}개뿐입니다. 시작 구간(${ROLE[data.role]} ${baselineCountOf(data)}등판)을 ${fmt.date(data.baseline_end)}에야 채웠고, 그 뒤 등판에서만 지수가 계산됩니다.`);
+  if (monitored <= 3) notes.push(`지수를 계산한 등판이 ${monitored}개뿐입니다. 시작 구간(${ROLE[data.role]} ${baselineCountOf(data)}등판)을 ${fmt.date(data.baseline_end)}에야 채웠고, 그 뒤 등판에서만 지수가 계산됩니다.`);
   if (gaps.length) notes.push(`등판 공백 ${gaps.map((g) => `${fmt.date(g.from)}→${fmt.date(g.to)} ${g.days}일`).join(", ")}: 긴 공백 뒤의 등판도 같은 '평소'와 비교하므로 복귀 직후에는 폼 변화 신호가 울리기 쉽습니다.`);
   const dateOf = (i) => fmt.date(data.outings[i - 1]?.date);
   // 띠·선의 글자는 첫 차트(지수)에만 적는다. 특징 차트는 선이 띠 안을 지나가 글자와 겹친다.
@@ -261,10 +274,9 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
         <div className="legend">
           <span><i style={{ background: "var(--velo)" }} />구속 하락 지수</span>
           {withChange && <span><i style={{ background: "var(--change)" }} />폼 변화 지수</span>}
-          <span><i className="dot" style={{ background: "var(--alarm)" }} />경보 (지수 &gt; 1)</span>
-          <span><i className="dash" />경보 한계 1</span>
-          <span><i className="band" style={{ background: "var(--base-bg)", border: "1px solid var(--line-2)" }} />시작 구간</span>
-          {data.il_date && <span><i style={{ background: "var(--ink)" }} />IL 등재일 (대조군은 짝지은 사례의 날짜)</span>}
+          <span><i className="dot" style={{ background: "var(--alarm)" }} />경보 (지수 1 넘음)</span>
+          <span><i className="band" style={{ background: "var(--base-bg)", border: "1px solid var(--line-2)" }} />시즌 초 평소를 배우는 구간</span>
+          {data.il_date && <span><i style={{ background: "var(--ink)" }} />IL 등재일</span>}
         </div>
       </div>
       {visibleAlerts.length > 0 ? (
@@ -288,7 +300,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
           {xAxis(!compact)}
           <YAxis domain={[Math.floor(Math.min(-0.5, ...rows.map((r) => r.velo_index ?? 0)) * 2) / 2, Math.ceil(yMax * 2) / 2]} tickFormatter={(v) => v.toFixed(1)}
             tickCount={6} tick={TICK} width={40} axisLine={false} tickLine={false} />
-          <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} unit={unit} />} />} cursor={{ stroke: "var(--line-2)" }} />
+          <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} unit={shownUnit} />} />} cursor={{ stroke: "var(--line-2)" }} />
           <ReferenceLine y={1} stroke="var(--alarm)" strokeDasharray="4 4" />
           <ReferenceLine y={0} stroke="var(--line-2)" />
           <Line type="monotone" dataKey="vidx_pre" stroke="var(--velo)" dot={{ r: 2, strokeWidth: 0, fill: "var(--velo)" }} strokeWidth={2.2} connectNulls name="구속 하락 지수" isAnimationActive={false} />
@@ -306,8 +318,8 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
             <ComposedChart data={rows} onClick={onClick} margin={{ top: 14, right: 16, left: 0, bottom: k === arr.length - 1 ? 16 : 4 }}>
               {common(false)}
               {xAxis(k !== arr.length - 1)}
-              <YAxis domain={["auto", "auto"]} tick={TICK} width={40} axisLine={false} tickLine={false} tickFormatter={(v) => fmt.num(v, f === "rel_z" ? 2 : 1)} />
-              <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} focus={f} unit={unit} />} />} cursor={{ stroke: "var(--line-2)" }} />
+              <YAxis domain={["auto", "auto"]} tick={TICK} width={40} axisLine={false} tickLine={false} tickFormatter={(v) => fmt.num(v, f === "rel_z" ? 0 : 1)} />
+              <Tooltip filterNull={false} content={<ChartTip render={(payload, label) => <OutingTip r={rows[Math.round(label) - 1] || payload[0].payload} focus={f} unit={shownUnit} />} />} cursor={{ stroke: "var(--line-2)" }} />
               <Area dataKey={`band_${f}`} stroke="none" fill="var(--velo)" fillOpacity={0.14} connectNulls isAnimationActive={false} name="평소 범위" />
               <Line type="monotone" dataKey={`${f}_pre`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={name} />
               {afterIl && <Line type="monotone" dataKey={`${f}_post`} stroke="var(--ink-2)" strokeWidth={1.6} dot={{ r: 2.5, strokeWidth: 1 }} connectNulls isAnimationActive={false} name={`${name} (IL 뒤)`} />}
@@ -324,26 +336,29 @@ function pitches(r) {
   return `${PITCH_NAME[r.fb] || r.fb || "패스트볼"} ${r.n_fb}구 / 전체 ${r.n_all ?? "—"}구`;
 }
 
-const DIGITS = { velo: 1, rel_z: 2, arm_angle: 1 };
+const DIGITS = { velo: 1, rel_z: 0, arm_angle: 1 };
 
 /** 모든 그래프에서 같은 툴팁: 어떤 등판이든(경보가 없어도, 시작 구간이어도) 날짜·투구 수·세 특징·예상 범위·지수를 보여 준다. focus는 지금 그래프의 특징(굵게). */
 function OutingTip({ r, focus, unit }) {
   const feats = Object.keys(FEATURE).filter((f) => r[f] != null);
   return (
     <>
-      <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)} · {r.phase === "baseline" ? "시작 구간(평소 배우는 중)" : "감시"}</div>
+      <div><b>{r.date}</b> · {r.i}번째 등판 · {pitches(r)}{r.phase === "baseline" && " · 평소를 배우는 중"}</div>
       {feats.map((f) => {
         const band = r[`band_${f}`];
         const d = DIGITS[f];
-        const label = f === "velo" && unit && unit !== "mph" ? `평균 구속 (${unit})` : FEATURE[f];
+        const label = f === "velo" ? `평균 구속 (${unit || "km/h"})` : FEATURE[f];
         return (
           <div key={f} style={f === focus ? { color: "var(--ink)", fontWeight: 650 } : undefined}>
-            {label}: {fmt.num(r[f], d)}{band && <span style={{ fontWeight: 400 }}> · 평소 범위 {fmt.num(band[0], d)}~{fmt.num(band[1], d)} (예상 {fmt.num(r.exp[f], d)})</span>}
+            {label}: {fmt.num(r[f], d)}{f === "velo" && r.mph != null && <span style={{ fontWeight: 400 }}> ({fmt.num(r.mph, 1)} mph)</span>}{band && <span style={{ fontWeight: 400 }}> · 평소 범위 {fmt.num(band[0], d)}~{fmt.num(band[1], d)}</span>}
           </div>
         );
       })}
       {r.phase !== "baseline" && r.velo_index != null && (
-        <div>구속 하락 지수 {fmt.num(r.velo_index)}{r.change_index != null && <> · 폼 변화 지수 {fmt.num(r.change_index)}</>}</div>
+        <>
+          <div>구속 하락 지수 <b>{fmt.num(r.velo_index)}</b> → {indexWord(r.velo_index)}</div>
+          {r.change_index != null && <div>폼 변화 지수 <b>{fmt.num(r.change_index)}</b> → {indexWord(r.change_index)}</div>}
+        </>
       )}
       {r.alarm_here && <div className="alarm">이 등판에서 경보 — 빨간 점을 누르면 카드가 열립니다</div>}
     </>
@@ -368,9 +383,9 @@ export function AlertCard({ alert, onClose }) {
         <h2>경보 카드 · {alert.who} · {alert.date} · {velo ? "구속 하락 신호" : `폼 변화 신호 (${alert.rule})`}</h2>
         <button className="btn" onClick={onClose}>닫기</button>
       </div>
-      <p className="headline">{!velo && !alert.synthetic && alert.z ? changeHeadline(alert) : alert.card}</p>
+      <p className="headline">{!velo && !alert.synthetic && alert.z ? changeHeadline(alert) : String(alert.card || "").replace(/(\d+(?:\.\d+)?) ?mph/g, (m, v) => `${(Number(v) * KMH).toFixed(1)} km/h(${v} mph)`)}</p>
       {velo ? (
-        <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {Math.abs(delta).toFixed(1)} {unit} {delta < 0 ? "낮았습니다" : "높았습니다"}.
+        <p className="note" style={{ margin: 0 }}>구속 하락 지수 {fmt.num(alert.index)} (1을 넘으면 경보). 이 등판의 구속은 예상보다 {unit === "mph" ? `${(Math.abs(delta) * KMH).toFixed(1)} km/h(${Math.abs(delta).toFixed(1)} mph)` : `${Math.abs(delta).toFixed(1)} ${unit}`} {delta < 0 ? "느렸습니다" : "빨랐습니다"}.
           구속이 예상보다 낮은 흐름이 이어졌다는 뜻이며, 점검을 시작하라는 신호입니다.</p>
       ) : (
         <div>
