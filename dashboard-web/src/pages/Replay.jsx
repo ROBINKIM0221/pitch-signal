@@ -293,7 +293,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
         </p>
       ) : rows.some((r) => r.phase === "monitor") ? <p className="caption">여기까지 경보가 없습니다.</p> : null}
       {notes.length > 0 && <p className="notice">{notes.join(" ")}</p>}
-      <h3 className="chart-title">신호 지수 <small>1을 넘으면 경보 · 경보 뒤에는 0에서 다시 시작</small></h3>
+      <h3 className="chart-title">신호 지수 <small>1을 넘으면 경보 · 경보 뒤에는 0에서 다시 시작</small><span className="hover-hint">선에 커서를 올리면 그 등판 숫자와 해석</span></h3>
       <ResponsiveContainer width="100%" height={compact ? 220 : 250}>
         <ComposedChart data={rows} onClick={onClick} margin={{ top: 14, right: 16, left: 0, bottom: compact ? 16 : 4 }}>
           {common(true)}

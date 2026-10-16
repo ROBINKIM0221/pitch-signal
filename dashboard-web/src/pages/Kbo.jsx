@@ -157,7 +157,7 @@ export default function Kbo() {
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
         <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "기록 있는 투수만" : "전체 보기"}</button>
-        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프</span>
+        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
       </div>
       {shown.map((p) => <ScoutCard key={p.name} p={p} />)}
       <div className="card">

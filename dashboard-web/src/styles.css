@@ -343,3 +343,9 @@ ul.plain b { color: var(--ink); }
 .guide .lv.al { background: var(--alarm-bg); color: #9b2a25; }
 @media (max-width: 1000px) { .guide { grid-template-columns: repeat(2, minmax(0, 1fr)); } .guide > div:nth-child(2n) { border-right: 0; } .guide > div:nth-child(n+3) { border-top: 1px solid var(--line); } }
 @media (max-width: 600px) { .guide { grid-template-columns: minmax(0, 1fr); } .guide > div { border-right: 0; border-top: 1px solid var(--line); } .guide > div:first-child { border-top: 0; } }
+
+/* 커서를 올리면 정보가 뜨는 곳 안내 (2026-10-16 사용자 요청) */
+.hover-hint { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--navy-2); background: var(--navy-bg); border-radius: 3px; padding: 1px 7px; margin-left: 6px; white-space: normal; letter-spacing: 0; }
+.hover-hint::before { content: ""; width: 9px; height: 11px; flex: none; background: var(--navy-2);
+  clip-path: polygon(0 0, 0 100%, 30% 72%, 52% 100%, 66% 92%, 45% 66%, 85% 66%); }
+p.caption > .hover-hint:first-child { margin-left: 0; }

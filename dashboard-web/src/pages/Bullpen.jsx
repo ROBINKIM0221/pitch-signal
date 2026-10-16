@@ -144,7 +144,7 @@ export default function Bullpen() {
                 {idle.map((r) => <button key={r.p.id} className="pill" onClick={() => set({ p: r.p.id })}>{r.p.name} <span style={{ color: "var(--muted)" }}>{fmt.date(r.st.lastDate)}</span></button>)}
               </p>
             )}
-            <p className="caption">7일 투구의 '/ 뒤' 숫자는 그 투수의 본인 기준(시즌 초 등판으로 정함, 그 기간에는 표시하지 않음). 줄을 누르면 시즌 전체 그래프가 열립니다.</p>
+            <p className="caption">7일 투구의 '/ 뒤' 숫자는 그 투수의 본인 기준(시즌 초 등판으로 정함, 그 기간에는 표시하지 않음). 줄을 누르면 시즌 전체 그래프가 열립니다. <span className="hover-hint">'지난 14일' 칸과 '7일 투구' 제목에 커서를 올리면 날짜별 투구 수와 설명</span></p>
           </div>
           {picked && <Detail row={picked} rules={index.rules} date={date} />}
           <p className="note">불펜에서 몸만 풀고 등판하지 않은 투구는 기록에 없어 실제 부담은 이보다 큽니다. 다른 팀에서 던진 등판도 계산에 넣습니다(달력에서 점선 칸).</p>
@@ -211,6 +211,7 @@ function Detail({ row, rules, date }) {
           {dateX && <ReferenceLine yAxisId="p" x={dateX} stroke="var(--velo)" strokeDasharray="3 3" label={{ value: `기준일 ${fmt.date(date)}`, position: "insideTopLeft", ...LABEL, fill: "var(--velo)" }} />}
         </ComposedChart>
       </ResponsiveContainer>
+      <p className="caption"><span className="hover-hint">그래프에 커서를 올리면 그날 투구 수·3일 등판·7일 투구와 이유</span></p>
       <h3>표시·주의나 품질 경보가 있던 등판 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {flagged.length}건</span></h3>
       <div className="tbl-wrap">
         <table className="tbl">

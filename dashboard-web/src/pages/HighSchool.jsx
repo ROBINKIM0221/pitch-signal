@@ -132,7 +132,7 @@ function BallChart({ p }) {
   ));
   return (
     <>
-      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small></div>
+      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small><span className="hover-hint">점에 커서를 올리면 그 경기 상대·볼 비율·센 공 수</span></div>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
@@ -290,7 +290,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       </div>
       <div className="grid2">
         <div className="card">
-          <h2>{s?.name} 투수</h2>
+          <h2>{s?.name} 투수 <span className="hover-hint">줄을 누르면 아래에 그 투수 · '누적 부하' 칸에 커서를 올리면 이유</span></h2>
           <div className="tbl-wrap">
             <table className="tbl pick">
               <thead><tr><th>투수</th><th>규정</th><th>누적 부하</th><th className="num">등판</th><th className="num">시즌 투구</th><th className="num" title="한 주(그날 포함 7일) 동안 던진 투구 수 합의 시즌 최댓값">7일 최대</th><th className="num">볼 비율</th></tr></thead>
@@ -322,7 +322,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
               <ReferenceLine x={500} stroke="var(--alarm)" strokeDasharray="4 4" />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">점선은 시즌 500구.</p>
+          <p className="caption">점선은 시즌 500구. <span className="hover-hint">막대에 커서를 올리면 투구 수</span></p>
         </div>
       </div>
       {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
@@ -348,7 +348,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             </p>
           )}
           <BallChart p={p} />
-          <div className="chart-title">등판별 투구 수 <small>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
+          <div className="chart-title">등판별 투구 수 <span className="hover-hint">막대·점에 커서를 올리면 날짜별 투구 수와 7일 합</span><small style={{ display: "block", marginTop: 2 }}>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={gameDays} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke={GRID} />
@@ -362,6 +362,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
               {rule && <ReferenceLine y={rule.max_pitches} stroke="var(--muted)" strokeDasharray="2 4" label={limitLabel(`7일 ${rule.max_pitches}구`)} />}
             </ComposedChart>
           </ResponsiveContainer>
+          <p className="caption" style={{ margin: "14px 0 6px" }}><span className="hover-hint">'볼 비율' 칸의 '검산 미달'과, '이닝별 보기'를 연 뒤 이닝 투구 수에 커서를 올리면 설명이 보입니다</span></p>
           <GamesTable p={p} withCompetition />
           <ViolationsTable p={p} />
         </div>
@@ -444,7 +445,7 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
           </tbody>
         </table>
       </div>
-      <p className="caption">고른 날짜 전날까지의 등판에 KBSA 규정(투구 수별 의무 휴식일, 3일 연속 등판 금지)을 적용한 결과입니다. 시즌 중에는 어제까지의 투구 수만 넣으면 오늘 나갈 수 있는 투수가 바로 나옵니다.</p>
+      <p className="caption">고른 날짜 전날까지의 등판에 KBSA 규정(투구 수별 의무 휴식일, 3일 연속 등판 금지)을 적용한 결과입니다. 시즌 중에는 어제까지의 투구 수만 넣으면 오늘 나갈 수 있는 투수가 바로 나옵니다. <span className="hover-hint">'이날 등판' 칸에 커서를 올리면 판단 이유</span></p>
     </div>
   );
 }
@@ -576,7 +577,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
                   <ReferenceLine y={kbsa.daily_max} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`하루 ${kbsa.daily_max}구`)} />
                 </ComposedChart>
               </ResponsiveContainer>
-              <p className="caption">누적 선은 대회 기간 투구 수의 합. 투구 수가 공개되지 않은 경기(점선 막대) 뒤로는 누적을 표시하지 않습니다.</p>
+              <p className="caption">누적 선은 대회 기간 투구 수의 합. 투구 수가 공개되지 않은 경기(점선 막대) 뒤로는 누적을 표시하지 않습니다. <span className="hover-hint">막대·점에 커서를 올리면 그날 값</span></p>
             </div>
           </div>
           <ViolationsTable p={p} />

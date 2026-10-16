@@ -160,7 +160,7 @@ export function ValidationSummary() {
               <Scatter data={data.opcurve.filter((q) => q.method === "B1 구속 1mph" && q.scale === 1)} dataKey="detection" name="구속 1mph 하락 규칙" fill="var(--warn)" shape="diamond" isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">경보를 더 자주 허용할수록 더 많이 잡습니다. 굵은 선이 구속 하락 신호, 회색 선이 기존 방법, 주황 마름모가 '구속 1mph 하락' 규칙입니다.</p>
+          <p className="caption">경보를 더 자주 허용할수록 더 많이 잡습니다. 굵은 선이 구속 하락 신호, 회색 선이 기존 방법, 주황 마름모가 '구속 1mph 하락' 규칙입니다. <span className="hover-hint">선에 커서를 올리면 값</span></p>
         </div>
       </div>
     </div>
