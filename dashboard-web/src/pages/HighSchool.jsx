@@ -293,13 +293,13 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           <h2>{s?.name} 투수</h2>
           <div className="tbl-wrap">
             <table className="tbl pick">
-              <thead><tr><th>투수</th><th>규정</th><th>누적 부하</th><th className="num">등판</th><th className="num">시즌</th><th className="num">7일 최대</th><th className="num">볼 비율</th></tr></thead>
+              <thead><tr><th>투수</th><th>규정</th><th>누적 부하</th><th className="num">등판</th><th className="num">시즌 투구</th><th className="num" title="한 주(그날 포함 7일) 동안 던진 투구 수 합의 시즌 최댓값">7일 최대</th><th className="num">볼 비율</th></tr></thead>
               <tbody>
                 {pitchers.map((x) => (
-                  <tr key={x.code} className={x.code === p?.code ? "hl" : ""} onClick={() => setCode(x.code)} title={x.load_reasons.join(" · ") || undefined}>
+                  <tr key={x.code} className={x.code === p?.code ? "hl" : ""} onClick={() => setCode(x.code)}>
                     <td><b>{x.label}</b></td>
                     <td><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
-                    <td><span className={`light ${LOAD_CLASS[x.load_status]}`}>{x.load_status}</span></td>
+                    <td><span className={`light ${LOAD_CLASS[x.load_status]}`} title={x.load_reasons.length ? `누적 부하 ${x.load_status} 이유: ${x.load_reasons.join(" · ")}` : undefined}>{x.load_status}</span></td>
                     <td className="num">{x.outings}</td>
                     <td className="num">{x.pitches_total ?? "—"}</td>
                     <td className="num">{x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}</td>
