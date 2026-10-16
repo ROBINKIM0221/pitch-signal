@@ -349,3 +349,7 @@ ul.plain b { color: var(--ink); }
 .hover-hint::before { content: ""; width: 9px; height: 11px; flex: none; background: var(--navy-2);
   clip-path: polygon(0 0, 0 100%, 30% 72%, 52% 100%, 66% 92%, 45% 66%, 85% 66%); }
 p.caption > .hover-hint:first-child { margin-left: 0; }
+
+/* 한글 줄바꿈: 단어 중간에서 끊지 않고(봅니/다), 마지막 줄에 한두 글자만 남지 않게 (2026-10-16) */
+.page p, .page li, .page h1, .page h2, .page h3, .page .caption, .page .note, .page .lead, .kpi .l, .guide p, .menu-grid span, details.more p, .foot { word-break: keep-all; overflow-wrap: break-word; text-wrap: pretty; }
+.page .lead { max-width: 92ch; }

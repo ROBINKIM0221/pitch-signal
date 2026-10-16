@@ -10,6 +10,14 @@ const RULE_NAME = { daily_max: "하루 105구 초과", rest: "의무 휴식일 �
 const LOAD_CLASS = { "보통": "ok", "주의": "warn", "높음": "alarm", "계산 불가": "base" };
 const STATUS_CLASS = { "준수": "ok", "위반": "alarm", "판정 불가": "base" };
 
+// 학교 투수 표 칸별 툴팁 (2026-10-16: 모든 칸에서 그 칸 설명이 뜨게)
+const RULE_TIP = { "준수": "하루 105구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 모두 지켰습니다", "위반": "KBSA 투구수 규정을 어긴 등판이 있습니다 (아래 카드에 날짜)", "판정 불가": "투구 수가 공개되지 않은 등판이 있어 규정 준수를 판정할 수 없습니다" };
+function loadTip(x, lights) {
+  if (x.load_reasons.length) return `누적 부하 ${x.load_status} 이유: ${x.load_reasons.join(" · ")}`;
+  if (x.load_status === "계산 불가") return "투구 수가 공개되지 않은 등판이 있어 누적 부하를 계산할 수 없습니다";
+  return `보통: 7일 합 최대 ${x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}구(주의 ${lights.sum7.caution}구 미만), 3일 안 두 경기 합 최대 ${x.max_pair3 != null ? fmt.num(x.max_pair3, 0) : "—"}구(주의 ${lights.pair3.caution}구 미만)`;
+}
+
 const DEFAULT_REGION = "경기";                                   // 공모전 지역
 
 export default function HighSchool() {
@@ -290,20 +298,20 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       </div>
       <div className="grid2">
         <div className="card">
-          <h2>{s?.name} 투수 <span className="hover-hint">줄을 누르면 아래에 그 투수 · '누적 부하' 칸에 커서를 올리면 이유</span></h2>
+          <h2>{s?.name} 투수 <span className="hover-hint">줄을 누르면 아래에 그 투수 · 칸에 커서를 올리면 설명</span></h2>
           <div className="tbl-wrap">
             <table className="tbl pick">
               <thead><tr><th>투수</th><th>규정</th><th>누적 부하</th><th className="num">등판</th><th className="num">시즌 투구</th><th className="num" title="한 주(그날 포함 7일) 동안 던진 투구 수 합의 시즌 최댓값">7일 최대</th><th className="num">볼 비율</th></tr></thead>
               <tbody>
                 {pitchers.map((x) => (
                   <tr key={x.code} className={x.code === p?.code ? "hl" : ""} onClick={() => setCode(x.code)}>
-                    <td><b>{x.label}</b></td>
-                    <td><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
-                    <td><span className={`light ${LOAD_CLASS[x.load_status]}`} title={x.load_reasons.length ? `누적 부하 ${x.load_status} 이유: ${x.load_reasons.join(" · ")}` : undefined}>{x.load_status}</span></td>
-                    <td className="num">{x.outings}</td>
-                    <td className="num">{x.pitches_total ?? "—"}</td>
-                    <td className="num">{x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}</td>
-                    <td className="num">{x.ball_season != null ? `${fmt.num(100 * x.ball_season, 0)}%` : "—"}{x.ball_flags > 0 && <span className="light warn" style={{ marginLeft: 4 }} title="평소보다 볼이 많았던 등판 수 (40구 이상)">{x.ball_flags}</span>}</td>
+                    <td title="누르면 아래에 이 투수의 시즌 카드가 열립니다"><b>{x.label}</b></td>
+                    <td title={RULE_TIP[x.rule_status]}><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
+                    <td title={loadTip(x, data.load_lights)}><span className={`light ${LOAD_CLASS[x.load_status]}`}>{x.load_status}</span></td>
+                    <td className="num" title={`시즌 등판 ${x.outings}회`}>{x.outings}</td>
+                    <td className="num" title={x.pitches_total == null ? "투구 수가 공개되지 않은 등판이 있어 합계를 낼 수 없습니다" : `시즌 공식 경기 투구 수 합계 ${x.pitches_total}구 (연습·불펜 투구 제외)`}>{x.pitches_total ?? "—"}</td>
+                    <td className="num" title={x.max_7d != null ? `한 주(그날 포함 7일) 동안 던진 투구 수 합의 시즌 최댓값 · 주의 ${data.load_lights.sum7.caution}구, 높음 ${data.load_lights.sum7.high}구` : undefined}>{x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}</td>
+                    <td className="num" title={x.ball_season != null ? `기록지에서 읽은 볼 비율(추정) · ${x.ball_outings ?? "?"}등판 합${x.ball_flags > 0 ? ` · 평소보다 볼이 많았던 등판 ${x.ball_flags}` : ""}` : "기록지에서 볼 비율을 읽지 못했습니다"}>{x.ball_season != null ? `${fmt.num(100 * x.ball_season, 0)}%` : "—"}{x.ball_flags > 0 && <span className="light warn" style={{ marginLeft: 4 }}>{x.ball_flags}</span>}</td>
                   </tr>
                 ))}
               </tbody>
