@@ -309,3 +309,16 @@ table.tbl tr.flow-row td { background: var(--panel); }
 /* 고르는 표 (2026-10-16): 줄을 누르면 그 투수 */
 table.tbl.pick tbody tr { cursor: pointer; }
 table.tbl.pick td, table.tbl.pick th { padding: 7px 10px; }
+
+/* 검증 요약: 결론 세 줄 */
+ol.findings { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+ol.findings b { color: var(--ink); }
+
+/* 소개: 화면 칸 메뉴 (하드힛식) */
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); border-top: 1px solid var(--line-2); border-left: 1px solid var(--line-2); }
+.menu-grid a { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); text-decoration: none; min-height: 112px; }
+.menu-grid a b { font-size: 15px; color: var(--navy); }
+.menu-grid a span { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.menu-grid a:hover { background: var(--navy-bg); }
+ul.plain { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+ul.plain b { color: var(--ink); }

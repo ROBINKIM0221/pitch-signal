@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ValidationSummary } from "./Performance.jsx";
 import { useSearchParams } from "react-router-dom";
 import {
   Area, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, CartesianGrid,
@@ -124,11 +125,8 @@ export default function Replay() {
   return (
     <div className="page">
       <h1>리플레이 · 경보 카드</h1>
-      <p className="lead">
-        2021~2026 시즌에서 시작 구간을 채워 감시가 돌아간 <b>투수-시즌 {index.length.toLocaleString()}개</b>를 모두 찾아볼 수 있습니다. 2024~2025는 계획을 고정한 뒤 한 번 계산한 검증셋,
-        2026은 봉인해 두었다가 10월 7일 한 번 평가한 시즌이고, 2021~2023은 경보 한계를 맞추는 데 쓴 개발셋입니다(각각 표시해 둠). 회색 띠는 평소를 잡는 시작 구간, 선은 두 신호의 지수(1을 넘으면 경보), 빨간 점은 경보,
-        검은 세로선은 팔 부상 IL 등재일(대조군은 짝지은 사례의 IL 등재일)입니다. 경보 점이나 경보 칩을 누르면 카드가 열립니다.
-      </p>
+      <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 되감아, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.
+        회색 띠는 평소를 잡는 시즌 초 구간, 빨간 점은 경보, 검은 세로선은 팔 부상 IL 등재일입니다. 경보 점을 누르면 경보 카드가 열립니다.</p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
           <input type="search" value={query} placeholder="이름 (예: Soroka, Skubal)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -182,6 +180,7 @@ export default function Replay() {
       {me && <Pitcher data={me} shown={shown ?? me.outings.length} alerts={alerts} setPicked={setPicked} multiplier={mult} />}
       {side && other && <Pitcher data={other} shown={other.outings.length} alerts={alerts} setPicked={setPicked} compact multiplier={mult} />}
       {picked && <AlertCard alert={picked} onClose={() => setPicked(null)} />}
+      <ValidationSummary />
     </div>
   );
 }

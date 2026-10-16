@@ -28,3 +28,10 @@ scout:                             # 화면 5 '영입 전 점검': 2026 KBO 외�
     - {name: Pedro Ávila, name_ko: 페드로 아빌라, team: SSG, mlbam: 658648, status: replacement}
     - {name: Raúl Alcántara, name_ko: 라울 알칸타라, team: 키움, mlbam: 593417, status: new}
     - {name: Nathan Wiles, name_ko: 네이선 와일스, team: 키움, mlbam: 686249, status: new}
+    # 2026-10-16 추가: 7월 9일 기사 뒤(또는 단기 대체로 빠졌던) 시즌 중 대체 영입 — 나무위키 시즌 문서·구단 발표 기사·MLB Stats API 거래 기록으로 확인
+    - {name: Bruce Zimmermann, name_ko: 브루스 짐머맨, team: 한화, mlbam: 669145, status: replacement}
+    - {name: Jack Cushing, name_ko: 잭 쿠싱, team: 한화, mlbam: 681007, status: replacement}
+    - {name: Austin Voth, name_ko: 오스틴 보스, team: 삼성, mlbam: 608723, status: replacement}
+    - {name: Mike Clevinger, name_ko: 마이크 클레빈저, team: NC, mlbam: 605182, status: replacement}
+    - {name: Drew VerHagen, name_ko: 드류 버하겐, team: NC, mlbam: 572403, status: replacement}
+    - {name: Kenny Rosenberg, name_ko: 케니 로젠버그, team: 키움, mlbam: 670046, status: replacement}

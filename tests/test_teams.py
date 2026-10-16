@@ -18,7 +18,7 @@ def outings():
     rows = [(1, "2024-04-01", 1, 18), (1, "2024-04-02", 2, 12), (1, "2024-04-05", 3, 25), (2, "2024-04-01", 1, 30), (2, "2024-04-05", 3, 9), (9, "2024-04-01", 1, 95)]
     o = pd.DataFrame(rows, columns=["pitcher", "game_date", "game_pk", "n_all"])
     o["game_date"] = pd.to_datetime(o["game_date"]); o["season"] = 2024
-    o["role"] = o["pitcher"].map({1: "RP", 2: "RP", 9: "SP"}); o["is_start"] = o["pitcher"] == 9
+    o["role"] = o["pitcher"].map({1: "RP", 2: "RP", 9: "SP"}); o["is_start"] = o["pitcher"] == 9; o["outs"] = 3
     return o
 
 
@@ -35,8 +35,9 @@ def test_team_payload_lists_relievers_with_their_outings_alarms_il_and_limit():
     assert [p["id"] for p in pay["pitchers"]] == ["1_2024", "2_2024"]                      # 선발(9)은 빠진다
     a = pay["pitchers"][0]
     assert a["name"] == "A Reliever" and a["p7d_limit"] == 40.0 and a["p7d_from"] == "2024-04-02" and a["il"] is None
-    assert a["outings"] == [{"date": "2024-04-01", "pitches": 18, "signals": [], "here": True}, {"date": "2024-04-02", "pitches": 12, "signals": [], "here": True},
+    assert [{k: v for k, v in o.items() if k != "outs"} for o in a["outings"]] == [{"date": "2024-04-01", "pitches": 18, "signals": [], "here": True}, {"date": "2024-04-02", "pitches": 12, "signals": [], "here": True},
                             {"date": "2024-04-05", "pitches": 25, "signals": ["velo"], "here": True}]
+    assert all(o["outs"] == 3 for o in a["outings"])
     b = pay["pitchers"][1]
     assert b["p7d_limit"] is None and b["p7d_from"] is None and b["il"] == {"date": "2024-04-20", "part": "elbow"}
 

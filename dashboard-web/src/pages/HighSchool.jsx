@@ -504,21 +504,25 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
       <div className="grid2 hs-grid">
         <div className="card">
           <h2>{s?.name} 투수</h2>
-          <div className="list">
-            {pitchers.map((x) => {
-              const load = cumulativeLight(x, data.load_lights);
-              return (
-                <button key={x.code} className={x.code === p?.code ? "on" : ""} onClick={() => setCode(x.code)}>
-                  <span className="code">{x.label}</span>
-                  <span className={`light ${STATUS_CLASS[x.rule_status]}`}>규정 {x.rule_status}</span>
-                  <span className={`light ${load.cls}`}>{load.text}</span>
-                  <span className="tags">
-                    {x.back_to_back > 0 && <span className="pill"><span className="dot" style={{ background: "var(--warn)" }} />연투 {x.back_to_back}</span>}
-                    {x.min_rest_exact > 0 && <span className="pill"><span className="dot" style={{ background: "var(--warn)" }} />최소 휴식 뒤 등판 {x.min_rest_exact}</span>}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="tbl-wrap">
+            <table className="tbl pick">
+              <thead><tr><th>투수</th><th>규정</th><th>대회 누적</th><th className="num">등판</th><th className="num">연투</th><th className="num">휴식 끝난 첫날 등판</th></tr></thead>
+              <tbody>
+                {pitchers.map((x) => {
+                  const load = cumulativeLight(x, data.load_lights);
+                  return (
+                    <tr key={x.code} className={x.code === p?.code ? "hl" : ""} onClick={() => setCode(x.code)}>
+                      <td><b>{x.label}</b></td>
+                      <td><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
+                      <td><span className={`light ${load.cls}`}>{load.text.replace("누적 ", "")}</span></td>
+                      <td className="num">{x.outings}</td>
+                      <td className="num">{x.back_to_back || "—"}</td>
+                      <td className="num">{x.min_rest_exact || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
         <div className="card">

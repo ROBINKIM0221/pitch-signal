@@ -42,7 +42,7 @@ def team_payload(team: str, season: int, outings: pd.DataFrame, team_map: pd.Dat
             if (pitcher, o.game_pk) in alarm_key.index:
                 a = alarm_key.loc[(pitcher, o.game_pk)]
                 signals = [s for s in SIGNALS if bool(a[f"{s}_alarm"])]
-            rows.append({"date": _date(o.game_date), "pitches": int(o.n_all), "signals": signals, "here": o.team == team})
+            rows.append({"date": _date(o.game_date), "pitches": int(o.n_all), "outs": None if pd.isna(o.outs) else int(o.outs), "signals": signals, "here": o.team == team})
         limit = limits.get((pitcher, season), float("nan"))
         end = ends.get((pitcher, season), pd.NaT)
         il = arm_il.loc[pitcher] if pitcher in arm_il.index else None

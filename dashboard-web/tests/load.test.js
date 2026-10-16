@@ -47,6 +47,14 @@ test("before the first outing of the season there is no state", () => {
   assert.deepEqual(st.flags, []);
 });
 
+test("status: a multi-inning outing followed by at most one day of rest → 주의", () => {
+  const outings = [{ date: "2024-05-01", pitches: 28, outs: 6 }, { date: "2024-05-03", pitches: 12, outs: 3 }];
+  const st = dayState(outings, "2024-05-03", rules, null);
+  assert.equal(st.prevOuts, 6);
+  assert.equal(loadStatus(st), "주의");
+  assert.equal(loadStatus(dayState([{ date: "2024-05-01", pitches: 28, outs: 5 }, { date: "2024-05-03", pitches: 12, outs: 3 }], "2024-05-03", rules, null)), "평소");
+});
+
 test("status: any flag → 표시; back-to-back today or acwr above 1.5 → 주의; two appearances in three days alone is 평소", () => {
   assert.equal(loadStatus({ flags: ["acwr"], pitchedToday: true, backToBack: false, apps3d: 1, acwr: 2.1 }), "표시");
   assert.equal(loadStatus({ flags: [], pitchedToday: true, backToBack: true, apps3d: 2, acwr: null }), "주의");

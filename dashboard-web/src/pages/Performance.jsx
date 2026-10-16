@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import { fmt, useJson } from "../lib/data.js";
 import { GRID, LABEL, LEGEND_STYLE, TICK, TIP_STYLE } from "../lib/chart.jsx";
@@ -113,6 +114,55 @@ export default function Performance() {
           <p className="note">경보 뒤 30일 안 IL 비율이 경보 없는 등판의 약 2배(검증셋 2.2배, 봉인 2.0배)입니다. 다만 10건 중 9건은 30일 안에 IL로 이어지지 않으므로, 경보는 '점검을 시작할 때'이지 부상 판정이 아닙니다.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 리플레이 아래 '검증 요약' (2026-10-16 외부 검토: 성능 비교 화면을 메뉴에서 빼고 결론만). 숫자는 performance.json에서 읽는다. */
+export function ValidationSummary() {
+  const { data } = useJson("performance.json");
+  if (!data) return null;
+  const velo = data.results.find((r) => r.method === "구속 하락 신호" && r.group === "all");
+  const form = data.results.find((r) => r.method === "폼 변화 신호" && r.group === "all");
+  const b1 = data.results.find((r) => r.method === "B1 구속 1mph" && r.group === "all");
+  const baselines = data.results.filter((r) => r.group === "all" && /^B[2-4]/.test(r.method));
+  const sealedH1 = data.sealed?.tests.find((t) => t.test.startsWith("H1"));
+  const fu = (split) => (data.followup || []).find((f) => f.role === "all" && f.method === "구속 하락 신호" && f.split === split);
+  const val = fu("val"), sealed = fu("sealed");
+  const curve = (name) => data.opcurve.filter((q) => q.method === name).sort((a, b) => a.false_alarms_per100 - b.false_alarms_per100);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>검증 요약 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>MLB {data.seasons.join("~")} 검증셋 · 평가 계획을 고정한 뒤 한 번 계산</span></h2>
+        <Link to="/performance" className="caption" style={{ margin: 0 }}>자세한 결과표 →</Link>
+      </div>
+      <div className="grid2" style={{ alignItems: "start" }}>
+        <ol className="findings">
+          <li><b>같은 오경보 수준(부상 없는 투수 100등판에 1번)에서, 부상 투수의 IL 직전 5등판 안 경보는 {fmt.pct(velo?.detection)}, 부상 없는 투수는 {fmt.pct(velo?.control_window)}입니다.</b>
+            {" "}미리 정한 주 지표(일치도: 부상 투수의 경보 지수가 짝지은 부상 없는 투수보다 클 확률)로 둘을 구별한 방법은 구속 하락 신호뿐이었습니다({fmt.num(velo?.concordance, 2)}, 95% 구간 하한 {fmt.num(velo?.concordance_lo, 2)}). 기존 방법(WHIP 관리도, 다변량 거리, 양방향 구속)은 구간이 0.5를 포함했습니다.</li>
+          <li><b>경보가 울린 뒤 30일 안에 팔 부상으로 IL에 오른 비율은 {fmt.pct(100 * (val?.alarm_rate ?? 0))}로, 경보 없는 등판({fmt.pct(100 * (val?.other_rate ?? 0))})의 {fmt.num(val?.lift, 1)}배입니다.</b>
+            {sealed && ` 봉인해 둔 2026 시즌에서도 ${fmt.num(sealed.lift, 1)}배였습니다.`} 그래도 열 번 중 아홉 번은 부상으로 이어지지 않으므로, 경보는 점검을 시작할 때이지 부상 판정이 아닙니다.</li>
+          <li><b>한계도 그대로 밝힙니다.</b> 흔히 쓰는 '구속 1mph 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
+            {" "}폼 변화 신호(일치도 {fmt.num(form?.concordance, 2)})는 부상 전조로 확인되지 않아 '무엇이 달라졌나' 설명용으로만 씁니다.
+            {sealedH1 && ` 2026 봉인 시즌에서는 구속 하락 신호의 순위 비교(일치도 ${fmt.num(sealedH1.value, 2)})가 재현되지 않았습니다.`}</li>
+        </ol>
+        <div>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart margin={{ top: 8, right: 16, left: 0, bottom: 24 }}>
+              <CartesianGrid stroke={GRID} />
+              <XAxis dataKey="false_alarms_per100" type="number" domain={[0, 8]} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false}
+                label={{ value: "부상 없는 투수 100등판당 경보 수", position: "bottom", offset: 8, ...LABEL }} />
+              <YAxis dataKey="detection" type="number" tick={TICK} width={40} axisLine={false} tickLine={false} unit="%" />
+              <Tooltip {...TIP_STYLE} formatter={(v, n) => [`${fmt.num(v, 1)}%`, n]} labelFormatter={(v) => `경보 ${fmt.num(v, 2)}/100등판`} />
+              <ReferenceLine x={data.design_far} stroke="var(--muted)" strokeDasharray="4 4" label={{ value: "설계점", position: "insideTopLeft", ...LABEL, fill: "var(--muted)" }} />
+              {baselines.map((r) => <Line key={r.method} data={curve(r.method)} dataKey="detection" name={r.method} stroke="#b8c0cc" strokeWidth={1.2} dot={false} isAnimationActive={false} />)}
+              <Line data={curve("구속 하락 신호")} dataKey="detection" name="구속 하락 신호" stroke="var(--navy-2)" strokeWidth={3} dot={{ r: 3, fill: "#fff", strokeWidth: 1.5 }} isAnimationActive={false} />
+              <Scatter data={data.opcurve.filter((q) => q.method === "B1 구속 1mph" && q.scale === 1)} dataKey="detection" name="구속 1mph 하락 규칙" fill="var(--warn)" shape="diamond" isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="caption">경보를 더 자주 허용할수록 더 많이 잡습니다. 굵은 선이 구속 하락 신호, 회색 선이 기존 방법, 주황 마름모가 '구속 1mph 하락' 규칙입니다.</p>
+        </div>
+      </div>
     </div>
   );
 }

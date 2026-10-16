@@ -11,13 +11,14 @@ const str = (n) => new Date(n * DAY).toISOString().slice(0, 10);
 
 /** 날짜별 투구 수(같은 날 두 번이면 합)와 등판 횟수. */
 function daily(outings) {
-  const pitches = new Map(), apps = new Map();
+  const pitches = new Map(), apps = new Map(), outs = new Map();
   for (const o of outings) {
     const d = num(o.date);
     pitches.set(d, (pitches.get(d) || 0) + o.pitches);
     apps.set(d, (apps.get(d) || 0) + 1);
+    outs.set(d, (outs.get(d) || 0) + (o.outs || 0));
   }
-  return { pitches, apps };
+  return { pitches, apps, outs };
 }
 
 function sum(map, from, to) {
@@ -32,7 +33,7 @@ function sum(map, from, to) {
  * p7dFrom: 기준선 마지막 등판일 — 7일 투구 표시는 그 뒤에만 켠다(기준을 만드는 등판이 자기 기준을 넘었다고 표시하지 않도록, 2026-10-16).
  */
 export function dayState(outings, date, rules, p7dLimit, p7dFrom = null) {
-  const { pitches, apps } = daily(outings);
+  const { pitches, apps, outs } = daily(outings);
   const today = num(date);
   const days = [...pitches.keys()].sort((a, b) => a - b);
   const first = days.length ? days[0] : null;
@@ -61,15 +62,24 @@ export function dayState(outings, date, rules, p7dLimit, p7dFrom = null) {
   return {
     date, pitchedToday, todayPitches: pitches.get(today) || 0, consecutive, backToBack: pitchedToday && (apps.get(today - 1) || 0) > 0,
     lastDate: last == null ? null : str(last), daysSince: last == null ? null : today - last, lastPitches: last == null ? null : pitches.get(last),
-    restDays, prevPitches, apps3d, p7d, acwr, flags,
+    restDays, prevPitches, prevOuts: prev == null ? null : outs.get(prev), apps3d, p7d, acwr, flags,
   };
 }
 
-/** 신호등 한 단계: 표시가 하나라도 켜지면 '표시', 연투(어제도 오늘도 등판)이거나 ACWR이 1.5를 넘으면(1.8이 표시 기준) '주의', 아니면 '평소'.
- *  '주의'는 평가 계획에 없는 현황판용 중간 단계다 (2026-10-07, 3일 2등판은 불펜의 흔한 패턴이라 뺌). */
+/** '주의' 이유 (평가 계획에 없는 현황판용 중간 단계): 연투, 최근 1주가 평소 주당의 1.5배 초과(1.8이 표시 기준),
+ *  2이닝 이상(아웃 6개 이상) 던지고 하루 이하 쉬고 등판 (2026-10-16 추가). 3일 2등판은 불펜의 흔한 패턴이라 넣지 않는다. */
+export function cautionReasons(st) {
+  const out = [];
+  if (st.pitchedToday && st.backToBack) out.push("연투");
+  if (st.acwr != null && st.acwr > 1.5 && !st.flags.includes("acwr")) out.push("최근 1주 투구가 평소의 1.5배 이상");
+  if (st.pitchedToday && st.prevOuts != null && st.prevOuts >= 6 && st.restDays != null && st.restDays <= 1) out.push("2이닝 이상 던지고 하루 이하 쉬고 등판");
+  return out;
+}
+
+/** 신호등 한 단계: 표시가 하나라도 켜지면 '표시', 주의 이유가 있으면 '주의', 아니면 '평소'. */
 export function loadStatus(st) {
   if (st.flags.length) return "표시";
-  if ((st.pitchedToday && st.backToBack) || (st.acwr != null && st.acwr > 1.5)) return "주의";
+  if (cautionReasons(st).length) return "주의";
   return "평소";
 }
 

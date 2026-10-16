@@ -144,22 +144,24 @@ export default function Kbo() {
   const withData = scout.pitchers.filter((p) => p.seasons.length > 0).length;
   return (
     <div className="page">
-      <h1>KBO · 외국인 투수 영입 전 점검</h1>
-      <p className="lead">
-        KBO 구단은 해마다 외국인 투수를 MLB·트리플A에서 데려옵니다. 그 선수들의 지난 시즌은 공개 추적 기록(MLB 2021~2026, 트리플A 2023~2025)에 남아 있어, 영입 전에 같은 엔진으로
-        '평소와 달라진 흐름이 있었는지'를 볼 수 있습니다. 2026년 KBO 외국인 투수 {scout.pitchers.length}명 중 <b>{withData}명</b>의 기록을 돌렸습니다.
-        트리플A는 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 쓴 <b>참고용</b>입니다. IL 등재는 MLB(거래 기록 + 수기 검토로 팔꿈치·어깨만)와 트리플A(거래 기록 자동 추출, 사유 문구가 거의 없어 대부분 '부위 미상') 공개 기록에서 가져왔고, KBO 시즌의 부상은 표시되지 않습니다.
-      </p>
+      <h1>KBO 외국인 투수 영입 전 점검</h1>
+      <p className="lead">2026년 KBO 외국인 투수 {scout.pitchers.length}명 중 MLB·트리플A 공개 추적 기록이 있는 {withData}명의 지난 시즌에 같은 엔진을 돌려, 영입 전에 '평소와 달라진 흐름'이 있었는지 봅니다.</p>
+      <details className="more">
+        <summary>자료와 한계 보기</summary>
+        <p>MLB 2021~2026, 트리플A 2023~2025(Baseball Savant). 트리플A는 구장 보정 없이 MLB 한계값을 그대로 쓴 참고용입니다.
+          IL 등재는 MLB(팔꿈치·어깨만 확인)와 트리플A(거래 기록, 대부분 부위 미상) 공개 기록에서 가져왔고, KBO 시즌의 부상은 들어 있지 않습니다.
+          명단은 2026년 7월 전반기 결산 기사와 그 뒤 시즌 중 대체 영입(구단 발표 기사)입니다.</p>
+      </details>
       <div className="toolbar">
         <label><span>구단</span>
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
         <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "기록 있는 투수만" : "전체 보기"}</button>
-        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · 표의 '리플레이 →'를 누르면 그 시즌의 네 그래프를 봅니다</span>
+        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프</span>
       </div>
       {shown.map((p) => <ScoutCard key={p.name} p={p} />)}
       <div className="card">
-        <h2>2026 시즌 중 부상 대응 사례 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 날짜는 공개 기록</span></h2>
+        <h2>2026 시즌 부상 대응 사례 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>말소에서 교체 결정까지 걸린 날</span></h2>
         <div className="kpi">
           {data.pitchers.map((p) => (
             <div key={p.name}>
@@ -176,7 +178,7 @@ export default function Kbo() {
       </div>
       <div className="card">
         <div className="card-head">
-          <h2>직접 입력 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 공개 추적 기록이 없는 투수(KBO 시즌, 고교 측정기)용 간이 분석</span></h2>
+          <h2>직접 입력 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>공개 기록이 없는 투수의 경기별 구속을 붙여 넣어 간이 분석</span></h2>
           <div className="row" style={{ margin: 0 }}>
             <div className="seg" role="group" aria-label="역할">
               {[["SP", "선발"], ["RP", "불펜"]].map(([k, v]) => <button key={k} className={`btn ${role === k ? "on" : ""}`} onClick={() => setRole(k)}>{v}</button>)}

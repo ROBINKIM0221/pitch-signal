@@ -270,29 +270,27 @@ def kbo_payload(cfg: dict) -> dict:
 
 
 def watchlist(cfg: dict, sealed_catalog: pd.DataFrame, names: pd.Series, outings: pd.DataFrame, labels: pd.DataFrame) -> dict:
-    """2026 시즌 감시 현황: 최근 N주(기본 4주) 안에 경보가 울린 투수-시즌과 그 뒤 팔 부상 IL 여부. 운영 화면 '이번 주 점검 대상'의 실제 자료판."""
-    mon = pd.read_parquet(PROCESSED / "monitor_sealed.parquet")
+    """2026 시즌 감시 현황: 시즌의 모든 경보(등판일·신호·그때 지수)와 투수-시즌별 팔 부상 IL 날짜.
+    화면이 고른 기준일의 최근 4주를 거른다 (2026-10-16 외부 검토: 9월 27일 기준 4주만 보이던 것을 날짜를 바꿔 보게)."""
+    mon = pd.read_parquet(PROCESSED / "monitor_sealed.parquet").sort_values("game_date")
     as_of = pd.Timestamp(outings["game_date"].max())
-    since = as_of - pd.Timedelta(weeks=4)
     arm = labels[labels["part"].isin(["elbow", "shoulder"]) & labels["season"].isin(cfg["data"]["split"]["sealed"])]
-    rows = []
-    for (pitcher, season), g in mon.sort_values("game_date").groupby(["pitcher", "season"]):
-        recent = g[(g["game_date"] >= since) & (g["velo_alarm"] | g["change_alarm"])]
-        if recent.empty:
+    pitchers, alarms = {}, []
+    for (pitcher, season), g in mon.groupby(["pitcher", "season"]):
+        hit = g[g["velo_alarm"] | g["change_alarm"]]
+        if hit.empty:
             continue
-        last = g.iloc[-1]
-        il_after = arm[(arm["pitcher"] == pitcher) & (arm["il_date"] > recent["game_date"].min())]["il_date"].min()
-        rows.append({"id": f"{pitcher}_{season}", "name": names.get(pitcher, str(pitcher)), "role": last["role"],
-                     "alarm_dates": [d.strftime("%Y-%m-%d") for d in recent["game_date"]],
-                     "signals": sorted({s for s, flag in (("velo", recent["velo_alarm"].any()), ("change", recent["change_alarm"].any())) if flag}),
-                     "last_outing": last["game_date"], "velo_index": r3(last["velo_index"]), "change_index": r3(last["change_index"]),
-                     "il_after": None if pd.isna(il_after) else il_after.strftime("%Y-%m-%d"),
-                     "n_mon": int(len(g)), "alarms_velo": int(g["velo_alarm"].sum()), "alarms_change": int(g["change_alarm"].sum())})
-    rows.sort(key=lambda r: (r["alarm_dates"][-1], r["name"]), reverse=True)
+        key = f"{pitcher}_{season}"
+        ils = arm[(arm["pitcher"] == pitcher) & (arm["season"] == season)]["il_date"].sort_values()
+        pitchers[key] = {"name": names.get(pitcher, str(pitcher)), "role": g.iloc[-1]["role"], "n_mon": int(len(g)),
+                         "il": [d.strftime("%Y-%m-%d") for d in ils]}
+        for r in hit.itertuples():
+            alarms.append({"id": key, "date": r.game_date.strftime("%Y-%m-%d"), "s": [x for x, f in (("velo", r.velo_alarm), ("change", r.change_alarm)) if f],
+                           "vi": r3(r.velo_index), "ci": r3(r.change_index)})
     season_alarms = {"velo": int(mon["velo_alarm"].sum()), "change": int(mon["change_alarm"].sum()), "pitcher_seasons": int(mon.groupby(["pitcher", "season"]).ngroups),
                      "outings": int(len(mon))}
-    return {"as_of": as_of.strftime("%Y-%m-%d"), "since": since.strftime("%Y-%m-%d"), "weeks": 4, "season": cfg["data"]["split"]["sealed"][0],
-            "rows": rows, "season_totals": season_alarms}
+    return {"as_of": as_of.strftime("%Y-%m-%d"), "start": mon["game_date"].min().strftime("%Y-%m-%d"), "weeks": 4, "season": cfg["data"]["split"]["sealed"][0],
+            "pitchers": pitchers, "alarms": alarms, "season_totals": season_alarms}
 
 
 def engine_params(cfg: dict) -> dict:
