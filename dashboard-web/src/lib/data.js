@@ -18,16 +18,17 @@ export async function loadJson(name) {
 }
 
 export function useJson(name) {
-  const [state, setState] = useState({ data: null, error: null });
+  const [state, setState] = useState({ name: null, data: null, error: null });
   useEffect(() => {
     let alive = true;
-    setState({ data: null, error: null });
     if (!name) return undefined;
-    loadJson(name).then((data) => alive && setState({ data, error: null }))
-      .catch((error) => alive && setState({ data: null, error }));
+    loadJson(name).then((data) => alive && setState({ name, data, error: null }))
+      .catch((error) => alive && setState({ name, data: null, error }));
     return () => { alive = false; };
   }, [name]);
-  return state;
+  // 파일 이름이 바뀐 직후 한 번은 이전 파일의 자료가 state에 남아 있다 — 지금 이름의 자료만 돌려준다
+  // (2026-10-16: 고교 시즌 화면에서 '전국체전' 탭을 누르면 대회 설정 + 시즌 자료로 그려 화면 전체가 멈추던 것)
+  return state.name === name ? { data: state.data, error: state.error } : { data: null, error: null };
 }
 
 export const fmt = {
