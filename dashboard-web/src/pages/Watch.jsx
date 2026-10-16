@@ -44,7 +44,7 @@ export default function Watch() {
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.id} className={r.il_after ? "hl" : ""}>
-                  <td><Link to={`/?p=${r.id}`}>{r.name}</Link></td>
+                  <td><Link to={`/replay?p=${r.id}`}>{r.name}</Link></td>
                   <td>{ROLE[r.role]}</td>
                   <td>{r.alarm_dates.map((d) => fmt.date(d)).join(", ")}</td>
                   <td>{r.signals.map((s) => <span key={s} className={`light ${s === "velo" ? "velo" : "change"}`} style={{ marginRight: 4 }}>{SIGNAL_NAME[s]}</span>)}</td>

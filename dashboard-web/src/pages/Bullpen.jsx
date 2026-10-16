@@ -192,7 +192,7 @@ function Detail({ row, rules, date }) {
           <span><i className="dot" style={{ background: "var(--alarm)" }} />품질 채널 경보</span>
           <span><i className="dash" />ACWR 표시 기준 {rules.acwr_flag}</span>
           <span><i style={{ background: "var(--ink)" }} />IL 등재일</span>
-          <Link to={`/?p=${p.id}`} style={{ marginLeft: 8 }}>리플레이에서 품질 채널 보기 →</Link>
+          <Link to={`/replay?p=${p.id}`} style={{ marginLeft: 8 }}>리플레이에서 품질 채널 보기 →</Link>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={280}>

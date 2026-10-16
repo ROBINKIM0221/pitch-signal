@@ -91,7 +91,7 @@ function ScoutCard({ p }) {
                     <td className="num" style={{ color: s.velo_change != null && s.velo_change <= -1 ? "var(--alarm)" : "inherit" }}>{s.velo_change == null ? "—" : `${s.velo_change > 0 ? "+" : ""}${fmt.num(s.velo_change, 1)}`}</td>
                     <td className="num">{s.alarms_velo} / {s.alarms_change}</td>
                     <td>{s.il ? <span className={`light ${ARM.has(s.il.part) ? "alarm" : "base"}`} title={s.il.reason || undefined}>{fmt.date(s.il.date)} {PART[s.il.part] || s.il.part}{s.il.count > 1 && ` · ${s.il.count}회`}</span> : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
-                    <td>{s.replay && <Link to={`/?p=${s.replay}`}>리플레이 →</Link>}</td>
+                    <td>{s.replay && <Link to={`/replay?p=${s.replay}`}>리플레이 →</Link>}</td>
                   </tr>
                 ))}
               </tbody>

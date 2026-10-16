@@ -25,7 +25,7 @@ export default function HighSchool() {
   const pick = (next) => setParams({ d: next }, { replace: true });
   const selector = (
     <div className="seg" role="tablist" aria-label="자료" style={{ marginBottom: 14 }}>
-      {index.datasets.map((d) => <button key={d.key} role="tab" className={`btn ${d.key === dataset.key ? "on" : ""}`} aria-selected={d.key === dataset.key} onClick={() => pick(d.key)}>{d.short} · {d.mode === "season" ? "전국 시즌" : "7일 대회"}</button>)}
+      {index.datasets.map((d) => <button key={d.key} role="tab" className={`btn ${d.key === dataset.key ? "on" : ""}`} aria-selected={d.key === dataset.key} onClick={() => pick(d.key)}>{d.mode === "season" ? `${d.short} 전국 고교` : `${d.short} (7일 대회)`}</button>)}
     </div>
   );
   if (!data) return <div className="page"><h1>고교 투구수 현황판</h1>{selector}<div className="placeholder">자료를 읽는 중…</div></div>;
@@ -132,7 +132,7 @@ function BallChart({ p }) {
   ));
   return (
     <>
-      <div className="chart-title">등판별 볼 비율(추정) <small>점 = 기록지에서 읽은 그 등판의 볼 비율, 점선 = 시즌 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"}, 주황 점 = 평소보다 볼이 많았던 등판</small></div>
+      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small></div>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
@@ -146,6 +146,8 @@ function BallChart({ p }) {
     </>
   );
 }
+
+const BALL_HOW = "협회 기록지 사진에서 공마다 볼인지 아닌지를 읽은 값입니다. 기록원이 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 타석 결과로 채웁니다. 볼 비율 = 볼 ÷ 공식 투구 수(읽지 못한 공은 볼이 아닌 것으로 셈). 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 뺍니다. '평소보다 볼 많음'은 40구 이상 등판을 그 투수의 다른 등판과 비교한 것이며, 원인은 해석하지 않습니다.";
 
 /** 다시 읽은 등판 표시 — 2026-10-09 사용자 "꼭 표시할 필요는 없다"로 숨김(데이터의 ball_reread는 남김). 되살리려면 SHOW_REREAD = true. */
 const SHOW_REREAD = false;
@@ -177,7 +179,7 @@ function GamesTable({ p, withCompetition }) {
   return (
     <div className="tbl-wrap">
       <table className="tbl games">
-        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">투구/타자</th></>}{hasBall && <th className="num" title="협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 추정값">볼 비율(추정)</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasDetail && <th>흐름</th>}</tr></thead>
+        <thead><tr><th>날짜</th><th>{withCompetition ? "대회" : "라운드"}</th><th>상대</th><th>등판</th><th className="num">이닝</th><th className="num">투구 수</th>{hasResults && <><th className="num">타자</th><th className="num">삼진</th><th className="num">4사구</th><th className="num">피안타</th><th className="num">타자당 투구</th></>}{hasBall && <th className="num" title={BALL_HOW}>볼 비율</th>}<th>직전 등판 뒤</th><th className="num">누적</th>{hasDetail && <th>흐름</th>}</tr></thead>
         <tbody>
           {p.games.map((g) => {
             const sum = g.flow ? flowSummary(g.flow) : null;
@@ -242,45 +244,41 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
   const rule = foreign !== "none" ? data.foreign_rules[foreign] : null;
   const days = useMemo(() => (p && s ? dailySeries(p.games.map((g) => ({ date: g.date, pitches: g.pitches })), s.start, s.end, { acute_days: 7, chronic_days: 21 }) : [])
     .map((d) => ({ ...d, over: rule ? (d.sum_7d != null && d.sum_7d > rule.max_pitches) : false })), [p, s, data, rule]);
-  const monthTicks = useMemo(() => days.filter((d) => d.date.endsWith("-01")).map((d) => d.date), [days]);   // 두 패널의 눈금을 매달 1일로 맞춘다
+  const gameDays = useMemo(() => days.filter((d) => d.pitches).map((d) => ({ ...d, x: d.date.slice(5).replace("-", "/") })), [days]);   // 등판한 날만 (빈 날이 많아 막대가 가늘어지던 것)
   const ruleCounts = Object.entries(totals.violations_by_rule).filter(([k]) => k !== "unknown").map(([k, v]) => `${RULE_NAME[k] || k} ${v}`).join(" · ");
   return (
     <div className="page">
-      <h1>고교 투구수 현황판 <span className="badge real">실제 기록 · {dataset.short} · {ds.region} 권역</span></h1>
+      <h1>고교 투구수 현황판</h1>
       {selector}
-      <p className="lead">
-        {dataset.name}: 2025 고교(18세 이하부) 37개 리그 {dataset.games}경기 전부 — 전국 {nation.schools}개 팀(주말리그 참가교, U-18 클럽 포함) · 투수 {nation.pitchers}명 · 등판 {nation.outings}회 · 규정 위반 {nation.violations}건 · 시즌 500구 이상 {nation.pitchers_season_500}명.
-        {" "}권역은 주말리그 참가 리그로 나눴고, 지금 보는 권역은 <b>{ds.region}</b>({totals.schools}개 팀, {ds.dates} {ds.games}경기)입니다. {index.labels}.
-        신호등 두 개는 서로 다른 뜻입니다. <b>규정</b>은 KBSA 투구수 규정(하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지)을 지켰는지,
-        <b> 누적 부하</b>는 규정에 없는 절대량 두 가지 — 7일 투구 수 합(주의 {data.load_lights.sum7.caution}구·높음 {data.load_lights.sum7.high}구)과 3일 안 두 등판의 합(주의 {data.load_lights.pair3.caution}구·높음 {data.load_lights.pair3.high}구) — 을 넘은 적이 있는지입니다.
-        기준값은 어떤 규정도 아니고 전국 2025 자료의 분위수(7일 합 상위 5%·2%)에 맞춘 서술적 눈금입니다. ACWR(최근 7일 ÷ 그 앞 3주 주평균)은 주말에만 던지는 고교 일정에서 분모가 작아 튀어 쓰지 않습니다.
-      </p>
+      <p className="lead">2025년 전국 고교 공식 경기 {dataset.games}경기의 투구 수로, 투수마다 KBSA 투구수 규정을 지켰는지와 규정이 보지 못하는 누적 부하를 봅니다.</p>
+      <details className="more">
+        <summary>신호등 기준 보기</summary>
+        <p><b>규정</b>: 하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 지켰는지.<br />
+          <b>누적 부하</b>: 7일 투구 수 합이 {data.load_lights.sum7.caution}구 이상이면 주의, {data.load_lights.sum7.high}구 이상이면 높음. 3일 안 두 경기 합이 {data.load_lights.pair3.caution}구 이상이면 주의, {data.load_lights.pair3.high}구 이상이면 높음.
+          규정이 아니라 2025년 전국 자료에서 상위 5%·2%에 해당하는 값으로 정한 눈금입니다.</p>
+      </details>
       <div className="toolbar">
         <label><span>권역</span>
           <select value={region?.key || ""} onChange={(e) => setRegion(e.target.value)}>
-            {dataset.regions.map((r) => <option key={r.key} value={r.key}>{r.name} · {r.schools}팀 · 투수 {r.pitchers}명{r.violations ? ` · 위반 ${r.violations}` : ""}</option>)}
+            {dataset.regions.map((r) => <option key={r.key} value={r.key}>{r.name} ({r.schools}팀)</option>)}
           </select>
         </label>
         <label><span>학교 검색</span>
-          <input list="hs-schools" placeholder="학교 이름 (전국)" onChange={(e) => jumpToSchool(e.target.value)} style={{ height: 34, padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: 9, background: "var(--card)", minWidth: 200 }} />
+          <input className="text" list="hs-schools" placeholder="학교 이름 (전국)" onChange={(e) => jumpToSchool(e.target.value)} style={{ minWidth: 200 }} />
           <datalist id="hs-schools">{dataset.schools.map((x) => <option key={x.code} value={x.name}>{`${dataset.regions.find((r) => r.key === x.region)?.name ?? ""} · ${x.games}경기`}</option>)}</datalist>
         </label>
+        <span className="caption" style={{ margin: 0 }}>{ds.region} 권역 · {totals.schools}개 팀 · 투수 {totals.pitchers}명 · {totals.games}경기</span>
       </div>
       <div className="kpi">
-        <div><div className="v">{totals.schools}<span className="sub"> 팀</span></div><div className="l">투수 {totals.pitchers}명 · 등판 {totals.outings}회 · {totals.games}경기 (투구 수 미공개 {totals.unknown_outings}등판)</div></div>
-        <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반 · 투수 {totals.violating_pitchers}명{ruleCounts && ` (${ruleCounts})`}</div></div>
-        <div><div className="v"><span style={{ color: "var(--alarm)" }}>{totals.pitchers_load_high}</span> · <span style={{ color: "var(--warn)" }}>{totals.pitchers_load_caution}</span><span className="sub"> 명</span></div><div className="l">누적 부하 높음 · 주의 (7일 합 {data.load_lights.sum7.high}/{data.load_lights.sum7.caution}구, 3일 안 두 등판 합 {data.load_lights.pair3.high}/{data.load_lights.pair3.caution}구)</div></div>
-        <div><div className="v">{totals.compliant_with_load}<span className="sub"> 명</span></div><div className="l">규정은 모두 지켰지만 누적 부하 표시(높음·주의)가 있던 투수</div></div>
-        <div><div className="v">{totals.pitchers_7d_150}<span className="sub"> 명</span></div><div className="l">7일 합 {data.load_lights.sum7.high}구 이상을 경험한 투수 · 시즌 500구 이상 {totals.pitchers_season_500}명</div></div>
-        <div><div className="v">{totals.pairs3_70}<span className="sub"> 쌍</span></div><div className="l">3일 안 두 등판 합 {data.load_lights.pair3.caution}구 이상 · {data.load_lights.pair3.high}구 이상 {totals.pairs3_100}쌍 (규정상 허용되는 연투·하루 쉰 등판)</div></div>
-        <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판) · 의무 휴식일 뒤 첫날 등판 {totals.min_rest_exact}건</div></div>
-        <div><div className="v">{totals.games_91plus}<span className="sub"> 등판</span></div><div className="l">91구 이상(휴식 4일 구간) · 100구 이상 {totals.games_100plus}등판</div></div>
-        {totals.ball_read != null && <div><div className="v">{totals.ball_outings}<span className="sub"> 등판</span></div><div className="l">기록지 판독 볼 비율(추정)을 보여 주는 등판 (기록지를 읽은 등판 {totals.ball_read}) · 평소보다 볼이 많았던 등판 {totals.ball_flags}</div></div>}
+        <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반{ruleCounts && ` (${ruleCounts})`}</div></div>
+        <div><div className="v">{totals.compliant_with_load}<span className="sub"> 명</span></div><div className="l">규정은 지켰지만 누적 부하 주의·높음</div></div>
+        <div><div className="v">{totals.pitchers_season_500}<span className="sub"> 명</span></div><div className="l">시즌 500구 이상 던진 투수</div></div>
+        <div><div className="v">{totals.pairs3_70}<span className="sub"> 쌍</span></div><div className="l">3일 안 두 경기 합 {data.load_lights.pair3.caution}구 이상</div></div>
       </div>
       <div className="toolbar">
         <label><span>학교</span>
           <select value={s?.code || ""} onChange={(e) => setSchool(e.target.value)}>
-            {schools.map((x) => <option key={x.code} value={x.code}>{x.name} · {x.games}경기 · 투수 {x.pitchers.length}명</option>)}
+            {schools.map((x) => <option key={x.code} value={x.code}>{x.name}</option>)}
           </select>
         </label>
         <label><span>해외 규정 비교</span>
@@ -289,43 +287,43 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             {Object.entries(data.foreign_rules).map(([k, v]) => <option key={k} value={k}>{k === "japan" ? "일본" : k} {v.window_days}일 {v.max_pitches}구</option>)}
           </select>
         </label>
-        <span className="caption" style={{ margin: 0 }}>경기 수가 많은 팀부터. 투수는 시즌 투구 수가 많은 순.</span>
+        {s && <span className="caption" style={{ margin: 0 }}>{s.name} · {s.games}경기 · 투수 {s.pitchers.length}명 · 규정 위반 {s.violations}건 · 부하 높음 <b style={{ color: "var(--alarm)" }}>{s.load_high}</b> · 주의 <b style={{ color: "var(--warn)" }}>{s.load_caution}</b></span>}
       </div>
-      {s && (
-        <div className="kpi">
-          <div><div className="v">{s.pitchers.length}<span className="sub"> 명</span></div><div className="l">{s.name} 투수 · {s.games}경기 · 팀 투구 수 {s.pitches_total ?? "—"}</div></div>
-          <div><div className="v">{s.violations}<span className="sub"> 건</span></div><div className="l">규정 위반 · 투수 {s.violating_pitchers}명</div></div>
-          <div><div className="v"><span style={{ color: "var(--alarm)" }}>{s.load_high}</span> · <span style={{ color: "var(--warn)" }}>{s.load_caution}</span><span className="sub"> 명</span></div><div className="l">누적 부하 높음 · 주의</div></div>
-          <div><div className="v">{s.compliant_with_load}<span className="sub"> 명</span></div><div className="l">규정은 지켰지만 누적 부하 표시가 있던 투수</div></div>
-        </div>
-      )}
       <div className="grid2">
         <div className="card">
-          <h2>{s?.name} 투수 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 규정 / 누적 부하</span></h2>
-          <div className="list">
-            {pitchers.map((x) => (
-              <button key={x.code} className={x.code === p?.code ? "on" : ""} onClick={() => setCode(x.code)} title={x.load_reasons.join(" · ") || undefined}>
-                <span className="code">{x.label}</span>
-                <span className={`light ${STATUS_CLASS[x.rule_status]}`}>규정 {x.rule_status}</span>
-                <span className={`light ${LOAD_CLASS[x.load_status]}`}>부하 {x.load_status}</span>
-                <span className="tags"><span className="pill">{x.outings}등판 · {x.pitches_total ?? "—"}구</span>{x.max_7d != null && <span className="pill">7일 최대 {fmt.num(x.max_7d, 0)}구</span>}{x.max_pair3 != null && <span className="pill">3일 쌍 최대 {fmt.num(x.max_pair3, 0)}구</span>}{x.ball_season != null && <span className="pill" title="기록지 판독 볼 비율(추정), 검산 통과 등판 합">볼 {fmt.num(100 * x.ball_season, 0)}%</span>}{x.ball_flags > 0 && <span className="pill" title="평소보다 볼이 많았던 등판 수 (40구 이상)"><span className="dot" style={{ background: "var(--warn)" }} />볼 많음 {x.ball_flags}</span>}</span>
-              </button>
-            ))}
+          <h2>{s?.name} 투수</h2>
+          <div className="tbl-wrap">
+            <table className="tbl pick">
+              <thead><tr><th>투수</th><th>규정</th><th>누적 부하</th><th className="num">등판</th><th className="num">시즌</th><th className="num">7일 최대</th><th className="num">볼 비율</th></tr></thead>
+              <tbody>
+                {pitchers.map((x) => (
+                  <tr key={x.code} className={x.code === p?.code ? "hl" : ""} onClick={() => setCode(x.code)} title={x.load_reasons.join(" · ") || undefined}>
+                    <td><b>{x.label}</b></td>
+                    <td><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
+                    <td><span className={`light ${LOAD_CLASS[x.load_status]}`}>{x.load_status}</span></td>
+                    <td className="num">{x.outings}</td>
+                    <td className="num">{x.pitches_total ?? "—"}</td>
+                    <td className="num">{x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}</td>
+                    <td className="num">{x.ball_season != null ? `${fmt.num(100 * x.ball_season, 0)}%` : "—"}{x.ball_flags > 0 && <span className="light warn" style={{ marginLeft: 4 }} title="평소보다 볼이 많았던 등판 수 (40구 이상)">{x.ball_flags}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
         <div className="card">
-          <h2>{s?.name} 시즌 투구 수 분배 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 투수별 합계</span></h2>
-          <ResponsiveContainer width="100%" height={Math.max(220, 24 * pitchers.length + 40)}>
+          <h2>투수별 시즌 투구 수</h2>
+          <ResponsiveContainer width="100%" height={Math.max(220, 33 * pitchers.length + 40)}>
             <ComposedChart layout="vertical" data={pitchers.map((x) => ({ label: x.label, total: x.pitches_total ?? 0, unknown: x.pitches_total == null, on: x.code === p?.code }))} margin={{ top: 4, right: 48, left: 4, bottom: 0 }}>
               <CartesianGrid horizontal={false} stroke={GRID} />
               <XAxis type="number" tick={TICK} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="label" width={44} tick={TICK} axisLine={false} tickLine={false} interval={0} />
+              <YAxis type="category" dataKey="label" width={86} tick={TICK} axisLine={false} tickLine={false} interval={0} />
               <Tooltip {...TIP_STYLE} formatter={(v, n, item) => [item.payload.unknown ? "일부 미공개" : `${fmt.num(v, 0)}구`, "시즌 투구 수"]} />
-              <Bar dataKey="total" name="시즌 투구 수" fill="var(--velo)" radius={[0, 3, 3, 0]} isAnimationActive={false} label={{ position: "right", fontSize: 11, fill: "var(--ink-2)", formatter: (v) => (v ? fmt.num(v, 0) : "") }} />
-              <ReferenceLine x={500} stroke="var(--alarm)" strokeDasharray="4 4" label={{ value: "500구", position: "insideTopRight", ...LABEL, fill: "var(--alarm)" }} />
+              <Bar dataKey="total" name="시즌 투구 수" fill="var(--navy-2)" radius={[0, 3, 3, 0]} isAnimationActive={false} label={{ position: "right", fontSize: 11, fill: "var(--ink-2)", formatter: (v) => (v ? fmt.num(v, 0) : "") }} />
+              <ReferenceLine x={500} stroke="var(--alarm)" strokeDasharray="4 4" />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">팀 합계 {s?.pitches_total ?? "—"}구 · {s?.games}경기. 한두 명에게 몰리는지 한눈에 봅니다.</p>
+          <p className="caption">점선은 시즌 500구.</p>
         </div>
       </div>
       {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
@@ -338,7 +336,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           {p.load_reasons.length > 0 && <p className="caption" style={{ marginTop: 0 }}>부하 표시 이유: {p.load_reasons.join(" · ")}</p>}
           {p.batters != null && p.batters > 0 && (
             <p className="caption" style={{ marginTop: 0 }}>
-              <b>시즌 등판 결과</b> (맥락 정보 — 신호가 아닙니다): 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 투구/타자 ${fmt.num(p.p_per_pa, 2)}`} · 타석별 흐름이 복원된 등판 {p.flow_games}/{p.outings}
+              <b>시즌 기록</b> 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 타자당 투구 ${fmt.num(p.p_per_pa, 1)}개`}
             </p>
           )}
           {p.games.some((g) => g.ball_marks != null) && (
@@ -346,35 +344,32 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           )}
           {p.games.some((g) => g.ball_marks != null) && (
             <p className="caption" style={{ marginTop: 0 }}>
-              <b>제구 (기록지 판독, 추정)</b>: 볼 비율 {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · 볼 비율을 보여 주는 등판 {p.ball_outings}/{p.outings}{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
-              {" "}— 협회 기록지 사진에서 공마다 볼·볼 아님을 읽은 값입니다. 기록원이 띠에 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 공식 타석 결과로 채웁니다. 볼 비율은 공식 투구 수에 대한 볼 수이고, 기록지에서 읽지 못한 공은 볼이 아닌 것으로 셉니다. 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 빼고, '평소보다 볼 많음'은 40구 이상 등판만 그 투수의 다른 등판과 비교합니다. 원인(피로·부상 등)은 해석하지 않습니다.
+              <b>볼 비율(추정)</b> {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · {p.outings}등판 중 {p.ball_outings}등판{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
+              <span className="info" title={BALL_HOW}>i</span>
             </p>
           )}
           <BallChart p={p} />
-          <div className="chart-title">일별 투구 수와 7일 합 <small>막대 = 그날 투구 수, 검은 선 = 그날까지 7일 합, 점선 = 주의 {data.load_lights.sum7.caution}구·높음 {data.load_lights.sum7.high}구{rule && ` · 해외 규정 비교: 7일 합이 ${rule.max_pitches}구를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={days} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} syncId="hs-season">
+          <div className="chart-title">등판별 투구 수 <small>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={gameDays} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke={GRID} />
-              <XAxis dataKey="date" ticks={monthTicks} tickFormatter={fmt.date} tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} />
+              <XAxis dataKey="x" tick={TICK} axisLine={{ stroke: GRID }} tickLine={false} interval="preserveStartEnd" minTickGap={8} />
               <YAxis tick={TICK} width={36} axisLine={false} tickLine={false} />
-              <Tooltip content={<ChartTip render={(payload) => <DayTip d={payload[0].payload} />} />} cursor={{ fill: "rgba(20,20,19,0.04)" }} />
-              <Bar dataKey="pitches" name="투구 수" fill="var(--velo)" barSize={5} radius={[2, 2, 0, 0]} isAnimationActive={false} />
-              <Line type="stepAfter" dataKey="sum_7d" name="7일 합" stroke="var(--ink)" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
-              <ReferenceLine y={data.load_lights.sum7.caution} stroke="var(--warn)" strokeDasharray="4 4" label={limitLabel(`주의 ${data.load_lights.sum7.caution}구`)} />
-              <ReferenceLine y={data.load_lights.sum7.high} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`높음 ${data.load_lights.sum7.high}구`)} />
+              <Tooltip content={<ChartTip render={(payload) => <DayTip d={payload[0].payload} />} />} cursor={{ fill: "rgba(19,40,75,0.05)" }} />
+              <Bar dataKey="pitches" name="투구 수" fill="var(--navy-2)" maxBarSize={22} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+              <Line dataKey="sum_7d" name="7일 합" stroke="var(--warn)" strokeWidth={2} dot={{ r: 2.5 }} isAnimationActive={false} />
+              <ReferenceLine y={data.load_lights.sum7.caution} stroke="var(--warn)" strokeDasharray="4 4" label={limitLabel(`주의 ${data.load_lights.sum7.caution}`)} />
+              <ReferenceLine y={data.load_lights.sum7.high} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`높음 ${data.load_lights.sum7.high}`)} />
               {rule && <ReferenceLine y={rule.max_pitches} stroke="var(--muted)" strokeDasharray="2 4" label={limitLabel(`7일 ${rule.max_pitches}구`)} />}
-              {p.violations.filter((v) => v.rule !== "unknown").map((v) => <ReferenceLine key={v.date + v.rule} x={v.date} stroke="var(--alarm)" label={{ value: "위반", position: "insideTop", ...LABEL, fill: "var(--alarm)" }} />)}
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">7일 합은 그날까지의 공식 경기 투구 수 합(연습·불펜 투구 제외). 3일 안 두 등판의 합은 등판표의 '직전 등판 뒤'와 투구 수로 확인할 수 있습니다.</p>
           <GamesTable p={p} withCompetition />
           <ViolationsTable p={p} />
         </div>
       )}
       <p className="note">
-        출처: {ds.source}. 전국 모든 공식 경기를 넣었으므로 각 투수의 기록은 시즌 전체입니다. 상세 기록이 공개되지 않은 경기({ds.no_detail_games.length}경기)는 선발 투수만 '투구 수 미공개'로 들어갑니다.
-        한계: 공식 경기 투구 수만 반영되고 연습·불펜 투구는 빠집니다. 고교에는 공식 부상 기록이 없어 이 화면은 '규정이 보지 못하는 부하를 보여 주는 현황판'이지 탐지 성능을 검증한 것이 아닙니다.
-        규정 수치(하루 {kbsa.daily_max}구, 휴식일 표 {kbsa.rest_table.map(([u, r]) => `${u}구 이하 ${r}일`).join(" · ")})와 부하 기준값은 설정 파일 값입니다.
+        출처: {ds.source}. 공식 경기 투구 수만 반영되며 연습·불펜 투구는 빠집니다. 상세 기록이 공개되지 않은 {ds.no_detail_games.length}경기는 선발 투수만 '투구 수 미공개'로 들어갑니다.
+        고교에는 공식 부상 기록이 없어, 이 화면은 부상 탐지가 아니라 규정이 보지 못하는 부하를 보여 주는 현황판입니다.
       </p>
     </div>
   );
@@ -417,11 +412,11 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
   return (
     <div className="card">
       <div className="card-head">
-        <h2>{school.name} 투수 운용 계획판 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 기준일 아침에 누가 등판할 수 있는가</span></h2>
+        <h2>{school.name} 투수 운용 계획판</h2>
         <span className="caption" style={{ margin: 0 }}>가용 <b style={{ color: "var(--ok)" }}>{counts["가용"]}</b> · 불가 <b style={{ color: "var(--alarm)" }}>{counts["불가"]}</b> · 판정 불가 {counts["판정 불가"]}{gameToday && ` · 이날 경기: ${gameToday.competition}`}</span>
       </div>
       <div className="toolbar" style={{ marginBottom: 10 }}>
-        <label><span>기준일</span><input type="date" value={date} min={school.start} max={addDays(school.end, 14)} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ height: 34, padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: 9, background: "var(--card)" }} /></label>
+        <label><span>날짜</span><input className="text" type="date" value={date} min={school.start} max={addDays(school.end, 14)} onChange={(e) => e.target.value && setDate(e.target.value)} /></label>
         <label><span>바로가기</span>
           <select value="" onChange={(e) => e.target.value && setDate(e.target.value)}>
             <option value="">대회 첫날…</option>
@@ -429,11 +424,11 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
             <option value={school.end}>시즌 마지막 경기 {fmt.date(school.end)}</option>
           </select>
         </label>
-        <label><span>오늘 투구 가정</span><input type="number" min={0} max={130} step={5} value={assume} onChange={(e) => setAssume(Math.max(0, Number(e.target.value) || 0))} style={{ width: 80, height: 34, padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: 9, background: "var(--card)" }} /><span style={{ color: "var(--muted)" }}>구 → 가용 투수의 다음 가능일</span></label>
+        <label><span>오늘</span><input className="text" type="number" min={0} max={130} step={5} value={assume} onChange={(e) => setAssume(Math.max(0, Number(e.target.value) || 0))} style={{ width: 80 }} /><span>구 던지면 다음 등판 가능일은?</span></label>
       </div>
       <div className="tbl-wrap">
         <table className="tbl">
-          <thead><tr><th>투수</th><th>기준일 상태</th><th>마지막 등판</th><th>의무 휴식</th><th>다음 등판 가능일</th><th className="num">직전 7일 합</th><th>이날 실제</th>{assume > 0 && <th>오늘 {assume}구 던지면</th>}</tr></thead>
+          <thead><tr><th>투수</th><th>이날 등판</th><th>마지막 등판</th><th>의무 휴식</th><th>다음 등판 가능일</th><th className="num">직전 7일 합</th><th>이날 실제</th>{assume > 0 && <th>오늘 {assume}구 던지면</th>}</tr></thead>
           <tbody>
             {rows.map(({ x, a, next, sum7, today, hypo }) => (
               <tr key={x.code} className={x.code === picked ? "hl" : ""} onClick={() => onPick(x.code)} style={{ cursor: "pointer" }}>
@@ -450,7 +445,7 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
           </tbody>
         </table>
       </div>
-      <p className="caption">상태는 기준일 아침 기준 — 그날 이전 등판만으로 KBSA 규정(투구 수별 의무 휴식일, 3일 연속 등판 금지)을 적용합니다. '이날 실제'는 기록에 있는 그날 등판입니다. 2025 기록으로 되돌아보는 화면이지만, 운영 중에는 어제까지의 투구 수만 넣으면 오늘의 가용 투수와 '오늘 몇 구를 던지면 언제 다시 나올 수 있는가'가 그대로 나옵니다.</p>
+      <p className="caption">고른 날짜 전날까지의 등판에 KBSA 규정(투구 수별 의무 휴식일, 3일 연속 등판 금지)을 적용한 결과입니다. 시즌 중에는 어제까지의 투구 수만 넣으면 오늘 나갈 수 있는 투수가 바로 나옵니다.</p>
     </div>
   );
 }
@@ -489,20 +484,14 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
   const chart = days.map((d) => { const g = p?.games.find((x) => x.date === d); return { date: d, pitches: g ? g.pitches : null, unknown: g && g.pitches == null ? kbsa.daily_max : null, cum: g ? g.cum_pitches : null }; });
   return (
     <div className="page">
-      <h1>고교 투구수 현황판 <span className="badge real">실제 기록 · {ds.short} 18세 이하부</span></h1>
+      <h1>고교 투구수 현황판</h1>
       {selector}
-      <p className="lead">
-        {ds.name} ({ds.dates}, 15개교 {ds.games}경기 단판 토너먼트). KBSA 기록실의 경기별 투수 기록(등판 구분·이닝·투구수)을 그대로 옮겼고, {index.labels}.
-        신호등 두 개는 서로 다른 뜻입니다. <b>규정</b>은 KBSA 투구수 규정(하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지)을 지켰는지,
-        <b> 누적</b>은 대회 7일 동안 던진 투구 수의 합입니다({data.load_lights.sum7.caution}구 이상 '주의', {data.load_lights.sum7.high}구 이상 '높음' — 시즌 화면의 7일 합과 같은 기준으로, 규정이 아니라 전국 2025 자료 분위수에 맞춘 서술적 눈금).
-      </p>
+      <p className="lead">{ds.name}({ds.dates}, 15개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
       <div className="kpi">
-        <div><div className="v">{ds.games}<span className="sub"> 경기</span></div><div className="l">상세 기록 {ds.games - ds.no_detail_games.length}경기 · {ds.no_detail_games.length}경기는 선발만 공개(투구 수 모름)</div></div>
-        <div><div className="v">{totals.pitchers}<span className="sub"> 명</span></div><div className="l">등판 투수 · 등판 {totals.outings}회 · 3경기 이상 등판 {totals.pitchers_3plus_games}명</div></div>
-        <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반 · 판정 불가 {totals.unknown_outings}등판</div></div>
-        <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판) · 의무 휴식일 뒤 첫날 등판 {totals.min_rest_exact}건</div></div>
-        <div><div className="v">{totals.games_91plus}<span className="sub"> 등판</span></div><div className="l">91구 이상(휴식 4일 구간) · 100구 이상 {totals.games_100plus}등판 · 최다 {kbsa.daily_max}구</div></div>
-        <div><div className="v">{totals.max_total}<span className="sub"> 구</span></div><div className="l">한 투수의 대회 누적 최다 투구 수</div></div>
+        <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반</div></div>
+        <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판)</div></div>
+        <div><div className="v">{totals.games_91plus}<span className="sub"> 등판</span></div><div className="l">91구 이상 등판</div></div>
+        <div><div className="v">{totals.max_total}<span className="sub"> 구</span></div><div className="l">한 투수의 대회 누적 최다</div></div>
       </div>
       <div className="toolbar">
         <label><span>학교</span>
@@ -510,11 +499,11 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
             {schools.map((x) => <option key={x.code} value={x.code}>{x.name} · {x.games}경기 · 투수 {x.pitchers.length}명</option>)}
           </select>
         </label>
-        <span className="caption" style={{ margin: 0 }}>경기 수가 많은 학교(결승 진출 4경기)부터 정렬. 투수는 누적 투구 수가 많은 순.</span>
+        <span className="caption" style={{ margin: 0 }}>{ds.games}경기 · 투수 {totals.pitchers}명 · 등판 {totals.outings}회</span>
       </div>
       <div className="grid2 hs-grid">
         <div className="card">
-          <h2>{s?.name} 투수 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 규정 / 누적</span></h2>
+          <h2>{s?.name} 투수</h2>
           <div className="list">
             {pitchers.map((x) => {
               const load = cumulativeLight(x, data.load_lights);
@@ -533,7 +522,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
           </div>
         </div>
         <div className="card">
-          <h2>{s?.name} 대회 등판 달력 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 칸의 숫자는 그날 투구 수</span></h2>
+          <h2>대회 등판 달력 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>칸 숫자 = 그날 투구 수</span></h2>
           <div className="tbl-wrap">
             <table className="heat">
               <thead>
@@ -592,9 +581,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
         </div>
       )}
       <p className="note">
-        출처: {ds.source}. 상세 기록이 공개되지 않은 경기({ds.no_detail_games.map((n) => `${n}경기`).join(", ")})는 선발 투수 두 명만 '투구 수 미공개'로 들어가 있고, 그날 등판한 다른 투수는 기록에 없습니다.
-        한계: 공식 경기 투구 수만 반영되고 대회 전 주말리그·연습 투구는 빠집니다. 고교에는 공식 부상 기록이 없어 이 화면은 '규정이 보지 못하는 부하를 보여 주는 현황판'이지 탐지 성능을 검증한 것이 아닙니다.
-        규정 수치(하루 {kbsa.daily_max}구, 휴식일 표 {kbsa.rest_table.map(([u, r]) => `${u}구 이하 ${r}일`).join(" · ")})는 설정 파일 값입니다.
+        출처: {ds.source}. 상세 기록이 공개되지 않은 {ds.no_detail_games.length}경기는 선발 투수 두 명만 '투구 수 미공개'로 들어갑니다. 대회 전 주말리그·연습 투구는 빠집니다.
       </p>
     </div>
   );
