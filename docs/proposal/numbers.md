@@ -165,7 +165,21 @@
 | 91구 이상 / 100구 이상 등판, 최다 | 5 / 3, 105구 | 〃 |
 | 3경기 이상 등판 투수 / 누적 최다 | 6명 / 188구 | 〃 |
 | 결승 진출 두 학교 팀 합계 | 광주제일고 557구(투수 6명), 유신고 356구 이상(투수 6명, 1등판 미공개) | reports/figures/final/06b_tournament.png |
-| 표기 | 학교는 실명, 선수는 등번호(#nn); 선수 실명 대응표는 저장소 밖(C:/work/private/pitchsignal/kbsa_2025_names.csv) | config_kbsa.yaml labels |
+| 표기 | 학교는 실명, 선수는 '이름 #등번호'(2026-10-08 사용자 결정); 이름 대응표는 저장소 밖(C:/work/private/pitchsignal/kbsa_2025_names.csv), 화면 데이터를 만들 때만 붙임 | config_kbsa.yaml labels·show_player_names |
+
+## 고교 현황판 (화면 3) — 운영 도구와 기록지 판독 (제안서 6.1의 (3)·(4))
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 등판 흐름이 붙은 등판 | 7,160 / 7,162 | dashboard-web/public/data/highschool.json (totals.flow_outings) |
+| 기록지 사진 | 1,953장 (2025 고교 경기, 2026-10-07 시범 62장 · 10-08 나머지), 저장소 밖 | C:/work/private/pitchsignal/scoresheets/, data/processed/scoresheet_read_meta.csv |
+| 볼 비율을 읽은 등판 / 화면에 보이는 등판 / '평소보다 볼 많음' | 7,153 / 6,560 / 105 | highschool.json (totals.ball_read·ball_outings·ball_flags) |
+| 시험용 경기 40구 이상: 등판 / 검산 통과 / 순위상관 (채우기 전) | 1,403 / 97.6% / 0.727 (0.677) | reports/tables/hs_scoresheet_summary.csv |
+| '평소보다 볼 많음' 등판의 타자당 사구·폭투 (시험용, 표시 없는 등판) | 5.57%·4.59% (3.84%·2.81%) | 〃 |
+| MLB 2025 같은 상관 (40구 이상 5,462등판, 정확한 투구 기록) | 0.658 (사구만 0.087) | 2026-10-16 계산, 저장소 밖 C:/work/private/pitchsignal/video/mlb_corr.py (data/raw/statcast/2025) |
+| 중계 영상 19경기 대조: 타석 일치 / 투수진 38개 볼 비율 평균 오차 | 1,236타석 중 90.2% / 1.3%p | 저장소 밖 C:/work/private/pitchsignal/review_full/seq_eval.py, video/staff_err.py (docs/SPEC.md 변경 기록 2026-10-16) |
+| AI 타석 칸 전체 다시 읽기 | 32,484타석 (영상 19경기 전 타석 + 40구 이상 등판 중 모델 판독뿐인 타석), 칸 선을 잘못 잡은 8장의 빈 판독은 버림 | reports/logs (score 실행), docs/SPEC.md 3.14.4의 5-2 |
+| 이닝별 투구 수: 붙은 등판 / 이닝 볼·스트라이크까지 보임 / 교체 경계 누적 = 공식 | 7,117 / 93.9% / 94.5% | reports/tables/hs_scoresheet_rows_summary.csv |
 
 ## 팀 불펜 현황판 (화면 4)
 
