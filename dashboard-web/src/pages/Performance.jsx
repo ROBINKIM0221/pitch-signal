@@ -27,10 +27,7 @@ export default function Performance() {
   return (
     <div className="page">
       <h1>성능 비교</h1>
-      <p className="lead">
-        평가 계획을 고정한 뒤 한 번씩 계산한 결과입니다. 모든 방법은 같은 사례·대조군·관찰 창을 쓰고, 임계값은 개발셋(2021~2023)에서만 맞췄습니다.
-        {hasSealed && " 2026 시즌은 봉인해 두었다가 10월 7일 한 번 평가했습니다 — 결과는 좋든 나쁘든 그대로 보고합니다."}
-      </p>
+      <p className="lead">평가 계획을 고정한 뒤 한 번 계산한 결과입니다. 모든 방법을 같은 투수·같은 기간으로 비교했고, 기준값은 2021~2023 시즌에서만 맞췄습니다.</p>
       {hasSealed && (
         <div className="toolbar">
           <div className="seg" role="tablist">

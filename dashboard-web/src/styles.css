@@ -73,8 +73,8 @@ b, strong { font-weight: 650; }
 
 /* ---------- 페이지 머리 ---------- */
 .page h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; font-weight: 800; color: var(--navy); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.page .lead { color: var(--ink-2); margin: 0 0 16px; max-width: 86ch; font-size: 14px; }
-details.more { margin: -8px 0 16px; font-size: 13px; color: var(--ink-2); max-width: 92ch; }
+.page .lead { color: var(--ink-2); margin: 0 0 16px; font-size: 14px; }
+details.more { margin: -8px 0 16px; font-size: 13px; color: var(--ink-2); }
 details.more summary { cursor: pointer; color: var(--navy-2); font-weight: 600; font-size: 12.5px; }
 details.more p { margin: 6px 0 0; line-height: 1.6; }
 .info { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-2); color: var(--muted); font-size: 10.5px; font-weight: 700; cursor: help; margin-left: 4px; vertical-align: 1px; }
@@ -352,4 +352,4 @@ p.caption > .hover-hint:first-child { margin-left: 0; }
 
 /* 한글 줄바꿈: 단어 중간에서 끊지 않고(봅니/다), 마지막 줄에 한두 글자만 남지 않게 (2026-10-16) */
 .page p, .page li, .page h1, .page h2, .page h3, .page .caption, .page .note, .page .lead, .kpi .l, .guide p, .menu-grid span, details.more p, .foot { word-break: keep-all; overflow-wrap: break-word; text-wrap: pretty; }
-.page .lead { max-width: 92ch; }
+.page .lead { max-width: none; }
