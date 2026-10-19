@@ -216,9 +216,11 @@ def highschool_files(cfg: dict) -> dict:
                                          "pitchers": sub["totals"]["pitchers"], "outings": sub["totals"]["outings"], "violations": sub["totals"]["violations"],
                                          "load_high": sub["totals"]["pitchers_load_high"], "load_caution": sub["totals"]["pitchers_load_caution"]})
                 entry["schools"] += [{"code": s["code"], "name": s["name"], "region": rkey, "games": s["games"], "pitchers": len(s["pitchers"])} for s in sub["schools"]]
+                entry.setdefault("players", []).extend({"n": x["label"], "s": s["code"], "p": x["code"], "r": rkey, "t": s["name"]} for s in sub["schools"] for x in s["pitchers"])
         else:
             sizes[f"highschool/{key}.json"] = dump(f"highschool/{key}.json", whole)
             entry["file"] = f"highschool/{key}.json"
+            entry["players"] = [{"n": x["label"], "s": s["code"], "p": x["code"], "t": s["name"]} for s in whole["schools"] for x in s["pitchers"]]   # 선수 이름 검색 (2026-10-20 사용자)
         index.append(entry)
     if index:
         sizes["highschool.json"] = dump("highschool.json", {"synthetic": False, "labels": kcfg["labels"], "load_lights": kcfg["load_lights"], "datasets": index})

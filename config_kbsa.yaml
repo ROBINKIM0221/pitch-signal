@@ -102,3 +102,18 @@ datasets:
       season: 2025
       competitions: [전국체전]
       input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}   # 13회 경기·상세 기록 없는 경기 허용
+
+  tournament_2026:                                # 2026-10-20 사용자 "2026 전국체전도 같이" — 대회 진행 중(10/16~), 끝난 경기만. 준결승·결승 뒤 다시 받아 갱신
+    mode: tournament
+    name: 제107회 전국체육대회 18세 이하부
+    short: 2026 전국체전
+    season: 2026
+    games_csv: data/raw/kbsa/games_2026.csv       # fetch_tournament_2026.py가 이 대회 경기를 붙임
+    dates: 2026-10-16 ~ (진행 중)                 # 제주(강창학종합경기장), 16팀
+    lig_idx: 1471
+    games: [39766, 39767, 39768, 39769, 39770, 39771, 39772, 39773, 39798, 39804, 39805, 39807]
+    rounds: {16강: 8, 8강: 4}                     # 끝난 경기만 (준결승 2·결승 1은 끝나면 추가)
+    overrides:
+      season: 2026
+      competitions: [전국체전]
+      input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}

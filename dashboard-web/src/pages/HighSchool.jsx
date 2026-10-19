@@ -247,10 +247,6 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
   const { dataset: ds, totals, kbsa } = data;
   const nation = dataset.totals;                                   // 전국 합계 (목록 파일)
   const setRegion = (next) => setParams({ d: dataset.key, r: next }, { replace: true });
-  const jumpToSchool = (name) => {                                 // 검색: 학교 이름 → 권역·학교
-    const hit = dataset.schools.find((x) => x.name === name);
-    if (hit) setParams({ d: dataset.key, r: hit.region, s: hit.code }, { replace: true });
-  };
   const foreign = params.get("f") && data.foreign_rules[params.get("f")] ? params.get("f") : "none";
   const rule = foreign !== "none" ? data.foreign_rules[foreign] : null;
   const days = useMemo(() => (p && s ? dailySeries(p.games.map((g) => ({ date: g.date, pitches: g.pitches })), s.start, s.end, { acute_days: 7, chronic_days: 21 }) : [])
@@ -273,10 +269,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             {dataset.regions.map((r) => <option key={r.key} value={r.key}>{r.name} ({r.schools}팀)</option>)}
           </select>
         </label>
-        <label><span>학교 검색</span>
-          <input className="text" list="hs-schools" placeholder="학교 이름 (전국)" onChange={(e) => jumpToSchool(e.target.value)} style={{ minWidth: 200 }} />
-          <datalist id="hs-schools">{dataset.schools.map((x) => <option key={x.code} value={x.name}>{`${dataset.regions.find((r) => r.key === x.region)?.name ?? ""} · ${x.games}경기`}</option>)}</datalist>
-        </label>
+        <PlayerSearch entry={dataset} params={params} setParams={setParams} />
         <span className="caption" style={{ margin: 0 }}>{ds.region} 권역 · {totals.schools}개 팀 · 투수 {totals.pitchers}명 · {totals.games}경기</span>
       </div>
       <div className="kpi">
@@ -487,7 +480,29 @@ function cumulativeLight(p, lights) {
   return { cls: p.pitches_total >= high ? "alarm" : p.pitches_total >= caution ? "warn" : "ok", text: `누적 ${p.pitches_total}구${p.pitches_total >= high ? " · 높음" : p.pitches_total >= caution ? " · 주의" : ""}` };
 }
 
+// 검색 칸 예시 (2026-10-20 사용자: 2025는 대구고 김민준, 2026은 하현승). 없는 자료는 목록 첫 선수
+const PLAYER_EXAMPLE = { korea_2025: "김민준 · 대구고", korea_2026: "하현승 · 부산고", tournament_2025: "하현승 · 부산고" };
+
+/** 선수 이름 검색 (2026-10-20 사용자: 학교 검색 대신, MLB 리플레이처럼 이름으로 바로) — 전국에서 찾아 그 권역·학교·투수로 이동 */
+function PlayerSearch({ entry, params, setParams }) {
+  const players = entry?.players || [];
+  const label = (x) => `${x.n} · ${x.t}`;
+  const pick = (v) => {
+    const hit = players.find((x) => label(x) === v);
+    if (hit) setParams({ d: entry.key, ...(hit.r ? { r: hit.r } : {}), s: hit.s, p: hit.p }, { replace: true });
+  };
+  if (!players.length) return null;
+  const example = PLAYER_EXAMPLE[entry.key] || `${players[0].n.split(" #")[0]} · ${players[0].t}`;
+  return (
+    <label><span>선수 검색</span>
+      <input key={params.get("p") || ""} className="text" type="search" list={`hs-players-${entry.key}`} placeholder={`이름 (예: ${example})`} onChange={(e) => pick(e.target.value)} style={{ minWidth: 220 }} />
+      <datalist id={`hs-players-${entry.key}`}>{players.map((x) => <option key={`${x.s}-${x.p}`} value={label(x)} />)}</datalist>
+    </label>
+  );
+}
+
 function TournamentBoard({ data, index, selector, params, setParams }) {
+  const entry = index?.datasets?.find((x) => x.key === data.dataset?.key);
   const { schools, s, pitchers, p, setSchool, setCode } = useSelection(data, params, setParams, null);
   const { dataset: ds, totals, kbsa } = data;
   const days = useMemo(() => { const dates = data.games.map((g) => g.date).sort(); return dateRange(dates[0], dates[dates.length - 1]); }, [data]);
@@ -496,7 +511,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
   return (
     <div className="page">
       <h1>{ds.short} 투구수 현황판</h1>
-      <p className="lead">{ds.name}({ds.dates}, 15개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
+      <p className="lead">{ds.name}({ds.dates}, {schools.length}개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
       <div className="kpi">
         <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반</div></div>
         <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판)</div></div>
@@ -509,6 +524,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
             {schools.map((x) => <option key={x.code} value={x.code}>{x.name} · {x.games}경기 · 투수 {x.pitchers.length}명</option>)}
           </select>
         </label>
+        <PlayerSearch entry={entry} params={params} setParams={setParams} />
         <span className="caption" style={{ margin: 0 }}>{ds.games}경기 · 투수 {totals.pitchers}명 · 등판 {totals.outings}회</span>
       </div>
       <div className="grid2 hs-grid">
