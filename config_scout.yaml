@@ -2,8 +2,7 @@
 scout:                             # 화면 5 '영입 전 점검': 2024~2026 KBO 외국인 투수의 MLB(우리 데이터)·트리플A(Savant minors) 기록 (2026-10-07 조사)
   aaa_seasons: [2023, 2024, 2025]  # Baseball Savant 트리플A 추적 기록이 있는 시즌 (2022는 PCL 일부라 뺌)
   pitchers:                        # mlbam: MLBAM 선수 ID. status: new = 그 시즌 신규, replacement = 시즌 중 대체 영입, short_term = 단기 대체, resigned = 재계약. kbo_season 없으면 2026
-    - {name: Matt Manning, name_ko: 맷 매닝, team: 삼성, mlbam: 666159, status: new}
-    - {name: Jack O'Loughlin, name_ko: 잭 오러클린, team: 삼성, mlbam: 672552, status: replacement}
+    - {name: Jack O'Loughlin, name_ko: 잭 오러클린, team: 삼성, mlbam: 672552, status: short_term}
     - {name: Ariel Jurado, name_ko: 아리엘 후라도, team: 삼성, mlbam: 642558, status: resigned}
     - {name: Yonny Chirinos, name_ko: 요니 치리노스, team: LG, mlbam: 630023, status: resigned}
     - {name: Anders Tolhurst, name_ko: 앤더스 톨허스트, team: LG, mlbam: 689434, status: resigned}
@@ -30,10 +29,10 @@ scout:                             # 화면 5 '영입 전 점검': 2024~2026 KBO
     - {name: Nathan Wiles, name_ko: 네이선 와일스, team: 키움, mlbam: 686249, status: new}
     # 2026-10-16 추가: 7월 9일 기사 뒤(또는 단기 대체로 빠졌던) 시즌 중 대체 영입 — 나무위키 시즌 문서·구단 발표 기사·MLB Stats API 거래 기록으로 확인
     - {name: Bruce Zimmermann, name_ko: 브루스 짐머맨, team: 한화, mlbam: 669145, status: replacement}
-    - {name: Jack Cushing, name_ko: 잭 쿠싱, team: 한화, mlbam: 681007, status: replacement}
-    - {name: Austin Voth, name_ko: 오스틴 보스, team: 삼성, mlbam: 608723, status: replacement}
-    - {name: Mike Clevinger, name_ko: 마이크 클레빈저, team: NC, mlbam: 605182, status: replacement}
-    - {name: Drew VerHagen, name_ko: 드류 버하겐, team: NC, mlbam: 572403, status: replacement}
+    - {name: Jack Cushing, name_ko: 잭 쿠싱, team: 한화, mlbam: 681007, status: short_term}
+    - {name: Austin Voth, name_ko: 오스틴 보스, team: 삼성, mlbam: 608723, status: short_term}
+    - {name: Mike Clevinger, name_ko: 마이크 클레빈저, team: NC, mlbam: 605182, status: short_term}
+    - {name: Drew VerHagen, name_ko: 드류 버하겐, team: NC, mlbam: 572403, status: short_term}
     - {name: Kenny Rosenberg, name_ko: 케니 로젠버그, team: 키움, mlbam: 670046, status: replacement}
     # 2026-10-20 추가 (외부 검토·사용자 결정 '2024·2025·2026 3년치'): 나무위키·위키백과 시즌 문서와 기사로 명단, MLB Stats API로 ID(생년월일·투타 확인).
     # 시라카와(일본 독립리그)는 미국 기록 없음. 메르세데스(608571)·윈(807650)은 ID만 있고 미국 출전 기록 없음
@@ -96,3 +95,8 @@ scout:                             # 화면 5 '영입 전 점검': 2024~2026 KBO
     - {name: Lachlan Wells, name_ko: 라클란 웰스, team: 키움, mlbam: 649143, status: short_term, kbo_season: 2025}
     - {name: Raúl Alcántara, name_ko: 라울 알칸타라, team: 키움, mlbam: 593417, status: replacement, kbo_season: 2025}
     - {name: C.C. Mercedes, name_ko: C.C. 메르세데스, team: 키움, mlbam: 608571, status: replacement, kbo_season: 2025}
+    # 2026-10-20 KBO 기록실 대조로 빠졌던 2026 투수 추가 (매닝은 0경기라 뺌, 부상 대체 5명은 short_term으로)
+    - {name: Chris Paddack, name_ko: 크리스 페덱, team: 삼성, mlbam: 663978, status: replacement}
+    - {name: Carlos Carrasco, name_ko: 카를로스 카라스코, team: LG, mlbam: 471911, status: replacement}
+    - {name: Davis Daniel, name_ko: 데이비스 대니엘, team: kt, mlbam: 669721, status: replacement}
+    - {name: Ginjiro Hiramoto, name_ko: 히라모토 긴지로, team: SSG, mlbam: null, status: short_term}
