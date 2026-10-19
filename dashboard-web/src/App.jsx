@@ -12,11 +12,11 @@ import About from "./pages/About.jsx";
 const GROUPS = [
   // 고교 아랫단은 자료(연도·대회)별 — 주소 ?d= 로 고른다 (현황판 안의 탭을 올림)
   { key: "hs", label: "고교 야구", items: [
-    // 순서 (2026-10-20 사용자): 2026 전국 고교 시즌이 가장 오른쪽
+    // 순서 (2026-10-20 사용자): 연도순, 같은 해는 시즌 → 전국체전
     { to: "/", d: "korea_2025", label: "2025 전국 고교 시즌", file: "highschool.json" },
     { to: "/", d: "tournament_2025", label: "2025 전국체전", file: "highschool.json" },
-    { to: "/", d: "tournament_2026", label: "2026 전국체전", file: "highschool.json" },
     { to: "/", d: "korea_2026", label: "2026 전국 고교 시즌", file: "highschool.json" },
+    { to: "/", d: "tournament_2026", label: "2026 전국체전", file: "highschool.json" },
   ] },
   { key: "pro", label: "MLB · KBO", items: [
     { to: "/replay", label: "리플레이 · 경보 카드", file: "pitchers.json" },

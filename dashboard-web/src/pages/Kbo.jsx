@@ -88,7 +88,7 @@ export default function Kbo() {
   const { data: scout } = useJson("scout.json");
   const [kboSeason, setKboSeason] = useState(null);
   const [team, setTeam] = useState("all");
-  const [onlyData, setOnlyData] = useState(true);
+  const [onlyData, setOnlyData] = useState(false);   // 기본은 명단 전체 (2026-10-20 사용자: 기록 없는 와이스 등이 빠져 보임)
 
   if (!scout) return <div className="placeholder">KBO 화면 자료를 읽는 중…</div>;
   const seasons = scout.kbo_seasons || [2026];
@@ -115,7 +115,7 @@ export default function Kbo() {
         <label><span>구단</span>
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
-        <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "기록 있는 투수만" : "전체 보기"}</button>
+        <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "미국 기록 있는 투수만" : "전체 명단"}</button>
         <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
       </div>
       {shown.map((p, i) => (
