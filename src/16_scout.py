@@ -1,4 +1,4 @@
-"""영입 전 점검 (화면 5): 2026 KBO 외국인 투수의 MLB·트리플A 기록에 같은 감시 엔진을 돌려 대시보드 JSON으로 내보낸다.
+"""영입 전 점검 (화면 5): 2024~2026 KBO 외국인 투수의 MLB·트리플A 기록(그 KBO 시즌까지)에 같은 감시 엔진을 돌려 대시보드 JSON으로 내보낸다.
 
 - 대상 목록: config_scout.yaml (평가 설정 파일과 분리. config.yaml 해시를 바꾸지 않기 위해)
 - 트리플A 투구: Baseball Savant 'Minor League Statcast'(minors=true) CSV를 선수별로 받아 data/raw/aaa/<mlbam>.parquet에 저장(있으면 재사용)
@@ -199,7 +199,7 @@ def main() -> None:
     cfg_scout = yaml.safe_load((ROOT / "config_scout.yaml").read_text(encoding="utf-8"))["scout"]
     core, rules = cfg["features"]["core"], cal.final_rules(cfg)
     labels = pd.read_csv(PROCESSED / "labels.csv", encoding="utf-8-sig", parse_dates=["il_date"])
-    ids = [p["mlbam"] for p in cfg_scout["pitchers"] if p["mlbam"] is not None]
+    ids = sorted({p["mlbam"] for p in cfg_scout["pitchers"] if p["mlbam"] is not None})
 
     pitches = aaa_pitches(cfg_scout, download=not a.no_download)
     placements = scout.il_placements(aaa_transactions(cfg, cfg_scout["aaa_seasons"], download=not a.no_download), ids, cfg["labels"])
@@ -213,11 +213,12 @@ def main() -> None:
     mlb_long = joined(mlb_out, mlb_tab, cfg, "MLB")
     everything = pd.concat([mlb_long, aaa_long], ignore_index=True) if len(aaa_long) else mlb_long
 
-    pitchers_out, aaa_catalog, aaa_alert_rows = [], [], []
+    pitchers_out, aaa_catalog, aaa_alert_rows, seen = [], [], [], set()
     for p in cfg_scout["pitchers"]:
-        entry = {**p, "seasons": [], "timeline": [], "il": []}
+        kbo_season = int(p.get("kbo_season", 2026))      # 2024·2025 외국인 투수 추가 (2026-10-20 외부 검토·사용자 결정)
+        entry = {**p, "kbo_season": kbo_season, "seasons": [], "timeline": [], "il": []}
         if p["mlbam"] is not None:
-            mine = everything[everything["pitcher"] == p["mlbam"]]
+            mine = everything[(everything["pitcher"] == p["mlbam"]) & (everything["season"] <= kbo_season)]   # 그 KBO 시즌까지의 미국 기록만
             for (season, league), g in mine.groupby(["season", "league"]):
                 monitored = g["phase"].eq("monitor").sum()
                 summary = scout.nan_to_none(scout.season_summary(g))
@@ -227,7 +228,8 @@ def main() -> None:
                 entry["seasons"].append({"season": int(season), **summary, "il": il, "replay": replay_id if has_replay else None})
                 if il:
                     entry["il"].append({"season": int(season), "league": league, **il})
-                if league == "AAA" and monitored > 0:
+                if league == "AAA" and monitored > 0 and replay_id not in seen:   # 여러 KBO 시즌에 나오는 투수는 한 번만
+                    seen.add(replay_id)
                     payload = replay_payload(g, p["name"], rules, core, "AAA")
                     _dump(f"replay/{replay_id}.json", payload)
                     aaa_catalog.append({"id": replay_id, "name": p["name"], "season": int(season), "role": summary["role"], "group": "other", "case_id": None,
@@ -243,7 +245,7 @@ def main() -> None:
                                       {"z": {f: _r3(getattr(al, f"z_{f}")) for f in core}, "step": {f: _r3(getattr(al, f"step_{f}")) for f in core},
                                        "zc": {f: _r3(getattr(al, f"zc_{f}")) for f in core}})})
 
-    _dump("scout.json", {"season": 2026, "as_of_note": "트리플A 기록은 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 써서 참고용", "aaa_seasons": cfg_scout["aaa_seasons"],
+    _dump("scout.json", {"season": 2026, "kbo_seasons": sorted({e["kbo_season"] for e in pitchers_out}, reverse=True),"as_of_note": "트리플A 기록은 구장 보정 없이, 한계값은 MLB 개발셋 값을 그대로 써서 참고용", "aaa_seasons": cfg_scout["aaa_seasons"],
                          "aaa_il_note": "트리플A IL은 MLB Stats API 거래 기록(sportId=11)에서 자동 추출. 사유 문구가 있는 등재만 부위를 알 수 있음",
                          "pitchers": pitchers_out})
     # 검색 목록·경보 카드에 트리플A 항목을 더한다 (13_export가 만든 파일에 덧붙임, 같은 id는 교체)

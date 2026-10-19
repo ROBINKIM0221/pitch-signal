@@ -25,7 +25,9 @@ function rowsFor(data, date) {
 export default function Watch() {
   const { data } = useJson("watchlist.json");
   const [params, setParams] = useSearchParams();
-  const date = data ? (params.get("d") >= data.start && params.get("d") <= data.as_of ? params.get("d") : data.as_of) : null;
+  // 처음 여는 날짜는 8월 30일 — 시즌 막판 경보는 그 뒤 부상이 나도 IL에 오르지 않는 경우가 많다 (2026-10-20 외부 검토·사용자 결정)
+  const first = data ? [`${data.as_of.slice(0, 4)}-08-30`, data.as_of].sort()[0] : null;
+  const date = data ? (params.get("d") >= data.start && params.get("d") <= data.as_of ? params.get("d") : first) : null;
   const rows = useMemo(() => (data && date ? rowsFor(data, date) : []), [data, date]);
   if (!data) return <div className="placeholder">2026 시즌 현황을 읽는 중…</div>;
   const t = data.season_totals;

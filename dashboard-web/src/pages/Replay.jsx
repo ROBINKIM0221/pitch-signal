@@ -28,7 +28,7 @@ function ReadingGuide() {
     <div className="guide">
       <div><b>신호 지수 읽는 법</b><p><span className="lv ok">0 근처</span> 평소 그대로 · <span className="lv mid">0.3~0.7</span> 평소와 조금 다름 · <span className="lv near">0.7~1</span> 경보에 가까움 · <span className="lv al">1 이상</span> 경보 — 한번 점검해 볼 때. 경보가 울리면 0에서 다시 셉니다.</p></div>
       <div><b><i style={{ background: "var(--velo)" }} />구속 하락 지수</b><p>시즌 초 등판으로 배운 '평소 구속'보다 느린 등판이 이어질수록 올라갑니다. 한 번 느린 것보다 여러 번 이어질 때 크게 오릅니다. 구속이 빨라지는 쪽은 세지 않습니다.</p></div>
-      <div><b><i style={{ background: "var(--change)" }} />폼 변화 지수</b><p>구속·공 놓는 높이·팔 각도 세 가지가 평소와 함께 달라질수록 올라갑니다. 높아져도 낮아져도 오르며, 부상과의 관계는 확인되지 않아 '무엇이 달라졌나' 설명용입니다.</p></div>
+      <div><b><i style={{ background: "var(--change)" }} />폼 변화 지수</b><p>구속·공 놓는 높이·팔 각도 세 가지가 평소와 함께 달라질수록 올라갑니다. 높아져도 낮아져도 오릅니다. 부상 전조로서의 근거는 구속 하락 지수보다 약해, 구속 하락 경보와 함께 '무엇이 달라졌나'를 보는 보조 정보입니다.</p></div>
       <div><b>아래 세 그래프</b><p>검은 선이 그 등판 값, 파란 띠가 그 투수의 평소 범위입니다. 선이 띠 밖으로 나간 등판이 평소와 다른 등판입니다. 마우스를 올리면 숫자와 해석이 나옵니다.</p></div>
     </div>
   );
@@ -133,7 +133,7 @@ export default function Replay() {
       <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 되감아, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.</p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
-          <input type="search" value={query} placeholder="이름 (예: Soroka, Skubal)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          <input type="search" value={query} placeholder="이름 (예: Hader, Eovaldi, Soroka)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} aria-label="투수 이름 검색" />
         </label>
         <label><span>시즌</span>

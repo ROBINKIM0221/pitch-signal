@@ -107,7 +107,7 @@ function FlowStrip({ flow, innings }) {
           <span key={inn} className="flow-inn">
             <b>{inn}회</b>
             {r && (
-              <span className="inn-count" title={r[2] == null ? "이 이닝은 기록지에서 센 공 수가 투구 수와 많이 달라 스트라이크·볼을 비웠습니다" : "스트라이크·볼은 기록지 표시를 읽은 추정값입니다 (스트라이크 = 볼이 아닌 모든 공, 띠에 안 그린 마지막 공은 타석 결과로 채움)"}>
+              <span className="inn-count" title={r[2] == null ? "이 이닝은 기록지에서 읽은 공 수가 투구 수와 많이 달라 스트라이크·볼을 비웠습니다" : "스트라이크·볼은 기록지 표시를 읽은 추정값입니다 (스트라이크 = 볼이 아닌 모든 공, 띠에 안 그린 마지막 공은 타석 결과로 채움)"}>
                 {r[1]}구{r[2] != null && <small> (스트라이크 {r[2]}개 · 볼 {r[3]}개)</small>}{r[4] && <small> · 교체 이닝</small>}
               </span>
             )}
@@ -123,7 +123,7 @@ function BallTip({ d }) {
   return (
     <>
       <div><b>{fmt.date(d.date)}</b> · {d.opponent}</div>
-      <div>볼 비율(추정) <b>{fmt.num(d.ball, 0)}%</b> · 센 공 {d.marks}개 / 공식 {d.pitches ?? "?"}구</div>
+      <div>볼 비율(추정) <b>{fmt.num(d.ball, 0)}%</b> · {ballOf(d.ball / 100, d.pitches)}</div>
       {d.flag && <div style={{ color: "var(--warn)" }}>평소보다 볼이 많았던 등판</div>}
     </>
   );
@@ -140,7 +140,7 @@ function BallChart({ p }) {
   ));
   return (
     <>
-      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small><span className="hover-hint">점에 커서를 올리면 그 경기 상대·볼 비율·센 공 수</span></div>
+      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small><span className="hover-hint">점에 커서를 올리면 그 경기 상대·볼 비율·볼 수</span></div>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
@@ -155,7 +155,10 @@ function BallChart({ p }) {
   );
 }
 
-const BALL_HOW = "협회 기록지 사진에서 공마다 볼인지 아닌지를 읽은 값입니다. 기록원이 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 타석 결과로 채웁니다. 볼 비율 = 볼 ÷ 공식 투구 수(읽지 못한 공은 볼이 아닌 것으로 셈). 센 공 수가 공식 투구 수와 15% 넘게 다른 등판은 뺍니다. '평소보다 볼 많음'은 40구 이상 등판을 그 투수의 다른 등판과 비교한 것이며, 원인은 해석하지 않습니다.";
+const BALL_HOW = "협회 기록지 사진에서 공마다 볼인지 아닌지를 읽은 값입니다. 기록원이 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 타석 결과로 채웁니다. 볼 비율 = 볼 ÷ 공식 투구 수(읽지 못한 공은 볼이 아닌 것으로 셈). 기록지에서 읽은 공 수가 공식 투구 수와 15% 넘게 다른 등판은 뺍니다. '평소보다 볼 많음'은 40구 이상 등판을 그 투수의 다른 등판과 비교한 것이며, 원인은 해석하지 않습니다.";
+
+// 볼 수는 '공식 투구 수 중 몇 개'로만 보여 준다 (2026-10-20 외부 검토·사용자 결정: 기록지에서 센 공 수는 화면에 내지 않음)
+const ballOf = (pct, pitches) => (pitches ? `공식 ${pitches}구 중 볼 ${Math.round(pct * pitches)}개 (기록지에서 읽음)` : "기록지에서 읽음");
 
 /** 다시 읽은 등판 표시 — 2026-10-09 사용자 "꼭 표시할 필요는 없다"로 숨김(데이터의 ball_reread는 남김). 되살리려면 SHOW_REREAD = true. */
 const SHOW_REREAD = false;
@@ -168,11 +171,11 @@ function RereadMark({ g }) {
 function BallCell({ g }) {
   if (g.ball_marks == null) return <span style={{ color: "var(--muted)" }}>—</span>;
   if (g.ball_pct == null) {
-    return <><span className="light base" title={`기록지에서 센 공 ${g.ball_marks}개가 공식 투구 수 ${g.pitches ?? "?"}구와 15% 넘게 달라 볼 비율을 보여 주지 않습니다`}>검산 미달</span><RereadMark g={g} /></>;
+    return <><span className="light base" title="기록지에서 읽은 공 수가 공식 투구 수와 15% 넘게 달라 볼 비율을 보여 주지 않습니다">검산 미달</span><RereadMark g={g} /></>;
   }
   return (
     <>
-      {fmt.num(100 * g.ball_pct, 0)}%
+      <span title={ballOf(g.ball_pct, g.pitches)}>{fmt.num(100 * g.ball_pct, 0)}%</span>
       {g.ball_flag && <span className="light warn" style={{ marginLeft: 6 }} title="평소보다 볼이 많았던 등판: 그 투수의 다른 등판보다 볼 비율이 뚜렷이 높았던 등판입니다(투구 수를 감안한 기준, 40구 이상만). 원인은 해석하지 않습니다.">볼 많음</span>}
       <RereadMark g={g} />
     </>

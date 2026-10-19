@@ -126,6 +126,7 @@ export function ValidationSummary() {
   const sealedH1 = data.sealed?.tests.find((t) => t.test.startsWith("H1"));
   const fu = (split) => (data.followup || []).find((f) => f.role === "all" && f.method === "구속 하락 신호" && f.split === split);
   const val = fu("val"), sealed = fu("sealed");
+  const formFu = (data.followup || []).find((f) => f.role === "all" && f.method === "폼 변화 신호" && f.split === "val");
   const curve = (name) => data.opcurve.filter((q) => q.method === name).sort((a, b) => a.false_alarms_per100 - b.false_alarms_per100);
   return (
     <div className="card">
@@ -139,9 +140,12 @@ export function ValidationSummary() {
             {" "}미리 정한 주 지표(일치도: 부상 투수의 경보 지수가 짝지은 부상 없는 투수보다 클 확률)로 둘을 구별한 방법은 구속 하락 신호뿐이었습니다({fmt.num(velo?.concordance, 2)}, 95% 구간 하한 {fmt.num(velo?.concordance_lo, 2)}). 기존 방법(WHIP 관리도, 다변량 거리, 양방향 구속)은 구간이 0.5를 포함했습니다.</li>
           <li><b>경보가 울린 뒤 30일 안에 팔 부상으로 IL에 오른 비율은 {fmt.pct(100 * (val?.alarm_rate ?? 0))}로, 경보 없는 등판({fmt.pct(100 * (val?.other_rate ?? 0))})의 {fmt.num(val?.lift, 1)}배입니다.</b>
             {sealed && ` 봉인해 둔 2026 시즌에서도 ${fmt.num(sealed.lift, 1)}배였습니다.`} 그래도 열 번 중 아홉 번은 부상으로 이어지지 않으므로, 경보는 점검을 시작할 때이지 부상 판정이 아닙니다.</li>
-          <li><b>한계도 그대로 밝힙니다.</b> 흔히 쓰는 '구속 1mph(1.6km/h) 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
-            {" "}폼 변화 신호(일치도 {fmt.num(form?.concordance, 2)})는 부상 전조로 확인되지 않아 '무엇이 달라졌나' 설명용으로만 씁니다.
-            {sealedH1 && ` 2026 봉인 시즌에서는 구속 하락 신호의 순위 비교(일치도 ${fmt.num(sealedH1.value, 2)})가 재현되지 않았습니다.`}</li>
+          <li><b>폼 변화 지수는 구속 하락 경보와 함께 보는 보조 정보입니다.</b> 경보 뒤 30일 안 팔 IL 비율은 {fmt.num(formFu?.lift, 1)}배로 방향은 같지만, IL 직전 5등판 안 경보({fmt.pct(form?.detection)} vs {fmt.pct(form?.control_window)})와 주 지표(일치도 {fmt.num(form?.concordance, 2)}) 모두 우연과 구별될 만큼 차이 나지 않았습니다.
+            <details className="more" style={{ margin: "8px 0 0" }}>
+              <summary>한계 보기</summary>
+              <p>흔히 쓰는 '구속 1mph(1.6km/h) 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
+                {sealedH1 && ` 2026 봉인 시즌에서는 구속 하락 신호의 순위 비교(일치도 ${fmt.num(sealedH1.value, 2)})가 재현되지 않았습니다 — 경보 뒤 IL 비율(위 2번)은 재현됐습니다.`}</p>
+            </details></li>
         </ol>
         <div>
           <ResponsiveContainer width="100%" height={260}>

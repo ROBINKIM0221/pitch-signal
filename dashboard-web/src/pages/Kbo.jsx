@@ -1,33 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { PITCH_NAME, ROLE, fmt, useJson, KMH, kmhText, indexWord } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK } from "../lib/chart.jsx";
-import { analyze, parseInput } from "../lib/engine.js";
-import { AlertCard, MultiplierControl, Pitcher } from "./Replay.jsx";
 
 const PART = { elbow: "팔꿈치", shoulder: "어깨", hamstring: "햄스트링", other: "다른 부위", unknown: "부위 미상" };
 const ARM = new Set(["elbow", "shoulder"]);
-const STATUS = { new: "2026 신규", replacement: "2026 대체 영입", resigned: "재계약" };
+const STATUS = { new: "신규", replacement: "시즌 중 대체", short_term: "단기 대체", resigned: "재계약" };
 const LEAGUE_COLOR = { MLB: "var(--ink)", AAA: "#8e6bbf" };
-const EXAMPLE = `날짜,직구 평균구속(km/h),직구 수,전체 투구 수
-2026-04-03,149.2,55,98
-2026-04-09,148.7,60,101
-2026-04-15,150.1,52,95
-2026-04-21,149.5,58,104
-2026-04-27,148.9,49,90
-2026-05-03,149.8,61,99
-2026-05-09,149.0,54,97
-2026-05-15,148.4,57,102
-2026-05-21,147.9,50,93
-2026-05-27,147.1,53,96
-2026-06-02,146.6,48,88
-2026-06-08,146.0,51,94`;
-const STORE = "ps-manual-input";
-
-function load() {
-  try { return JSON.parse(localStorage.getItem(STORE)) || null; } catch { return null; }
-}
+const TEAM_ORDER = ["KIA", "삼성", "LG", "두산", "kt", "SSG", "롯데", "한화", "NC", "키움"];
 
 function AlarmDot({ cx, cy, payload }) {
   if (!payload?.alarm || cx == null || cy == null) return null;
@@ -64,9 +45,9 @@ function ScoutCard({ p }) {
     <div className="card scout">
       <div className="card-head">
         <h2>{p.name_ko} <span style={{ color: "var(--muted)", fontWeight: 500 }}>{p.name} · {p.team}</span></h2>
-        <span className={`light ${p.status === "resigned" ? "base" : p.status === "replacement" ? "warn" : "ok"}`}>{STATUS[p.status]}</span>
+        <span className={`light ${p.status === "resigned" ? "base" : p.status === "new" ? "ok" : "warn"}`}>{p.kbo_season} {STATUS[p.status] || p.status}</span>
       </div>
-      {!has && <p className="caption" style={{ margin: 0 }}>2021년 이후 MLB·2023년 이후 트리플A 추적 기록이 없습니다(더블A 이하·독립리그·NPB·KBO 기록은 공개 추적 자료가 없음).</p>}
+      {!has && <p className="caption" style={{ margin: 0 }}>{p.kbo_season}년 이전 공개 추적 기록(2021년 이후 MLB·2023년 이후 트리플A)이 없습니다(더블A 이하·독립리그·NPB·KBO 기록은 공개 추적 자료가 없음).</p>}
       {has && (
         <>
           <div className="legend" style={{ marginBottom: 2 }}>
@@ -104,117 +85,45 @@ function ScoutCard({ p }) {
 }
 
 export default function Kbo() {
-  const { data } = useJson("kbo_case.json");
   const { data: scout } = useJson("scout.json");
-  const { data: params } = useJson("engine_params.json");
+  const [kboSeason, setKboSeason] = useState(null);
   const [team, setTeam] = useState("all");
   const [onlyData, setOnlyData] = useState(true);
-  const saved = useMemo(load, []);
-  const [name, setName] = useState(saved?.name ?? "");
-  const [role, setRole] = useState(saved?.role ?? "SP");
-  const [unit, setUnit] = useState(saved?.unit ?? "km/h");
-  const [text, setText] = useState(saved?.text ?? "");
-  const [season, setSeason] = useState(saved?.season ?? new Date().getFullYear());
-  const [result, setResult] = useState(null);
-  const [problems, setProblems] = useState([]);
-  const [picked, setPicked] = useState(null);
-  const [mult, setMult] = useState(1);
-  useEffect(() => { if (result) run(); }, [mult]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { try { localStorage.setItem(STORE, JSON.stringify({ name, role, unit, text, season })); } catch { /* 저장 못 해도 동작엔 지장 없음 */ } }, [name, role, unit, text, season]);
 
-  const run = () => {
-    if (!params) return;
-    const { rows, problems: bad } = parseInput(text, Number(season));
-    setProblems(bad);
-    if (rows.length < 3) { setResult(null); setProblems([...bad, "등판이 3개 이상 있어야 합니다."]); return; }
-    const out = analyze(rows, role, params.roles, params.rules, unit, mult);
-    const label = name.trim() || "직접 입력한 투수";
-    setResult({
-      data: { id: "manual", manual: true, name: label, season: Number(season), role, group: "other", il_date: null,
-              baseline_end: out.outings[out.nStart - 1]?.date ?? null, outings: out.outings, limits: {} },
-      alerts: out.alerts.map((a) => ({ ...a, id: "manual", who: label, unit, velo_delta: a.velo, rule: "EWMA" })),
-      monitored: out.monitored, nStart: out.nStart,
-    });
-    setPicked(null);
-  };
-
-  if (!data || !scout) return <div className="placeholder">KBO 화면 자료를 읽는 중…</div>;
-  const teams = [...new Set(scout.pitchers.map((p) => p.team))];
-  const shown = scout.pitchers.filter((p) => (team === "all" || p.team === team) && (!onlyData || p.seasons.length > 0));
-  const withData = scout.pitchers.filter((p) => p.seasons.length > 0).length;
+  if (!scout) return <div className="placeholder">KBO 화면 자료를 읽는 중…</div>;
+  const seasons = scout.kbo_seasons || [2026];
+  const ks = kboSeason ?? seasons[0];
+  const inSeason = scout.pitchers.filter((p) => (p.kbo_season ?? 2026) === ks);
+  const teams = TEAM_ORDER.filter((t) => scout.pitchers.some((p) => p.team === t));
+  const shown = inSeason.filter((p) => (team === "all" || p.team === team) && (!onlyData || p.seasons.length > 0))
+    .sort((a, b) => TEAM_ORDER.indexOf(a.team) - TEAM_ORDER.indexOf(b.team));
+  const withData = inSeason.filter((p) => p.seasons.length > 0).length;
   return (
     <div className="page">
       <h1>KBO 외국인 투수 영입 전 점검</h1>
-      <p className="lead">2026년 KBO 외국인 투수 {scout.pitchers.length}명 중 MLB·트리플A 공개 추적 기록이 있는 {withData}명의 지난 시즌에 같은 엔진을 돌려, 영입 전에 '평소와 달라진 흐름'이 있었는지 봅니다.</p>
+      <p className="lead">{ks}년 KBO 외국인 투수 {inSeason.length}명 중 MLB·트리플A 공개 추적 기록이 있는 {withData}명의 미국 시절에 같은 엔진을 돌려, 영입 전에 '평소와 달라진 흐름'이 있었는지 봅니다.</p>
       <details className="more">
         <summary>자료와 한계 보기</summary>
         <p>MLB 2021~2026, 트리플A 2023~2025(Baseball Savant). 트리플A는 구장 보정 없이 MLB 한계값을 그대로 쓴 참고용입니다.
           IL 등재는 MLB(팔꿈치·어깨만 확인)와 트리플A(거래 기록, 대부분 부위 미상) 공개 기록에서 가져왔고, KBO 시즌의 부상은 들어 있지 않습니다.
-          명단은 2026년 7월 전반기 결산 기사와 그 뒤 시즌 중 대체 영입(구단 발표 기사)입니다.</p>
+          각 투수는 그 KBO 시즌까지의 미국 기록만 보여 줍니다. 명단은 시즌별 구단 발표·언론 기사(시즌 중 대체·단기 대체 포함)로 정리했습니다.</p>
       </details>
       <div className="toolbar">
+        <div className="seg" role="group" aria-label="KBO 시즌">
+          {seasons.map((y) => <button key={y} className={`btn ${ks === y ? "on" : ""}`} onClick={() => setKboSeason(y)}>{y}</button>)}
+        </div>
         <label><span>구단</span>
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
         <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "기록 있는 투수만" : "전체 보기"}</button>
         <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
       </div>
-      {shown.map((p) => <ScoutCard key={p.name} p={p} />)}
-      <div className="card">
-        <h2>2026 시즌 부상 대응 사례 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>말소에서 교체 결정까지 걸린 날</span></h2>
-        <div className="kpi">
-          {data.pitchers.map((p) => (
-            <div key={p.name}>
-              <div className="v" style={{ fontSize: 18 }}>{p.name} <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>{p.team} · {PART[p.part] || p.part}</span></div>
-              <div className="l">말소 {p.removed} → 결정 {p.decision} ({p.decision_type}) · <b>{Math.round((new Date(p.decision) - new Date(p.removed)) / 86400000)}일</b><br />대체 {p.replacement} · {p.outcome}</div>
-            </div>
-          ))}
+      {shown.map((p, i) => (
+        <div key={`${p.kbo_season}_${p.name}`}>
+          {team === "all" && (i === 0 || shown[i - 1].team !== p.team) && <h3 className="team-head">{p.team}</h3>}
+          <ScoutCard p={p} />
         </div>
-        {data.response_only.map((x) => (
-          <p key={x.name} className="note" style={{ margin: "4px 0" }}>
-            <b>{x.name}</b> ({x.team}) · {PART[x.part] || x.part} · 말소 {x.removed} → 결정 {x.decision} ({x.decision_type}) · 대체 {x.replacement} · {x.outcome}. {x.note}
-          </p>
-        ))}
-      </div>
-      <div className="card">
-        <div className="card-head">
-          <h2>직접 입력 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>공개 기록이 없는 투수의 경기별 구속을 붙여 넣어 간이 분석</span></h2>
-          <div className="row" style={{ margin: 0 }}>
-            <div className="seg" role="group" aria-label="역할">
-              {[["SP", "선발"], ["RP", "불펜"]].map(([k, v]) => <button key={k} className={`btn ${role === k ? "on" : ""}`} onClick={() => setRole(k)}>{v}</button>)}
-            </div>
-            <div className="seg" role="group" aria-label="단위">
-              {["km/h", "mph"].map((u) => <button key={u} className={`btn ${unit === u ? "on" : ""}`} onClick={() => setUnit(u)}>{u}</button>)}
-            </div>
-          </div>
-        </div>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <label className="toolbar-label"><span>이름(표시용)</span> <input className="text" value={name} placeholder="예: 투수 A" onChange={(e) => setName(e.target.value)} /></label>
-          <label className="toolbar-label"><span>시즌</span> <input className="text" style={{ width: 80 }} value={season} onChange={(e) => setSeason(e.target.value)} /></label>
-        </div>
-        <textarea className="paste" rows={7} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
-          placeholder={"한 줄에 한 등판: 날짜, 직구 평균 구속, 직구 투구 수[, 전체 투구 수]\n" + EXAMPLE.split("\n").slice(0, 4).join("\n") + "\n…"} />
-        <div className="row" style={{ marginTop: 10, marginBottom: 4 }}>
-          <button className="btn on" onClick={run} disabled={!params}>분석</button>
-          <button className="btn" onClick={() => setText(EXAMPLE)}>예시 넣기</button>
-          <button className="btn" onClick={() => { setText(""); setResult(null); setProblems([]); }}>지우기</button>
-          <span className="caption" style={{ margin: 0 }}>쉼표·탭·공백 구분 모두 됩니다. 머리글 줄은 건너뜁니다. 날짜는 2026-04-03, 2026.04.03, 4/3 형식.</span>
-        </div>
-        {problems.length > 0 && <ul className="problems">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
-        <p className="notice" style={{ marginTop: 10 }}>
-          <b>간이 분석(참고용)입니다.</b> ① 경기 평균만 있으므로 투구별 흔들림, 평소가 움직이는 크기, 경보 한계(선발 {params?.roles.SP.k} · 불펜 {params?.roles.RP.k})는
-          MLB 개발셋에서 추정한 값을 빌려 씁니다 — <b>'정상이면 100등판에 1회'라는 오경보 보장은 MLB에서만 검증된 것</b>이고 KBO에서는 확인되지 않았습니다.
-          ② 폼 변화 신호(릴리스 높이·팔 각도)는 공개 자료가 없어 그리지 않습니다. ③ 이미 다친 선수를 골라 넣는 사후 입력은 사례 연구이지 탐지 성능의 근거가 아닙니다.
-        </p>
-        {result && (
-          <>
-            <div className="toolbar"><MultiplierControl value={mult} onChange={setMult} /></div>
-            <p className="caption">등판 {result.data.outings.length}개 중 시작 구간 {result.nStart}개, 분석 {result.monitored}개 · 경보 {result.alerts.length}건. 시작 구간은 {role === "SP" ? "선발 첫 8등판" : "불펜 첫 15등판과 직구 120구 중 늦은 시점"}입니다.{mult !== 1 && ` 한계 배수 ${mult.toFixed(2)} (설계점 1.0이 아닌 조정값).`}</p>
-            <Pitcher data={result.data} shown={result.data.outings.length} alerts={result.alerts} setPicked={setPicked} features={["velo"]} signals={["velo"]} unit={unit} />
-          </>
-        )}
-      </div>
-      {picked && <AlertCard alert={picked} onClose={() => setPicked(null)} />}
+      ))}
       <p className="note">한계: 영입 전 점검은 공개 기록이 있는 선수에게만 가능하고, 트리플A 결과는 참고용입니다. KBO 시즌 자체의 추적 기록은 공개돼 있지 않습니다.</p>
     </div>
   );

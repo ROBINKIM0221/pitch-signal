@@ -353,3 +353,6 @@ p.caption > .hover-hint:first-child { margin-left: 0; }
 /* 한글 줄바꿈: 단어 중간에서 끊지 않고(봅니/다), 마지막 줄에 한두 글자만 남지 않게 (2026-10-16) */
 .page p, .page li, .page h1, .page h2, .page h3, .page .caption, .page .note, .page .lead, .kpi .l, .guide p, .menu-grid span, details.more p, .foot { word-break: keep-all; overflow-wrap: break-word; text-wrap: pretty; }
 .page .lead { max-width: none; }
+
+/* KBO 화면 구단 머리글 (2026-10-20) */
+.team-head { margin: 22px 0 8px; font-size: 15px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 4px; }

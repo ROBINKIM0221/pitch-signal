@@ -1,25 +1,25 @@
 # 화면 5 '영입 전 점검' 대상 목록. 평가 설정(config.yaml·config_calibrated.yaml)과 분리해 두어 고정한 설정 파일의 해시가 바뀌지 않게 한다.
-scout:                             # 화면 5 '영입 전 점검': 2026 KBO 외국인 투수의 MLB(우리 데이터)·트리플A(Savant minors) 기록 (2026-10-07 조사)
+scout:                             # 화면 5 '영입 전 점검': 2024~2026 KBO 외국인 투수의 MLB(우리 데이터)·트리플A(Savant minors) 기록 (2026-10-07 조사)
   aaa_seasons: [2023, 2024, 2025]  # Baseball Savant 트리플A 추적 기록이 있는 시즌 (2022는 PCL 일부라 뺌)
-  pitchers:                        # mlbam: MLBAM 선수 ID. status: new = 2026 신규, replacement = 2026 시즌 중 대체 영입, resigned = 재계약
+  pitchers:                        # mlbam: MLBAM 선수 ID. status: new = 그 시즌 신규, replacement = 시즌 중 대체 영입, short_term = 단기 대체, resigned = 재계약. kbo_season 없으면 2026
     - {name: Matt Manning, name_ko: 맷 매닝, team: 삼성, mlbam: 666159, status: new}
     - {name: Jack O'Loughlin, name_ko: 잭 오러클린, team: 삼성, mlbam: 672552, status: replacement}
     - {name: Ariel Jurado, name_ko: 아리엘 후라도, team: 삼성, mlbam: 642558, status: resigned}
     - {name: Yonny Chirinos, name_ko: 요니 치리노스, team: LG, mlbam: 630023, status: resigned}
-    - {name: Anders Tolhurst, name_ko: 앤더스 톨허스트, team: LG, mlbam: null, status: new}
+    - {name: Anders Tolhurst, name_ko: 앤더스 톨허스트, team: LG, mlbam: 689434, status: resigned}
     - {name: Yacksel Ríos, name_ko: 약셀 리오스, team: LG, mlbam: 605441, status: replacement}
     - {name: Matt Sauer, name_ko: 맷 사우어, team: kt, mlbam: 669422, status: new}
     - {name: Caleb Boushley, name_ko: 케일럽 보쉴리, team: kt, mlbam: 676961, status: new}
-    - {name: Logan Allen, name_ko: 로건 앨런, team: kt, mlbam: 671106, status: replacement}
+    - {name: Logan Allen, name_ko: 로건 앨런, team: kt, mlbam: 663531, status: replacement}
     - {name: James Naile, name_ko: 제임스 네일, team: KIA, mlbam: 664942, status: resigned}
     - {name: Adam Oller, name_ko: 애덤 올러, team: KIA, mlbam: 670124, status: resigned}
     - {name: Zach Logue, name_ko: 잭 로그, team: 두산, mlbam: 656657, status: resigned}
     - {name: Chris Flexen, name_ko: 크리스 플렉센, team: 두산, mlbam: 623167, status: new}
     - {name: Wes Benjamin, name_ko: 웨스 벤자민, team: 두산, mlbam: 605138, status: replacement}
-    - {name: Wilkel Hernández, name_ko: 윌켈 에르난데스, team: 한화, mlbam: null, status: new}
+    - {name: Wilkel Hernández, name_ko: 윌켈 에르난데스, team: 한화, mlbam: 665859, status: new}
     - {name: Owen White, name_ko: 오웬 화이트, team: 한화, mlbam: 669391, status: new}
-    - {name: Riley Thompson, name_ko: 라일리 톰슨, team: NC, mlbam: null, status: resigned}
-    - {name: Curtis Taylor, name_ko: 커티스 테일러, team: NC, mlbam: null, status: new}
+    - {name: Riley Thompson, name_ko: 라일리 톰슨, team: NC, mlbam: 663929, status: resigned}
+    - {name: Curtis Taylor, name_ko: 커티스 테일러, team: NC, mlbam: 668954, status: new}
     - {name: Elvin Rodríguez, name_ko: 엘빈 로드리게스, team: 롯데, mlbam: 660730, status: new}
     - {name: Jeremy Beasley, name_ko: 제러미 비슬리, team: 롯데, mlbam: 676886, status: new}
     - {name: Mitch White, name_ko: 미치 화이트, team: SSG, mlbam: 669952, status: resigned}
@@ -35,3 +35,64 @@ scout:                             # 화면 5 '영입 전 점검': 2026 KBO 외�
     - {name: Mike Clevinger, name_ko: 마이크 클레빈저, team: NC, mlbam: 605182, status: replacement}
     - {name: Drew VerHagen, name_ko: 드류 버하겐, team: NC, mlbam: 572403, status: replacement}
     - {name: Kenny Rosenberg, name_ko: 케니 로젠버그, team: 키움, mlbam: 670046, status: replacement}
+    # 2026-10-20 추가 (외부 검토·사용자 결정 '2024·2025·2026 3년치'): 나무위키·위키백과 시즌 문서와 기사로 명단, MLB Stats API로 ID(생년월일·투타 확인).
+    # 시라카와(일본 독립리그)는 미국 기록 없음. 메르세데스(608571)·윈(807650)은 ID만 있고 미국 출전 기록 없음
+    - {name: Wil Crowe, name_ko: 윌 크로우, team: KIA, mlbam: 640444, status: new, kbo_season: 2024}
+    - {name: James Naile, name_ko: 제임스 네일, team: KIA, mlbam: 664942, status: new, kbo_season: 2024}
+    - {name: Cam Alldred, name_ko: 캠 알드레드, team: KIA, mlbam: 682027, status: short_term, kbo_season: 2024}
+    - {name: Eric Lauer, name_ko: 에릭 라우어, team: KIA, mlbam: 641778, status: replacement, kbo_season: 2024}
+    - {name: Eric Stout, name_ko: 에릭 스타우트, team: KIA, mlbam: 657770, status: short_term, kbo_season: 2024}
+    - {name: Connor Seabold, name_ko: 코너 시볼드, team: 삼성, mlbam: 657756, status: new, kbo_season: 2024}
+    - {name: Denyi Reyes, name_ko: 데니 레예스, team: 삼성, mlbam: 660593, status: new, kbo_season: 2024}
+    - {name: Casey Kelly, name_ko: 케이시 켈리, team: LG, mlbam: 543391, status: resigned, kbo_season: 2024}
+    - {name: Dietrich Enns, name_ko: 디트릭 엔스, team: LG, mlbam: 608650, status: new, kbo_season: 2024}
+    - {name: Elieser Hernández, name_ko: 엘리에이저 에르난데스, team: LG, mlbam: 622694, status: replacement, kbo_season: 2024}
+    - {name: Raúl Alcántara, name_ko: 라울 알칸타라, team: 두산, mlbam: 593417, status: resigned, kbo_season: 2024}
+    - {name: Brandon Waddell, name_ko: 브랜든 와델, team: 두산, mlbam: 663399, status: resigned, kbo_season: 2024}
+    - {name: Jordan Balazovic, name_ko: 조던 발라조빅, team: 두산, mlbam: 666364, status: replacement, kbo_season: 2024}
+    - {name: Keisho Shirakawa, name_ko: 시라카와 케이쇼, team: 두산, mlbam: null, status: short_term, kbo_season: 2024}
+    - {name: William Cuevas, name_ko: 윌리엄 쿠에바스, team: kt, mlbam: 571035, status: resigned, kbo_season: 2024}
+    - {name: Wes Benjamin, name_ko: 웨스 벤자민, team: kt, mlbam: 605138, status: resigned, kbo_season: 2024}
+    - {name: Roenis Elías, name_ko: 로에니스 엘리아스, team: SSG, mlbam: 606273, status: resigned, kbo_season: 2024}
+    - {name: Robert Dugger, name_ko: 로버트 더거, team: SSG, mlbam: 667498, status: new, kbo_season: 2024}
+    - {name: Drew Anderson, name_ko: 드류 앤더슨, team: SSG, mlbam: 623454, status: replacement, kbo_season: 2024}
+    - {name: Keisho Shirakawa, name_ko: 시라카와 케이쇼, team: SSG, mlbam: null, status: short_term, kbo_season: 2024}
+    - {name: Charlie Barnes, name_ko: 찰리 반즈, team: 롯데, mlbam: 656212, status: resigned, kbo_season: 2024}
+    - {name: Aaron Wilkerson, name_ko: 애런 윌커슨, team: 롯데, mlbam: 658792, status: resigned, kbo_season: 2024}
+    - {name: Félix Peña, name_ko: 펠릭스 페냐, team: 한화, mlbam: 570240, status: resigned, kbo_season: 2024}
+    - {name: Ricardo Sánchez, name_ko: 리카르도 산체스, team: 한화, mlbam: 645307, status: resigned, kbo_season: 2024}
+    - {name: Jaime Barria, name_ko: 하이메 바리아, team: 한화, mlbam: 642545, status: replacement, kbo_season: 2024}
+    - {name: Ryan Weiss, name_ko: 라이언 와이스, team: 한화, mlbam: 680802, status: short_term, kbo_season: 2024}
+    - {name: Kyle Hart, name_ko: 카일 하트, team: NC, mlbam: 606996, status: new, kbo_season: 2024}
+    - {name: Daniel Castano, name_ko: 다니엘 카스타노, team: NC, mlbam: 641447, status: new, kbo_season: 2024}
+    - {name: Eric Jokisch, name_ko: 에릭 요키시, team: NC, mlbam: 518852, status: replacement, kbo_season: 2024}
+    - {name: Ariel Jurado, name_ko: 아리엘 후라도, team: 키움, mlbam: 642558, status: resigned, kbo_season: 2024}
+    - {name: Enmanuel De Jesus, name_ko: 엔마누엘 데 헤이수스, team: 키움, mlbam: 646241, status: new, kbo_season: 2024}
+    - {name: James Naile, name_ko: 제임스 네일, team: KIA, mlbam: 664942, status: resigned, kbo_season: 2025}
+    - {name: Adam Oller, name_ko: 애덤 올러, team: KIA, mlbam: 670124, status: new, kbo_season: 2025}
+    - {name: Denyi Reyes, name_ko: 데니 레예스, team: 삼성, mlbam: 660593, status: resigned, kbo_season: 2025}
+    - {name: Ariel Jurado, name_ko: 아리엘 후라도, team: 삼성, mlbam: 642558, status: new, kbo_season: 2025}
+    - {name: Gerson Garabito, name_ko: 헤르손 가라비토, team: 삼성, mlbam: 642520, status: replacement, kbo_season: 2025}
+    - {name: Yonny Chirinos, name_ko: 요니 치리노스, team: LG, mlbam: 630023, status: new, kbo_season: 2025}
+    - {name: Elieser Hernández, name_ko: 엘리에이저 에르난데스, team: LG, mlbam: 622694, status: resigned, kbo_season: 2025}
+    - {name: Coen Wynne, name_ko: 코엔 윈, team: LG, mlbam: 807650, status: short_term, kbo_season: 2025}
+    - {name: Anders Tolhurst, name_ko: 앤더스 톨허스트, team: LG, mlbam: 689434, status: replacement, kbo_season: 2025}
+    - {name: Cole Irvin, name_ko: 콜 어빈, team: 두산, mlbam: 608344, status: new, kbo_season: 2025}
+    - {name: Zach Logue, name_ko: 잭 로그, team: 두산, mlbam: 656657, status: new, kbo_season: 2025}
+    - {name: William Cuevas, name_ko: 윌리엄 쿠에바스, team: kt, mlbam: 571035, status: resigned, kbo_season: 2025}
+    - {name: Enmanuel De Jesus, name_ko: 엔마누엘 데 헤이수스, team: kt, mlbam: 646241, status: new, kbo_season: 2025}
+    - {name: Patrick Murphy, name_ko: 패트릭 머피, team: kt, mlbam: 641907, status: replacement, kbo_season: 2025}
+    - {name: Drew Anderson, name_ko: 드류 앤더슨, team: SSG, mlbam: 623454, status: resigned, kbo_season: 2025}
+    - {name: Mitch White, name_ko: 미치 화이트, team: SSG, mlbam: 669952, status: new, kbo_season: 2025}
+    - {name: Charlie Barnes, name_ko: 찰리 반즈, team: 롯데, mlbam: 656212, status: resigned, kbo_season: 2025}
+    - {name: Tucker Davidson, name_ko: 터커 데이비슨, team: 롯데, mlbam: 656353, status: new, kbo_season: 2025}
+    - {name: Alec Gamboa, name_ko: 알렉 감보아, team: 롯데, mlbam: 687941, status: replacement, kbo_season: 2025}
+    - {name: Vince Velasquez, name_ko: 빈스 벨라스케즈, team: 롯데, mlbam: 592826, status: replacement, kbo_season: 2025}
+    - {name: Ryan Weiss, name_ko: 라이언 와이스, team: 한화, mlbam: 680802, status: resigned, kbo_season: 2025}
+    - {name: Cody Ponce, name_ko: 코디 폰세, team: 한화, mlbam: 664074, status: new, kbo_season: 2025}
+    - {name: Riley Thompson, name_ko: 라일리 톰슨, team: NC, mlbam: 663929, status: new, kbo_season: 2025}
+    - {name: Logan Allen, name_ko: 로건 앨런, team: NC, mlbam: 663531, status: new, kbo_season: 2025}
+    - {name: Kenny Rosenberg, name_ko: 케니 로젠버그, team: 키움, mlbam: 670046, status: new, kbo_season: 2025}
+    - {name: Lachlan Wells, name_ko: 라클란 웰스, team: 키움, mlbam: 649143, status: short_term, kbo_season: 2025}
+    - {name: Raúl Alcántara, name_ko: 라울 알칸타라, team: 키움, mlbam: 593417, status: replacement, kbo_season: 2025}
+    - {name: C.C. Mercedes, name_ko: C.C. 메르세데스, team: 키움, mlbam: 608571, status: replacement, kbo_season: 2025}
