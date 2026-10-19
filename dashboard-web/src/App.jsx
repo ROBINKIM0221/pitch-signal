@@ -21,8 +21,8 @@ const GROUPS = [
   { key: "pro", label: "MLB · KBO", items: [
     { to: "/replay", label: "리플레이 · 경보 카드", file: "pitchers.json" },
     { to: "/bullpen", label: "팀 불펜 현황판", file: "teams.json" },
-    { to: "/kbo", label: "KBO 영입 전 점검", file: "kbo_case.json" },
     { to: "/watch", label: "시즌 경보 현황", file: "watchlist.json" },
+    { to: "/kbo", label: "KBO 영입 전 점검", file: "scout.json" },
     { to: "/performance", label: "검증 결과표", file: "performance.json", hidden: true },
   ] },
   { key: "about", label: "소개", items: [{ to: "/about", label: "소개", file: null }] },
