@@ -119,7 +119,7 @@ export default function Kbo() {
         <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
       </div>
       {shown.map((p, i) => (
-        <div key={`${p.kbo_season}_${p.name}`}>
+        <div key={`${p.kbo_season}_${p.team}_${p.name}`}>{/* 같은 시즌 두 팀에서 뛴 투수(2024 시라카와)가 있어 팀까지 넣어야 열쇠가 겹치지 않음 */}
           {team === "all" && (i === 0 || shown[i - 1].team !== p.team) && <h3 className="team-head">{p.team}</h3>}
           <ScoutCard p={p} />
         </div>
