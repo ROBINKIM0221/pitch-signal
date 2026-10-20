@@ -141,6 +141,8 @@ export function ValidationSummary() {
           <li><b>경보가 울린 뒤 30일 안에 팔 부상으로 IL에 오른 비율은 {fmt.pct(100 * (val?.alarm_rate ?? 0))}로, 경보 없는 등판({fmt.pct(100 * (val?.other_rate ?? 0))})의 {fmt.num(val?.lift, 1)}배입니다.</b>
             {sealed && ` 봉인해 둔 2026 시즌에서도 ${fmt.num(sealed.lift, 1)}배였습니다.`} 그래도 열 번 중 아홉 번은 부상으로 이어지지 않으므로, 경보는 점검을 시작할 때이지 부상 판정이 아닙니다.</li>
           <li><b>폼 변화 지수는 구속 하락 경보와 함께 보는 보조 정보입니다.</b> 경보 뒤 30일 안 팔 IL 비율은 {fmt.num(formFu?.lift, 1)}배로 방향은 같지만, IL 직전 5등판 안 경보({fmt.pct(form?.detection)} vs {fmt.pct(form?.control_window)})와 주 지표(일치도 {fmt.num(form?.concordance, 2)}) 모두 우연과 구별될 만큼 차이 나지 않았습니다.
+            {/* 2026-10-21 사후 탐색(사용자 "해보자"): 같은 등판에서 두 경보가 함께 울린 64번 — 개발 7/38, 검증 4/20, 봉인 1/6 */}
+            {" "}다만 같은 등판에서 구속 하락 경보와 <b>함께</b> 울리면 30일 안 팔 IL이 약 19%(64번 중 12번, 경보 없는 등판 약 5%)로, 개발·검증·봉인 세 기간 모두 높았습니다(사후 탐색, 건수가 적음).
             <details className="more" style={{ margin: "8px 0 0" }}>
               <summary>한계 보기</summary>
               <p>흔히 쓰는 '구속 1mph(1.6km/h) 하락' 규칙은 더 많이 잡지만({fmt.pct(b1?.detection)}) 부상 없는 투수에게도 100등판에 {fmt.num(b1?.false_alarms_per100, 1)}번 울립니다.
