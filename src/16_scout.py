@@ -105,6 +105,57 @@ def aaa_transactions(cfg: dict, seasons: list[int], download: bool) -> pd.DataFr
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["id", "person_id", "date", "effective_date", "description"])
 
 
+RAW_STATS = ROOT / "data" / "raw" / "mlbstats"
+RAW_STATCAST = ROOT / "data" / "raw" / "statcast"
+
+
+def pitcher_stats(cfg: dict, ids: list[int], download: bool) -> dict[int, list[dict]]:
+    """투수별 MLB·트리플A 시즌 투구 기록(MLB Stats API yearByYear, 팀별 줄) — data/raw/mlbstats/<mlbam>.json에 저장해 두고 재사용."""
+    RAW_STATS.mkdir(parents=True, exist_ok=True)
+    api, out = cfg["data"]["api"], {}
+    for pid in ids:
+        path = RAW_STATS / f"{pid}.json"
+        if not path.exists() and download:
+            splits = []
+            for sport in scout.SPORT:
+                data = mlb_api.get_json(f"{mlb_api.BASE}/people/{pid}/stats", {"stats": "yearByYear", "group": "pitching", "sportId": sport},
+                                        pause=api["pause_sec"], retries=api["retries"], timeout=api["timeout_sec"])
+                splits += [s for g in data.get("stats", []) for s in g.get("splits", [])]
+            path.write_text(json.dumps(splits, ensure_ascii=False), encoding="utf-8")
+        if path.exists():
+            out[pid] = json.loads(path.read_text(encoding="utf-8"))
+    return out
+
+
+def fip_constants(cfg: dict, seasons: list[int], download: bool) -> dict[tuple[int, str], float]:
+    """리그·시즌별 FIP 상수 (팀 투수 기록 합계로) — data/raw/mlbstats/league_<리그>_<시즌>.json."""
+    api, out = cfg["data"]["api"], {}
+    for season in seasons:
+        for sport, league in scout.SPORT.items():
+            path = RAW_STATS / f"league_{league}_{season}.json"
+            if not path.exists() and download:
+                data = mlb_api.get_json(f"{mlb_api.BASE}/teams/stats", {"season": season, "sportIds": sport, "group": "pitching", "stats": "season"},
+                                        pause=api["pause_sec"], retries=api["retries"], timeout=api["timeout_sec"])
+                path.write_text(json.dumps([s["stat"] for g in data.get("stats", []) for s in g.get("splits", [])], ensure_ascii=False), encoding="utf-8")
+            if path.exists():
+                teams = json.loads(path.read_text(encoding="utf-8"))
+                total = {c: sum(int(t.get(c) or 0) for t in teams) for c in ("outs", "earnedRuns", "homeRuns", "baseOnBalls", "hitByPitch", "strikeOuts")}
+                if total["outs"]:
+                    out[(season, league)] = scout.fip_constant(total)
+    return out
+
+
+def mlb_whiff(ids: list[int], seasons: list[int]) -> dict[tuple[int, int], float]:
+    """MLB 헛스윙률 (투수·시즌): Statcast 원자료(주 단위 파일)에서 대상 투수 줄만 읽는다."""
+    out = {}
+    for season in seasons:
+        parts = [pd.read_parquet(f, columns=["pitcher", "description"], filters=[("pitcher", "in", ids)]) for f in sorted((RAW_STATCAST / str(season)).glob("*.parquet"))]
+        if parts:
+            d = pd.concat(parts, ignore_index=True)
+            out.update({(int(p), season, "MLB"): scout.whiff_rate(g["description"]) for p, g in d.groupby("pitcher")})
+    return out
+
+
 def aaa_tables(cfg: dict, pitches: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """트리플A 투구 → 등판 표(구장 보정 없음), 감시 표, 경보 카드."""
     outings, fbs = [], []
@@ -213,10 +264,18 @@ def main() -> None:
     mlb_long = joined(mlb_out, mlb_tab, cfg, "MLB")
     everything = pd.concat([mlb_long, aaa_long], ignore_index=True) if len(aaa_long) else mlb_long
 
+    stat_seasons = list(range(2021, 2027))
+    raw_stats = pitcher_stats(cfg, ids, download=not a.no_download)
+    cfip = fip_constants(cfg, stat_seasons, download=not a.no_download)
+    whiff = mlb_whiff(ids, stat_seasons)
+    if len(pitches):
+        whiff.update({(int(p), int(s), "AAA"): scout.whiff_rate(g["description"]) for (p, s), g in pitches.groupby(["pitcher", pitches["game_date"].dt.year])})
+    log.info("시즌 성적: 투수 %d명, FIP 상수 %d개, 헛스윙률 %d개", len(raw_stats), len(cfip), len(whiff))
+
     pitchers_out, aaa_catalog, aaa_alert_rows, seen = [], [], [], set()
     for p in cfg_scout["pitchers"]:
         kbo_season = int(p.get("kbo_season", 2026))      # 2024·2025 외국인 투수 추가 (2026-10-20 외부 검토·사용자 결정)
-        entry = {**p, "kbo_season": kbo_season, "seasons": [], "timeline": [], "il": []}
+        entry = {**p, "kbo_season": kbo_season, "seasons": [], "timeline": [], "il": [], "stats": []}
         if p["mlbam"] is not None:
             mine = everything[(everything["pitcher"] == p["mlbam"]) & (everything["season"] <= kbo_season)]   # 그 KBO 시즌까지의 미국 기록만
             for (season, league), g in mine.groupby(["season", "league"]):
@@ -235,6 +294,9 @@ def main() -> None:
                     aaa_catalog.append({"id": replay_id, "name": p["name"], "season": int(season), "role": summary["role"], "group": "other", "case_id": None,
                                         "part": None, "il_date": None, "detected": None, "n_mon": int(monitored), "alarms_velo": summary["alarms_velo"],
                                         "alarms_change": summary["alarms_change"], "split": "aaa", "league": "AAA"})
+            counts = scout.season_counts(raw_stats.get(p["mlbam"], []))
+            entry["stats"] = [{"season": s, "league": lg, **scout.season_rates(c, cfip.get((s, lg)), whiff.get((p["mlbam"], s, lg)))}
+                              for (s, lg), c in sorted(counts.items()) if 2021 <= s <= kbo_season and c["outs"] > 0]
             entry["timeline"] = scout.timeline(mine)
             entry["seasons"].sort(key=lambda s: (s["season"], s["league"]))
         pitchers_out.append(entry)

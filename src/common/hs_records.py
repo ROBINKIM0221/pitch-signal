@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -221,6 +222,48 @@ def _ball_fields(g: pd.DataFrame) -> dict:
             "ball_flags": int((g["ball_flag"] == True).sum())}
 
 
+AIR_OUT = re.compile(r"플|직")        # 뜬공·파울플라이·인필드플라이·직선타 (희생플라이 포함), MLB airOuts처럼 직선타는 뜬공 쪽
+GROUND_OUT = re.compile(r"땅")        # 땅볼·병살 (번트 아웃은 어느 쪽에도 넣지 않음)
+
+
+def season_stats(g: pd.DataFrame) -> dict:
+    """투수 시즌 성적 (2026-10-20 사용자: 스카우트가 보는 지표 — 맥락 정보, 신호 아님).
+    이닝·자책은 경기 기록 투수 표(outs, er), 나머지는 타석 결과(flow)에서 센다: 승부주자(TB)는 타석이 아님.
+    타수 = 타석 − 4구 − 사구 − 희생(번트·플라이), 출루율 분모 = 타수 + 4구 + 사구 + 희생플라이. 아웃은 땅볼/뜬공으로 나눠 GO/AO."""
+    if "flow" not in g:
+        return {}
+    g = g[g["flow"].notna()]                                    # 타석 결과가 있는 등판만 (이닝·자책·투구 수도 같은 등판으로)
+    outs = g["outs"].sum(min_count=1) if "outs" in g else np.nan
+    er = g["er"].sum(min_count=1) if "er" in g else np.nan
+    pas = [pa for raw in g["flow"] for pa in json.loads(raw) if pa["cat"] != "TB"]
+    if not pas or pd.isna(outs) or outs <= 0:
+        return {}
+    c = lambda cat: sum(pa["cat"] == cat for pa in pas)
+    bf, k, bb, hbp, hr = len(pas), c("K"), c("BB"), c("HBP"), c("HR")
+    sac = [pa for pa in pas if pa["cat"] == "SAC"]
+    sf = sum("희플" in pa["res"] for pa in sac)
+    hits = [pa["res"] for pa in pas if pa["cat"] in ("H", "HR")]
+    tb = sum(4 if pa["cat"] == "HR" else 3 if pa["res"].endswith("3") else 2 if pa["res"].endswith("2") else 1
+             for pa in pas if pa["cat"] in ("H", "HR"))
+    ab = bf - bb - hbp - len(sac)
+    go = sum(pa["cat"] == "OUT" and bool(GROUND_OUT.search(pa["res"])) for pa in pas)
+    ao = sum((pa["cat"] == "OUT" and bool(AIR_OUT.search(pa["res"])) and not GROUND_OUT.search(pa["res"])) or (pa in sac and "희플" in pa["res"]) for pa in pas)
+    ip = outs / 3
+    pitches = g["pitches"].sum() if g["pitches"].notna().all() else np.nan
+    obp_den = ab + bb + hbp + sf
+    return {"ip": _r3(ip), "outs": int(outs), "bf": bf, "era": _r3(27 * er / outs) if pd.notna(er) else None,
+            "whip": _r3((len(hits) + bb) / ip), "avg": _r3(len(hits) / ab) if ab > 0 else None,
+            "obp": _r3((len(hits) + bb + hbp) / obp_den) if obp_den > 0 else None, "slg": _r3(tb / ab) if ab > 0 else None,
+            "k_pct": _r3(k / bf), "bb_pct": _r3((bb + hbp) / bf), "hr": hr,
+            "p_ip": _r3(pitches / ip) if pd.notna(pitches) else None, "p_bf": _r3(pitches / bf) if pd.notna(pitches) else None,
+            "go_ao": _r3(go / ao) if ao > 0 else None}
+
+
+def _r3(value):
+    """성적 지표: 소수 셋째 자리, 결측은 None."""
+    return None if value is None or pd.isna(value) else round(float(value), 3)
+
+
 def _clean(value):
     """JSON으로 내보낼 값: 결측은 None, numpy 수는 파이썬 수."""
     if value is None or (isinstance(value, float) and np.isnan(value)) or value is pd.NA or value is pd.NaT:
@@ -304,7 +347,7 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                              "batters": _clean(batters), **season_results,
                              "p_per_pa": _clean(g["pitches"].sum() / batters) if known and pd.notna(batters) and batters > 0 else None,
                              "flow_games": int(g["flow"].notna().sum()) if "flow" in g else 0,
-                             **(_ball_fields(g) if "ball_marks" in g else {}),
+                             **(_ball_fields(g) if "ball_marks" in g else {}), "stats": season_stats(g) or None,
                              "violations": _rec(v, ["date", "rule", "detail"]), "games": games_out})
         pitchers.sort(key=lambda p: (-(p["pitches_total"] if p["pitches_total"] is not None else -1), p["label"]))
         span = daily.loc[daily["school"] == school, "date"]

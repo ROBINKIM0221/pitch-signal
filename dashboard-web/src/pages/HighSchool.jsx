@@ -337,7 +337,8 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`} title={p.load_reasons.join(" · ") || undefined}>부하 {p.load_status}</span></span>
           </div>
           {p.load_reasons.length > 0 && <p className="caption" style={{ marginTop: 0 }}>부하 표시 이유: {p.load_reasons.join(" · ")}</p>}
-          {p.batters != null && p.batters > 0 && (
+          {p.stats && <HsStats st={p.stats} />}
+          {!p.stats && p.batters != null && p.batters > 0 && (
             <p className="caption" style={{ marginTop: 0 }}>
               <b>시즌 기록</b> 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 타자당 투구 ${fmt.num(p.p_per_pa, 1)}개`}
             </p>
@@ -478,6 +479,37 @@ function cumulativeLight(p, lights) {
   if (p.pitches_total == null) return { cls: "base", text: "누적 모름" };
   const { caution, high } = lights.sum7;
   return { cls: p.pitches_total >= high ? "alarm" : p.pitches_total >= caution ? "warn" : "ok", text: `누적 ${p.pitches_total}구${p.pitches_total >= high ? " · 높음" : p.pitches_total >= caution ? " · 주의" : ""}` };
+}
+
+// 투수 시즌 성적 (2026-10-21 사용자: 스카우트가 보는 지표 — 맥락 정보, 규정·부하 신호와 섞지 않음). 10이닝 미만은 흐리게
+const HS_STATS = [
+  ["ip", "이닝", (v) => fmt.num(v, 1), "타석 결과가 있는 등판의 이닝"],
+  ["era", "ERA", (v) => fmt.num(v, 2), "9이닝당 자책점 (고교는 7이닝 경기가 많아 프로와 바로 비교하지 않음)"],
+  ["whip", "WHIP", (v) => fmt.num(v, 2), "이닝당 출루 허용 (피안타 + 볼넷)"],
+  ["avg", "피안타율", (v) => v.toFixed(3).replace(/^0/, ""), "상대 타율 (타수 = 타석 − 4구 − 사구 − 희생)"],
+  ["ops", "피OPS", (v) => v.toFixed(3).replace(/^0/, ""), "상대 출루율 + 장타율 (2루타·3루타는 타석 결과 표기로 셈)"],
+  ["k_pct", "삼진%", (v) => fmt.num(100 * v, 1), "상대 타자 중 삼진 비율"],
+  ["bb_pct", "4사구%", (v) => fmt.num(100 * v, 1), "상대 타자 중 볼넷·사구 비율"],
+  ["k_bb", "K−BB%", (v) => fmt.num(100 * v, 1), "삼진% − 4사구%. 이닝이 적어도 비교적 안정적인 제구·구위 지표"],
+  ["go_ao", "땅볼/뜬공", (v) => fmt.num(v, 2), "땅볼 아웃 ÷ 뜬공 아웃 (직선타는 뜬공 쪽, 번트 아웃 제외)"],
+  ["p_ip", "이닝당 투구", (v) => fmt.num(v, 1), "이닝당 투구 수 — 같은 이닝을 막아도 많으면 부하가 큼"],
+  ["p_bf", "타자당 투구", (v) => fmt.num(v, 1), "타자 한 명에게 던진 공"],
+];
+
+function HsStats({ st }) {
+  const small = st.ip < 10;
+  const vals = { ...st, ops: st.obp != null && st.slg != null ? st.obp + st.slg : null, k_bb: st.k_pct != null && st.bb_pct != null ? st.k_pct - st.bb_pct : null };
+  return (
+    <div style={{ margin: "0 0 10px" }}>
+      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>협회 경기 기록·타석 결과 · 맥락 정보{small && " · 10이닝 미만이라 표본 적음"}</small><span className="hover-hint">칸에 커서를 올리면 뜻</span></div>
+      <div className="tbl-wrap">
+        <table className="tbl" style={small ? { opacity: 0.55 } : undefined}>
+          <thead><tr>{HS_STATS.map(([k, name, , tip]) => <th key={k} className="num" title={tip}>{name}</th>)}</tr></thead>
+          <tbody><tr>{HS_STATS.map(([k, , f, tip]) => <td key={k} className="num" title={tip}>{vals[k] == null ? "—" : f(vals[k])}</td>)}</tr></tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // 검색 칸 예시 (2026-10-20 사용자: 2025는 대구고 김민준, 2026은 하현승). 없는 자료는 목록 첫 선수

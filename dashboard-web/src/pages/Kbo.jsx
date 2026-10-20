@@ -47,7 +47,7 @@ function ScoutCard({ p }) {
         <h2>{p.name_ko} <span style={{ color: "var(--muted)", fontWeight: 500 }}>{p.name} · {p.team}</span></h2>
         <span className={`light ${p.status === "resigned" ? "base" : p.status === "new" ? "ok" : "warn"}`}>{p.kbo_season} {STATUS[p.status] || p.status}</span>
       </div>
-      {!has && <p className="caption" style={{ margin: 0 }}>{p.kbo_season}년 이전 공개 추적 기록(2021년 이후 MLB·2023년 이후 트리플A)이 없습니다(더블A 이하·독립리그·NPB·KBO 기록은 공개 추적 자료가 없음).</p>}
+      {!has && <p className="caption" style={{ margin: 0 }}>{p.kbo_season}년 이전 공개 투구 추적 기록(2021년 이후 MLB·2023년 이후 트리플A)이 없어 구속 흐름·경보는 볼 수 없습니다{p.stats?.length ? " — 아래는 공개 성적만" : "(더블A 이하·독립리그·NPB·KBO 기록은 공개 자료가 없음)"}.</p>}
       {has && (
         <>
           <div className="legend" style={{ marginBottom: 2 }}>
@@ -80,6 +80,45 @@ function ScoutCard({ p }) {
           </div>
         </>
       )}
+      <StatsTable stats={p.stats} />
+    </div>
+  );
+}
+
+// 시즌 성적 (2026-10-21 사용자: 스카우트가 보는 지표 — 맥락 정보, 경보와 섞지 않음). 20이닝 미만은 흐리게
+const STAT_COLS = [
+  ["ip", "이닝", (v) => fmt.num(v, 1), "던진 이닝"],
+  ["era", "ERA", (v) => fmt.num(v, 2), "9이닝당 자책점"],
+  ["fip", "FIP", (v) => fmt.num(v, 2), "수비·운을 뺀 평균자책 — 삼진·볼넷·사구·홈런만으로 계산(리그·시즌 상수)"],
+  ["whip", "WHIP", (v) => fmt.num(v, 2), "이닝당 출루 허용 (피안타 + 볼넷)"],
+  ["avg", "피안타율", (v) => v.toFixed(3).replace(/^0/, ""), "상대 타율"],
+  ["ops", "피OPS", (v) => v.toFixed(3).replace(/^0/, ""), "상대 출루율 + 장타율"],
+  ["k_pct", "삼진%", (v) => fmt.num(100 * v, 1), "상대 타자 중 삼진 비율"],
+  ["bb_pct", "볼넷%", (v) => fmt.num(100 * v, 1), "상대 타자 중 볼넷·사구 비율"],
+  ["k_bb", "K−BB%", (v) => fmt.num(100 * v, 1), "삼진% − 볼넷%. 리그를 옮길 때 가장 잘 이어지는 제구·구위 지표"],
+  ["hr9", "HR/9", (v) => fmt.num(v, 2), "9이닝당 피홈런"],
+  ["go_ao", "땅볼/뜬공", (v) => fmt.num(v, 2), "땅볼 아웃 ÷ 뜬공 아웃. 1보다 크면 땅볼 투수 (KBO 구장이 작아 홈런 억제에 유리)"],
+  ["whiff", "헛스윙%", (v) => fmt.num(100 * v, 1), "스윙 중 헛스윙 비율 (투구 추적 자료, 트리플A는 2023년부터)"],
+  ["p_ip", "이닝당 투구", (v) => fmt.num(v, 1), "이닝당 투구 수 — 많으면 같은 이닝에도 부하가 큼"],
+];
+
+function StatsTable({ stats }) {
+  if (!stats?.length) return null;
+  return (
+    <div className="tbl-wrap" style={{ marginTop: 10 }}>
+      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>MLB Stats API 정규시즌 · 20이닝 미만은 흐리게(표본 적음) · 트리플A FIP는 트리플A 리그 상수</small><span className="hover-hint">머리글에 커서를 올리면 뜻</span></div>
+      <table className="tbl">
+        <thead><tr><th>시즌</th><th className="num" title="경기 (선발)">경기</th>{STAT_COLS.map(([k, name, , tip]) => <th key={k} className="num" title={tip}>{name}</th>)}</tr></thead>
+        <tbody>
+          {stats.map((s) => (
+            <tr key={`${s.league}${s.season}`} style={s.ip < 20 ? { opacity: 0.5 } : undefined}>
+              <td><span className="pill" style={{ margin: 0 }}><span className="dot" style={{ background: LEAGUE_COLOR[s.league] }} />{s.league} {s.season}</span></td>
+              <td className="num">{s.g}{s.gs > 0 && ` (${s.gs})`}</td>
+              {STAT_COLS.map(([k, , f]) => <td key={k} className="num">{s[k] == null ? "—" : f(s[k])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

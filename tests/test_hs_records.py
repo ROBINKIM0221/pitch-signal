@@ -1,3 +1,4 @@
+import pytest
 """KBSA 기록 변환(학교 실명·선수 등번호 표기, 입력표, 등판 주석, 대시보드 payload) 테스트. 실행: python -m pytest -q tests/test_hs_records.py"""
 import numpy as np
 import pandas as pd
@@ -284,3 +285,26 @@ def test_payload_carries_innings_per_game():
     pay = hr.payload(outings, daily, violated, names, RULES, {"mode": "tournament", "name": "가상 대회", "short": "전국체전", "season": 2025, "dates": "-"}, "시험", LIGHTS)
     ace = next(p for s in pay["schools"] for p in s["pitchers"] if s["name"] == "다라고" and p["label"] == "#54")
     assert ace["games"][0]["innings"][0] == [1, 30, 19, 11, False] and ace["games"][1]["innings"] is None
+
+
+def test_season_stats_counts_from_flow():
+    """시즌 성적: 3이닝(9아웃) 자책 2, 타석 결과 12개(승부주자 1개는 타석 아님)."""
+    import json
+    flow = [{"inn": 1, "res": r, "cat": c, "ev": []} for r, c in [
+        ("좌안", "H"), ("좌중2", "H"), ("우중3", "H"), ("좌월홈", "HR"), ("4구", "BB"), ("사구", "HBP"), ("삼진", "K"), ("삼진", "K"),
+        ("유땅", "OUT"), ("2땅병살", "OUT"), ("중플", "OUT"), ("중희플", "SAC"), ("승부주자", "TB")]]
+    g = pd.DataFrame({"outs": [9], "er": [2.0], "pitches": [60.0], "flow": [json.dumps(flow, ensure_ascii=False)]})
+    st = hr.season_stats(g)
+    assert st["bf"] == 12 and st["ip"] == 3.0 and st["era"] == 6.0
+    assert st["whip"] == pytest.approx((4 + 1) / 3, abs=1e-3)                       # 피안타 4 + 볼넷 1 (사구 빼고)
+    ab = 12 - 1 - 1 - 1                                               # 4구·사구·희생플라이
+    assert st["avg"] == pytest.approx(4 / ab, abs=1e-3) and st["slg"] == pytest.approx((1 + 2 + 3 + 4) / ab, abs=1e-3)
+    assert st["obp"] == pytest.approx((4 + 1 + 1) / (ab + 1 + 1 + 1), abs=1e-3)
+    assert st["k_pct"] == pytest.approx(2 / 12, abs=1e-3) and st["bb_pct"] == pytest.approx(2 / 12, abs=1e-3)
+    assert st["go_ao"] == pytest.approx(2 / 2, abs=1e-3)                             # 땅볼 2 (병살 포함) / 뜬공 1 + 희생플라이 1
+    assert st["p_ip"] == 20.0 and st["p_bf"] == 5.0
+
+
+def test_season_stats_empty_without_flow():
+    g = pd.DataFrame({"outs": [3], "er": [0.0], "pitches": [15.0], "flow": [None]})
+    assert hr.season_stats(g) == {}

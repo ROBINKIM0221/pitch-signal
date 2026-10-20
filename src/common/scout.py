@@ -83,3 +83,57 @@ def season_il(placements: pd.DataFrame, pitcher: int, season: int) -> dict | Non
     arm = mine[mine["part"].isin(["elbow", "shoulder"])]
     first = (arm if len(arm) else mine).iloc[0]
     return {"date": first["il_date"].strftime("%Y-%m-%d"), "part": first["part"], "reason": first["reason"] if isinstance(first["reason"], str) else None, "count": int(len(mine))}
+
+
+# ---------- 시즌 성적 (2026-10-21 사용자: 스카우트가 보는 지표 — 맥락 정보, 경보 신호와 섞지 않음) ----------
+COUNTS = ["gamesPitched", "gamesStarted", "outs", "earnedRuns", "hits", "doubles", "triples", "homeRuns", "baseOnBalls", "hitByPitch",
+          "strikeOuts", "battersFaced", "atBats", "sacFlies", "groundOuts", "airOuts", "numberOfPitches"]
+SPORT = {1: "MLB", 11: "AAA"}
+
+
+def season_counts(splits: list[dict]) -> dict[tuple[int, str], dict]:
+    """MLB Stats API yearByYear 투구 기록(팀별 줄)을 (시즌, 리그)별 합계로. 정규시즌만, 팀 줄만 더한다."""
+    out: dict[tuple[int, str], dict] = {}
+    for s in splits:
+        if s.get("gameType", "R") != "R" or s.get("sport", {}).get("id") not in SPORT or "team" not in s:
+            continue
+        key = (int(s["season"]), SPORT[s["sport"]["id"]])
+        acc = out.setdefault(key, {c: 0 for c in COUNTS})
+        for c in COUNTS:
+            acc[c] += int(s["stat"].get(c) or 0)
+    return out
+
+
+def fip_constant(league: dict) -> float:
+    """FIP 상수 = 리그 ERA − (13·HR + 3·(BB+HBP) − 2·K) / IP (리그 합계로)."""
+    ip = league["outs"] / 3
+    return 9 * league["earnedRuns"] / ip - (13 * league["homeRuns"] + 3 * (league["baseOnBalls"] + league["hitByPitch"]) - 2 * league["strikeOuts"]) / ip
+
+
+def season_rates(c: dict, cfip: float | None, whiff: float | None) -> dict:
+    """합계 → 화면 지표. 분모가 0이면 None."""
+    r = lambda v: None if v is None or (isinstance(v, float) and np.isnan(v)) else round(float(v), 3)
+    ip = c["outs"] / 3
+    bf, ab = c["battersFaced"], c["atBats"]
+    singles = c["hits"] - c["doubles"] - c["triples"] - c["homeRuns"]
+    tb = singles + 2 * c["doubles"] + 3 * c["triples"] + 4 * c["homeRuns"]
+    obp_den = ab + c["baseOnBalls"] + c["hitByPitch"] + c["sacFlies"]
+    k, bb = (c["strikeOuts"] / bf, (c["baseOnBalls"] + c["hitByPitch"]) / bf) if bf else (None, None)
+    fip = (13 * c["homeRuns"] + 3 * (c["baseOnBalls"] + c["hitByPitch"]) - 2 * c["strikeOuts"]) / ip + cfip if ip and cfip is not None else None
+    return {"g": c["gamesPitched"], "gs": c["gamesStarted"], "ip": r(ip), "era": r(9 * c["earnedRuns"] / ip) if ip else None, "fip": r(fip),
+            "whip": r((c["hits"] + c["baseOnBalls"]) / ip) if ip else None, "avg": r(c["hits"] / ab) if ab else None,
+            "ops": r((c["hits"] + c["baseOnBalls"] + c["hitByPitch"]) / obp_den + tb / ab) if ab and obp_den else None,
+            "k_pct": r(k), "bb_pct": r(bb), "k_bb": r(k - bb) if bf else None, "hr9": r(9 * c["homeRuns"] / ip) if ip else None,
+            "go_ao": r(c["groundOuts"] / c["airOuts"]) if c["airOuts"] else None, "whiff": r(whiff),
+            "p_ip": r(c["numberOfPitches"] / ip) if ip and c["numberOfPitches"] else None}
+
+
+WHIFF = {"swinging_strike", "swinging_strike_blocked", "foul_tip", "missed_bunt"}
+SWING = WHIFF | {"foul", "foul_bunt", "hit_into_play", "foul_pitchout", "swinging_pitchout"}
+
+
+def whiff_rate(descriptions: pd.Series) -> float:
+    """헛스윙률 = 헛스윙 ÷ 스윙 (Statcast description 기준)."""
+    d = descriptions.astype(str)
+    swings = int(d.isin(SWING).sum())
+    return float(d.isin(WHIFF).sum() / swings) if swings else float("nan")

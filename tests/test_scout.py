@@ -68,3 +68,40 @@ def test_season_il_prefers_an_arm_injury_over_an_earlier_unknown_one():
     assert scout.season_il(placements, 10, 2025) == {"date": "2025-06-09", "part": "shoulder", "reason": "Right shoulder discomfort.", "count": 2}
     assert scout.season_il(placements, 10, 2024) == {"date": "2024-08-01", "part": "unknown", "reason": None, "count": 1}
     assert scout.season_il(placements, 10, 2023) is None
+
+
+def _split(season, sport, team, **stat):
+    return {"season": str(season), "sport": {"id": sport}, "team": {"id": team}, "gameType": "R", "stat": stat}
+
+
+def test_season_counts_sums_team_rows_by_league():
+    """트레이드로 두 팀에서 뛴 시즌은 합치고, MLB·트리플A는 따로, 팀 없는 합계 줄은 무시한다."""
+    splits = [_split(2024, 1, 1, outs=30, strikeOuts=5), _split(2024, 1, 2, outs=15, strikeOuts=4),
+              _split(2024, 11, 3, outs=60, strikeOuts=20), {"season": "2024", "sport": {"id": 1}, "stat": {"outs": 45}}]
+    c = scout.season_counts(splits)
+    assert c[(2024, "MLB")]["outs"] == 45 and c[(2024, "MLB")]["strikeOuts"] == 9 and c[(2024, "AAA")]["outs"] == 60
+
+
+def test_season_rates_formulas():
+    c = {"gamesPitched": 10, "gamesStarted": 10, "outs": 180, "earnedRuns": 24, "hits": 50, "doubles": 10, "triples": 1, "homeRuns": 6,
+         "baseOnBalls": 20, "hitByPitch": 2, "strikeOuts": 60, "battersFaced": 250, "atBats": 225, "sacFlies": 3, "groundOuts": 60, "airOuts": 40,
+         "numberOfPitches": 960}
+    r = scout.season_rates(c, cfip=3.1, whiff=0.25)
+    assert r["ip"] == 60 and r["era"] == 3.6 and r["whip"] == round(70 / 60, 3)
+    assert r["fip"] == round((13 * 6 + 3 * 22 - 2 * 60) / 60 + 3.1, 3)
+    tb = 33 + 20 + 3 + 24
+    assert r["ops"] == round(72 / 250 + tb / 225, 3) and r["avg"] == round(50 / 225, 3)
+    assert r["k_pct"] == 0.24 and r["bb_pct"] == 0.088 and r["k_bb"] == 0.152
+    assert r["hr9"] == 0.9 and r["go_ao"] == 1.5 and r["p_ip"] == 16.0 and r["whiff"] == 0.25
+
+
+def test_fip_constant_makes_league_fip_equal_league_era():
+    lg = {"outs": 3000, "earnedRuns": 450, "homeRuns": 120, "baseOnBalls": 350, "hitByPitch": 40, "strikeOuts": 900}
+    c = scout.fip_constant(lg)
+    ip = 1000
+    assert abs((13 * 120 + 3 * 390 - 2 * 900) / ip + c - 9 * 450 / ip) < 1e-9
+
+
+def test_whiff_rate():
+    d = pd.Series(["swinging_strike", "foul", "hit_into_play", "ball", "called_strike", "foul_tip"])
+    assert scout.whiff_rate(d) == 2 / 4
