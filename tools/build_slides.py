@@ -3,7 +3,7 @@
 슬라이드는 '---' 줄로 나누고, 각 슬라이드는 아래 줄들로 적는다:
   # 제목            슬라이드 제목 (왼쪽 위)
   time: 0:35        배정 시간 (합계 확인용)
-  layout: cover     표지 양식 (없으면 보통 양식)
+  layout: cover     표지 양식 (없으면 보통 양식, wide = 가로로 긴 그림을 글 아래 전체 폭으로)
   big: 35.6%        크게 보여 줄 숫자 하나 (60pt 이상)
   message: ...      화면에 크게 적는 핵심 메시지 한 문장 (값 안의 '\n' 두 글자는 줄바꿈)
   sub: ...          메시지 아래 작은 보조 문장
@@ -141,7 +141,8 @@ def _normal(slide, s: dict, root: Path, number: int, total: int, qr: Path):
     line = slide.shapes.add_shape(1, Cm(1.7), Cm(2.75), Cm(2.2), Cm(0.12))        # 제목 아래 짧은 강조선
     line.fill.solid(); line.fill.fore_color.rgb = ACCENT; line.line.fill.background()
     has_image = bool(s.get("image"))
-    width_cm = 14.5 if has_image else 30.5
+    wide = s.get("layout") == "wide"                                               # 가로로 긴 그림: 글은 위, 그림은 아래 전체 폭
+    width_cm = 14.5 if has_image and not wide else 30.5
     text_w = Cm(width_cm)
     y = 3.6
     if s.get("big"):
@@ -157,7 +158,9 @@ def _normal(slide, s: dict, root: Path, number: int, total: int, qr: Path):
         _text(slide, Cm(1.6), Cm(y), text_w, Cm(h), s["sub"], 18, color=INK2); y += h
     if s["bullets"]:
         _bullets(slide, Cm(1.6), Cm(y), text_w, Cm(max(1.0, 17.0 - y)), s["bullets"][:3])
-    if has_image:
+    if has_image and wide:
+        _picture(slide, root / s["image"], Cm(1.6), Cm(y + 0.3), Cm(30.6), Cm(17.6 - y))
+    elif has_image:
         _picture(slide, root / s["image"], Cm(16.6), Cm(3.4), Cm(16.0), Cm(13.6))
     if s.get("qr", "").lower() == "true":
         left = Cm(1.6) if has_image else Cm(28.2)                                  # 그림이 있으면 글 아래 왼쪽에
