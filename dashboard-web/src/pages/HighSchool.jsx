@@ -403,7 +403,8 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
     return [...out.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [mine]);
   const [date, setDate] = useState(school.end);
-  const [assume, setAssume] = useState(0);
+  const [assumeText, setAssumeText] = useState("");          // 글자로 둔다: 숫자로 두면 0 뒤에 쳐도 '010'이 화면에 남음 (React number 입력칸)
+  const assume = Math.max(0, Number(assumeText) || 0);
   const rows = school.pitchers.map((x) => {
     const outings = x.games.map((g) => ({ date: g.date, pitches: g.pitches }));
     const today = x.games.find((g) => g.date === date) || null;
@@ -436,7 +437,7 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
             <option value={school.end}>시즌 마지막 경기 {fmt.date(school.end)}</option>
           </select>
         </label>
-        <label><span>오늘</span><input className="text" type="number" min={0} max={130} step={5} value={assume} onChange={(e) => setAssume(Math.max(0, Number(e.target.value) || 0))} style={{ width: 80 }} /><span>구 던지면 다음 등판 가능일은?</span></label>
+        <label><span>오늘</span><input className="text" type="number" min={0} max={130} step={5} value={assumeText} placeholder="0" onChange={(e) => setAssumeText(e.target.value.replace(/^0+(?=\d)/, ""))} style={{ width: 80 }} /><span>구 던지면 다음 등판 가능일은?</span></label>
       </div>
       <div className="tbl-wrap">
         <table className="tbl">
