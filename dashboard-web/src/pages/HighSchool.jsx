@@ -507,7 +507,7 @@ function HsStats({ st }) {
   const vals = { ...st, ops: st.obp != null && st.slg != null ? st.obp + st.slg : null, k_bb: st.k_pct != null && st.bb_pct != null ? st.k_pct - st.bb_pct : null };
   return (
     <div style={{ margin: "0 0 10px" }}>
-      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>협회 경기 기록·타석 결과 · 맥락 정보{small && " · 10이닝 미만이라 표본 적음"}</small><span className="hover-hint">칸에 커서를 올리면 뜻</span></div>
+      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>협회 경기 기록·타석 결과 · 맥락 정보{small && " · 10이닝 미만이라 표본 적음"}</small></div>
       <div className="tbl-wrap">
         <table className="tbl" style={small ? { opacity: 0.55 } : undefined}>
           <thead><tr>{HS_STATS.map(([k, name, , tip]) => <th key={k} className="num" title={tip}>{name}</th>)}</tr></thead>

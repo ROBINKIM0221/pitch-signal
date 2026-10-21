@@ -106,7 +106,7 @@ function StatsTable({ stats }) {
   if (!stats?.length) return null;
   return (
     <div className="tbl-wrap" style={{ marginTop: 10 }}>
-      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>MLB Stats API 정규시즌 · 20이닝 미만은 흐리게(표본 적음) · 트리플A FIP는 트리플A 리그 상수</small><span className="hover-hint">머리글에 커서를 올리면 뜻</span></div>
+      <div className="chart-title" style={{ marginBottom: 4 }}>시즌 성적 <small>MLB Stats API 정규시즌 · 20이닝 미만은 흐리게(표본 적음) · 트리플A FIP는 트리플A 리그 상수</small></div>
       <table className="tbl">
         <thead><tr><th>시즌</th><th className="num" title="경기 (선발)">경기</th>{STAT_COLS.map(([k, name, , tip]) => <th key={k} className="num" title={tip}>{name}</th>)}</tr></thead>
         <tbody>
