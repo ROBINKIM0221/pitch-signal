@@ -133,7 +133,7 @@ export default function Replay() {
       <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 되감아, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.</p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
-          <input type="search" value={query} placeholder="이름 (예: Hader, Eovaldi, Soroka)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          <input type="search" value={query} placeholder="이름 (예: Cease, Eovaldi, Soroka)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} aria-label="투수 이름 검색" />
         </label>
         <label><span>시즌</span>
