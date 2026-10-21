@@ -356,3 +356,10 @@ p.caption > .hover-hint:first-child { margin-left: 0; }
 
 /* KBO 화면 구단 머리글 (2026-10-20) */
 .team-head { margin: 22px 0 8px; font-size: 15px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 4px; }
+
+/* 투수 시즌 카드 요약 칸 (2026-10-21) */
+.kpi.mini { border-top-width: 2px; margin: 4px 0 12px; }
+.kpi.mini > div { padding: 10px 16px; }
+.kpi.mini .v { font-size: 20px; margin: 2px 0; }
+.kpi.mini .l { margin-top: 0; font-size: 12.5px; }
+.kpi.mini .v .light { font-size: 13px; vertical-align: middle; }

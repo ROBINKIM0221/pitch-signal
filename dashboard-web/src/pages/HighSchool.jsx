@@ -329,28 +329,32 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           <p className="caption">점선은 시즌 500구. <span className="hover-hint">막대에 커서를 올리면 투구 수</span></p>
         </div>
       </div>
-      {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
       {p && (
         <div className="card">
           <div className="card-head">
             <h2>{s.name} {p.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 등판 {p.outings}회{p.pitches_total != null && ` · 시즌 ${p.pitches_total}구`}{p.max_pitches != null && ` · 한 경기 최다 ${p.max_pitches}구`}{p.max_7d != null && ` · 7일 최대 ${fmt.num(p.max_7d, 0)}구`}</span></h2>
             <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`} title={p.load_reasons.join(" · ") || undefined}>부하 {p.load_status}</span></span>
           </div>
-          {p.load_reasons.length > 0 && <p className="caption" style={{ marginTop: 0 }}>부하 표시 이유: {p.load_reasons.join(" · ")}</p>}
-          {p.stats && <HsStats st={p.stats} />}
-          {!p.stats && p.batters != null && p.batters > 0 && (
-            <p className="caption" style={{ marginTop: 0 }}>
-              <b>시즌 기록</b> 타자 {fmt.num(p.batters, 0)}명 · 삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0}){p.p_per_pa != null && ` · 타자당 투구 ${fmt.num(p.p_per_pa, 1)}개`}
-            </p>
-          )}
-          {p.games.some((g) => g.ball_marks != null) && (
-            <p className="caption" style={{ marginTop: 0 }}>※ 볼·스트라이크 비율은 손으로 쓴 협회 기록지를 모델이 읽고 판정한 값이라 약간의 오차가 있을 수 있습니다.</p>
-          )}
-          {p.games.some((g) => g.ball_marks != null) && (
-            <p className="caption" style={{ marginTop: 0 }}>
-              <b>볼 비율(추정)</b> {p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"} · {p.outings}등판 중 {p.ball_outings}등판{p.ball_flags > 0 && ` · 평소보다 볼이 많았던 등판 ${p.ball_flags}`}
-              <span className="info" title={BALL_HOW}>i</span>
-            </p>
+          {/* 요약 칸 세 개 (2026-10-21 사용자: 한 줄씩 주르륵 나오던 부하 이유·시즌 기록·볼 비율을 깔끔하게) */}
+          <div className="kpi mini">
+            <div>
+              <div className="l">누적 부하</div>
+              <div className="v"><span className={`light ${LOAD_CLASS[p.load_status]}`}>{p.load_status}</span></div>
+              <div className="l">{p.load_reasons.length ? p.load_reasons.join(" · ") : `7일 최대 ${p.max_7d != null ? fmt.num(p.max_7d, 0) : "—"}구 · 기준 안`}</div>
+            </div>
+            <div>
+              <div className="l">볼 비율(추정) <span className="info" title={`${BALL_HOW}\n\n※ 손으로 쓴 협회 기록지를 모델이 읽고 판정한 값이라 약간의 오차가 있을 수 있습니다.`}>i</span></div>
+              <div className="v">{p.ball_season != null ? `${fmt.num(100 * p.ball_season, 1)}%` : "—"}</div>
+              <div className="l">{p.games.some((g) => g.ball_marks != null) ? `${p.outings}등판 중 ${p.ball_outings}등판 기록지 판독${p.ball_flags > 0 ? ` · 볼 많았던 등판 ${p.ball_flags}` : ""}` : "기록지 판독 없음"}</div>
+            </div>
+            <div>
+              <div className="l">상대 타자</div>
+              <div className="v">{p.batters != null ? fmt.num(p.batters, 0) : "—"}<span className="sub"> 명</span></div>
+              <div className="l">{p.k != null ? `삼진 ${fmt.num(p.k, 0)} · 4사구 ${fmt.num(p.bb_hbp ?? 0, 0)} · 피안타 ${fmt.num(p.hits ?? 0, 0)}` : ""}</div>
+            </div>
+          </div>
+          {p.stats ? <HsStats st={p.stats} /> : p.batters > 0 && (
+            <p className="caption" style={{ marginTop: 0 }}>삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0})</p>
           )}
           <BallChart p={p} />
           <div className="chart-title">등판별 투구 수 <span className="hover-hint">막대·점에 커서를 올리면 날짜별 투구 수와 7일 합</span><small style={{ display: "block", marginTop: 2 }}>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
@@ -372,6 +376,8 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
           <ViolationsTable p={p} />
         </div>
       )}
+      {/* 투수 운용 계획판은 맨 아래 (2026-10-21 사용자) */}
+      {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
       <p className="note">
         출처: {ds.source}. 공식 경기 투구 수만 반영되며 연습·불펜 투구는 빠집니다. 상세 기록이 공개되지 않은 {ds.no_detail_games.length}경기는 선발 투수만 '투구 수 미공개'로 들어갑니다.
         고교에는 공식 부상 기록이 없어, 이 화면은 부상 탐지가 아니라 규정이 보지 못하는 부하를 보여 주는 현황판입니다.

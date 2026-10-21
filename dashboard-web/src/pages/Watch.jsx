@@ -53,7 +53,7 @@ export default function Watch() {
       </div>
       <div className="card">
         <div className="card-head">
-          <h2>경보 투수 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>최근 경보 날짜순 · 이름을 누르면 리플레이</span></h2>
+          <h2>경보 투수 <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: 13 }}>최근 경보 날짜순 · 이름을 누르면 그 투수의 시즌 상세(등판별 구속·지수 그래프와 경보 카드)</span></h2>
         </div>
         <div className="tbl-wrap">
           <table className="tbl">
