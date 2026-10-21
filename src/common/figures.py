@@ -365,7 +365,7 @@ def highschool_season_caption(payload: dict) -> str:
             f"팀은 팀 투구 수가 많은 순이다. 투수는 등번호로만 표시했다. 등판 {k['outings']}회에서 KBSA 규정 위반은 {k['violations']}건(하루 105구 초과 1, 의무 휴식일 미준수 1)뿐이지만 "
             f"시즌 500구 이상이 {k['pitchers_season_500']}명, 7일 합 150구 이상을 경험한 투수가 {k['pitchers_7d_150']}명, 100구 이상 등판이 {k['games_100plus']}회였고 "
             f"가장 많이 던진 세 투수는 {', '.join(f'{p['pitches_total']:,}구({p['outings']}등판)' for p in worst)}였다. 연투 {k['back_to_back']}건은 모두 45구 이하 뒤라 규정상 허용이다. "
-            f"누적 부하 신호등(7일 합 120/150구, 3일 안 두 등판 합 70/100구)은 높음 {k['pitchers_load_high']}명·주의 {k['pitchers_load_caution']}명이고, "
+            f"누적 부하 신호등(7일 합 120/150구, 3일 내 두 등판 합 70/100구)은 높음 {k['pitchers_load_high']}명·주의 {k['pitchers_load_caution']}명이고, "
             f"규정 위반 없이 높음·주의가 켜진 투수가 {k['compliant_with_load']}명이다.")
 
 

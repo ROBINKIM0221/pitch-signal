@@ -15,7 +15,7 @@ const RULE_TIP = { "준수": "하루 105구, 투구 수별 의무 휴식일, 3�
 function loadTip(x, lights) {
   if (x.load_reasons.length) return `누적 부하 ${x.load_status} 이유: ${x.load_reasons.join(" · ")}`;
   if (x.load_status === "계산 불가") return "투구 수가 공개되지 않은 등판이 있어 누적 부하를 계산할 수 없습니다";
-  return `보통: 7일 합 최대 ${x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}구(주의 ${lights.sum7.caution}구 미만), 3일 안 두 경기 합 최대 ${x.max_pair3 != null ? fmt.num(x.max_pair3, 0) : "—"}구(주의 ${lights.pair3.caution}구 미만)`;
+  return `보통: 7일 합 최대 ${x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}구(주의 ${lights.sum7.caution}구 미만), 3일 내 두 경기 합 최대 ${x.max_pair3 != null ? fmt.num(x.max_pair3, 0) : "—"}구(주의 ${lights.pair3.caution}구 미만)`;
 }
 
 const DEFAULT_REGION = "경기";                                   // 공모전 지역
@@ -68,6 +68,10 @@ function restText(g) {
 }
 
 function innings(outs) { return `${Math.floor(outs / 3)}${outs % 3 ? `.${outs % 3}` : ""}`; }
+// 선발·교체 횟수와 시즌 이닝 (2026-10-21 외부 피드백: 선발 50구와 교체 50구는 다르고, 역할이 고정인지 섞였는지 보이게)
+const starts = (games) => games.filter((g) => g.role === "선발").length;
+const totalOuts = (games) => games.reduce((s, g) => s + (g.outs || 0), 0);
+const pitchLine = (g) => `${g.pitches == null ? "투구 수 미공개" : `${g.pitches}구`}${g.outs != null ? ` · ${innings(g.outs)}이닝` : ""}`;
 
 function DayTip({ d }) {
   return (
@@ -261,7 +265,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>규정</b>: 하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 지켰는지.<br />
-          <b>누적 부하</b>: 7일 투구 수 합이 {data.load_lights.sum7.caution}구 이상이면 주의, {data.load_lights.sum7.high}구 이상이면 높음. 3일 안 두 경기 합이 {data.load_lights.pair3.caution}구 이상이면 주의, {data.load_lights.pair3.high}구 이상이면 높음.
+          <b>누적 부하</b>: 7일 투구 수 합이 {data.load_lights.sum7.caution}구 이상이면 주의, {data.load_lights.sum7.high}구 이상이면 높음. 3일 내 두 경기 합이 {data.load_lights.pair3.caution}구 이상이면 주의, {data.load_lights.pair3.high}구 이상이면 높음.
           규정이 아니라 2025년 전국 자료에서 상위 5%·2%에 해당하는 값으로 정한 눈금입니다.</p>
       </details>
       <div className="toolbar">
@@ -277,7 +281,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
         <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반{ruleCounts && ` (${ruleCounts})`}</div></div>
         <div><div className="v">{totals.compliant_with_load}<span className="sub"> 명</span></div><div className="l">규정은 지켰지만 누적 부하 주의·높음</div></div>
         <div><div className="v">{totals.pitchers_season_500}<span className="sub"> 명</span></div><div className="l">시즌 500구 이상 던진 투수</div></div>
-        <div><div className="v">{totals.pairs3_70}<span className="sub"> 쌍</span></div><div className="l">3일 안 두 경기 합 {data.load_lights.pair3.caution}구 이상</div></div>
+        <div><div className="v">{totals.pairs3_70}<span className="sub"> 쌍</span></div><div className="l">3일 내 두 경기 합 {data.load_lights.pair3.caution}구 이상</div></div>
       </div>
       <div className="toolbar">
         <label><span>학교</span>
@@ -305,7 +309,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
                     <td title="누르면 아래에 이 투수의 시즌 카드가 열립니다"><b>{x.label}</b></td>
                     <td title={RULE_TIP[x.rule_status]}><span className={`light ${STATUS_CLASS[x.rule_status]}`}>{x.rule_status}</span></td>
                     <td title={loadTip(x, data.load_lights)}><span className={`light ${LOAD_CLASS[x.load_status]}`}>{x.load_status}</span></td>
-                    <td className="num" title={`시즌 등판 ${x.outings}회`}>{x.outings}</td>
+                    <td className="num" title={`시즌 등판 ${x.outings}회 (선발 ${starts(x.games)} · 교체 ${x.games.length - starts(x.games)}) · ${innings(totalOuts(x.games))}이닝`}>{x.outings} <span style={{ color: "var(--muted)" }}>(선발 {starts(x.games)})</span></td>
                     <td className="num" title={x.pitches_total == null ? "투구 수가 공개되지 않은 등판이 있어 합계를 낼 수 없습니다" : `시즌 공식 경기 투구 수 합계 ${x.pitches_total}구 (연습·불펜 투구 제외)`}>{x.pitches_total ?? "—"}</td>
                     <td className="num" title={x.max_7d != null ? `한 주(그날 포함 7일) 동안 던진 투구 수 합의 시즌 최댓값 · 주의 ${data.load_lights.sum7.caution}구, 높음 ${data.load_lights.sum7.high}구` : undefined}>{x.max_7d != null ? fmt.num(x.max_7d, 0) : "—"}</td>
                     <td className="num" title={x.ball_season != null ? `기록지에서 읽은 볼 비율(추정) · ${x.ball_outings ?? "?"}등판 합${x.ball_flags > 0 ? ` · 평소보다 볼이 많았던 등판 ${x.ball_flags}` : ""}` : "기록지에서 볼 비율을 읽지 못했습니다"}>{x.ball_season != null ? `${fmt.num(100 * x.ball_season, 0)}%` : "—"}{x.ball_flags > 0 && <span className="light warn" style={{ marginLeft: 4 }}>{x.ball_flags}</span>}</td>
@@ -333,7 +337,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       {p && (
         <div className="card">
           <div className="card-head">
-            <h2>{s.name} {p.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 등판 {p.outings}회{p.pitches_total != null && ` · 시즌 ${p.pitches_total}구`}{p.max_pitches != null && ` · 한 경기 최다 ${p.max_pitches}구`}{p.max_7d != null && ` · 7일 최대 ${fmt.num(p.max_7d, 0)}구`}</span></h2>
+            <h2>{s.name} {p.label} <span style={{ color: "var(--muted)", fontWeight: 500 }}>· 등판 {p.outings}회 (선발 {starts(p.games)} · 교체 {p.games.length - starts(p.games)}){p.pitches_total != null && ` · 시즌 ${p.pitches_total}구`} · {innings(totalOuts(p.games))}이닝{p.max_pitches != null && ` · 한 경기 최다 ${p.max_pitches}구`}{p.max_7d != null && ` · 7일 최대 ${fmt.num(p.max_7d, 0)}구`}</span></h2>
             <span><span className={`light ${STATUS_CLASS[p.rule_status]}`} style={{ marginRight: 6 }}>규정 {p.rule_status}</span><span className={`light ${LOAD_CLASS[p.load_status]}`} title={p.load_reasons.join(" · ") || undefined}>부하 {p.load_status}</span></span>
           </div>
           {/* 요약 칸 세 개 (2026-10-21 사용자: 한 줄씩 주르륵 나오던 부하 이유·시즌 기록·볼 비율을 깔끔하게) */}
@@ -460,11 +464,11 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
                 <td><b>{x.label}</b></td>
                 <td><span className={`light ${cls[a.status]}`} title={a.reasons.join(" / ") || undefined}>{a.status}{a.status === "불가" && a.until && ` · ${fmt.date(a.until)}부터`}</span></td>
                 {assume > 0 && <td className="hypo">{hypo ? <><b>{fmt.date(hypo.date)}</b>부터 (휴식 {hypo.rest}일)</> : <span style={{ color: "var(--muted)" }}>오늘 등판 불가</span>}</td>}
-                <td>{next ? <>{fmt.date(next.last.date)} <span style={{ color: "var(--muted)" }}>· {next.last.pitches == null ? "투구 수 미공개" : `${next.last.pitches}구`}</span></> : <span style={{ color: "var(--muted)" }}>기준일 전 등판 없음</span>}</td>
+                <td>{next ? <>{fmt.date(next.last.date)} <span style={{ color: "var(--muted)" }}>· {pitchLine(x.games.find((g) => g.date === next.last.date) || next.last)}</span></> : <span style={{ color: "var(--muted)" }}>기준일 전 등판 없음</span>}</td>
                 <td>{next ? (next.rest == null ? "—" : next.rest === 0 ? "없음" : `${next.rest}일`) : "—"}</td>
                 <td>{next ? (next.date ? fmt.date(next.date) : "판정 불가") : "—"}</td>
                 <td className="num">{sum7 == null ? "—" : sum7}{sum7 != null && sum7 >= lights.sum7.caution && <span className={`light ${sum7 >= lights.sum7.high ? "alarm" : "warn"}`} style={{ marginLeft: 6 }}>{sum7 >= lights.sum7.high ? "높음" : "주의"}</span>}</td>
-                <td>{today ? <span className={`light ${a.status === "불가" ? "alarm" : "velo"}`}>{today.pitches == null ? "등판 (투구 수 미공개)" : `${today.pitches}구 등판`}{a.status === "불가" && " · 규정 위반?"}</span> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
+                <td>{today ? <span className={`light ${a.status === "불가" ? "alarm" : "velo"}`}>{today.role} {pitchLine(today)}{a.status === "불가" && " · 규정 위반?"}</span> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
               </tr>
             ))}
           </tbody>

@@ -284,7 +284,7 @@ def _rec(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
 
 
 def pair3_max(g: pd.DataFrame) -> float:
-    """한 투수의 등판(날짜순)에서 '3일 안 두 등판'의 합 중 최댓값. 그런 쌍이 없거나 투구 수를 모르면 NaN."""
+    """한 투수의 등판(날짜순)에서 '3일 내 두 등판'의 합 중 최댓값. 그런 쌍이 없거나 투구 수를 모르면 NaN."""
     g = g.sort_values(["date", "game_no"])
     gaps = g["date"].diff().dt.days
     sums = g["pitches"] + g["pitches"].shift(1)
@@ -293,9 +293,9 @@ def pair3_max(g: pd.DataFrame) -> float:
 
 
 def load_light(max_7d, max_pair3, lights: dict) -> tuple[str, list[str]]:
-    """누적 부하 신호등: 7일 합과 3일 안 두 등판 합을 절대량 기준(load_lights)에 대 본다. 어느 하나라도 '높음'이면 높음, '주의'만 있으면 주의."""
+    """누적 부하 신호등: 7일 합과 3일 내 두 등판 합을 절대량 기준(load_lights)에 대 본다. 어느 하나라도 '높음'이면 높음, '주의'만 있으면 주의."""
     reasons, level = [], 0
-    for value, key, name in ((max_7d, "sum7", "7일 합"), (max_pair3, "pair3", "3일 안 두 등판 합")):
+    for value, key, name in ((max_7d, "sum7", "7일 합"), (max_pair3, "pair3", "3일 내 두 등판 합")):
         if value is None or (isinstance(value, float) and np.isnan(value)):
             continue
         if value >= lights[key]["high"]:
@@ -307,7 +307,7 @@ def load_light(max_7d, max_pair3, lights: dict) -> tuple[str, list[str]]:
 
 def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, names: pd.DataFrame, rules: dict, info: dict, source: str, lights: dict) -> dict:
     """대시보드 highschool/<key>.json. 학교는 실명(names의 team), 투수는 names의 label(등번호 표기, 실명 표시를 켜면 '이름 #번호' — with_player_names).
-    누적 부하 신호등은 절대량(load_lights: 7일 합, 3일 안 두 등판 합)으로 매기고, ACWR은 고교 화면에서 쓰지 않는다(2026-10-07 결정)."""
+    누적 부하 신호등은 절대량(load_lights: 7일 합, 3일 내 두 등판 합)으로 매기고, ACWR은 고교 화면에서 쓰지 않는다(2026-10-07 결정)."""
     kbsa_rules = set(hs.KBSA_RULES)
     school_name = names.drop_duplicates("school").set_index("school")["team"]
     label_of = names.set_index("pitcher")["label"]
@@ -365,7 +365,7 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
     ordered = outings.sort_values(["pitcher", "date", "game_no"])
     gaps = ordered.groupby("pitcher")["date"].diff().dt.days
     pair_sum = ordered["pitches"] + ordered.groupby("pitcher")["pitches"].shift(1)
-    pairs = pair_sum[(gaps <= 2) & pair_sum.notna()]                                           # 3일 안 두 등판의 합
+    pairs = pair_sum[(gaps <= 2) & pair_sum.notna()]                                           # 3일 내 두 등판의 합
     heavy_b2b = int(((ordered["gap_days"] == 0) & (pair_sum >= 70)).sum())
     max7 = daily.groupby("pitcher")["sum_7d"].max()
     totals = {"schools": int(outings["school"].nunique()), "pitchers": int(outings["pitcher"].nunique()), "outings": int(len(outings)),

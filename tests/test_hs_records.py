@@ -167,8 +167,8 @@ def test_season_payload_reports_absolute_load_lights_and_the_rule_versus_load_sp
     school = pay["schools"][0]
     hong = next(p for p in school["pitchers"] if p["label"] == "#17")
     kim = next(p for p in school["pitchers"] if p["label"] == "#23")
-    # #17: 4주차부터 토 90 + 일 35 → 7일 합 최대 125(주의), 3일 안 두 등판 합 125(높음) → 높음; #23: 주 40 → 보통
-    assert hong["max_7d"] == 125 and hong["max_pair3"] == 125 and hong["load_status"] == "높음" and "3일 안 두 등판 합 125구" in " ".join(hong["load_reasons"])
+    # #17: 4주차부터 토 90 + 일 35 → 7일 합 최대 125(주의), 3일 내 두 등판 합 125(높음) → 높음; #23: 주 40 → 보통
+    assert hong["max_7d"] == 125 and hong["max_pair3"] == 125 and hong["load_status"] == "높음" and "3일 내 두 등판 합 125구" in " ".join(hong["load_reasons"])
     assert kim["max_7d"] == 40 and kim["max_pair3"] is None and kim["load_status"] == "보통" and kim["load_reasons"] == []
     assert hong["rule_status"] == "위반"                                           # 90구 뒤 이튿날 등판 → 의무 휴식 미준수
     assert "acwr_peak" not in hong and "acwr_flag_pitchers" not in pay["totals"]      # ACWR은 고교 화면에서 쓰지 않는다
