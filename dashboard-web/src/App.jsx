@@ -19,7 +19,7 @@ const GROUPS = [
     { to: "/", d: "tournament_2026", label: "2026 전국체전", file: "highschool.json" },
   ] },
   { key: "pro", label: "MLB · KBO", items: [
-    { to: "/replay", label: "리플레이 · 경보 카드", file: "pitchers.json" },
+    { to: "/replay", label: "투수 시즌 상세 · 경보 카드", file: "pitchers.json" },
     { to: "/bullpen", label: "팀 불펜 현황판", file: "teams.json" },
     { to: "/watch", label: "시즌 경보 현황", file: "watchlist.json" },
     { to: "/kbo", label: "KBO 영입 전 점검", file: "scout.json" },

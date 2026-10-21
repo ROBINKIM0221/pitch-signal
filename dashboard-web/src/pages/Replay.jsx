@@ -129,8 +129,8 @@ export default function Replay() {
     alarm: index.filter((p) => p.alarms_velo + p.alarms_change > 0).length };
   return (
     <div className="page">
-      <h1>리플레이 · 경보 카드</h1>
-      <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 되감아, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.</p>
+      <h1>투수 시즌 상세 · 경보 카드</h1>
+      <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 따라가며, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.</p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
           <input type="search" value={query} placeholder="이름 (예: Cease, Eovaldi, Soroka)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -170,9 +170,9 @@ export default function Replay() {
       </div>
       {me && (
         <div className="toolbar" style={{ gap: 14 }}>
-          <label><span>재생 위치</span>
+          <label><span>몇 번째 등판까지</span>
             <input type="range" min={Math.max(1, baselineCount)} max={me.outings.length} value={shown ?? me.outings.length}
-              onChange={(e) => setShown(Number(e.target.value))} aria-label="재생 위치" />
+              onChange={(e) => setShown(Number(e.target.value))} aria-label="몇 번째 등판까지" />
             <span className="range-value">{shown}/{me.outings.length} 등판</span>
           </label>
           <MultiplierControl value={mult} onChange={setMult} />

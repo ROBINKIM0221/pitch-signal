@@ -72,7 +72,7 @@ function ScoutCard({ p }) {
                     <td className="num" style={{ color: s.velo_change != null && s.velo_change <= -1 ? "var(--alarm)" : "inherit" }}>{s.velo_change == null ? "—" : `${s.velo_change > 0 ? "+" : ""}${fmt.num(s.velo_change * KMH, 1)}`}</td>
                     <td className="num">{s.alarms_velo} / {s.alarms_change}</td>
                     <td>{s.il ? <span className={`light ${ARM.has(s.il.part) ? "alarm" : "base"}`} title={s.il.reason || undefined}>{fmt.date(s.il.date)} {PART[s.il.part] || s.il.part}{s.il.count > 1 && ` · ${s.il.count}회`}</span> : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
-                    <td>{s.replay && <Link to={`/replay?p=${s.replay}`}>리플레이 →</Link>}</td>
+                    <td>{s.replay && <Link to={`/replay?p=${s.replay}`}>시즌 상세 →</Link>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -155,7 +155,7 @@ export default function Kbo() {
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
         <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "미국 기록 있는 투수만" : "전체 명단"}</button>
-        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '리플레이 →'를 누르면 그 시즌 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
+        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '시즌 상세 →'를 누르면 그 시즌 등판별 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
       </div>
       {shown.map((p, i) => (
         <div key={`${p.kbo_season}_${p.team}_${p.name}`}>{/* 같은 시즌 두 팀에서 뛴 투수(2024 시라카와)가 있어 팀까지 넣어야 열쇠가 겹치지 않음 */}

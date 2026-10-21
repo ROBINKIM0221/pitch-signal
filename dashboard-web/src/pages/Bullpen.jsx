@@ -3,14 +3,14 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK, limitLabel } from "../lib/chart.jsx";
-import { addDays, cautionReasons, dateRange, dayState, loadStatus } from "../lib/load.js";
+import { addDays, cautionReasons, dateRange, dayState, displayFlags, loadStatus } from "../lib/load.js";
 
 const TEAM_KO = { ATH: "애슬레틱스", OAK: "오클랜드", ATL: "애틀랜타", AZ: "애리조나", BAL: "볼티모어", BOS: "보스턴", CHC: "시카고 컵스", CIN: "신시내티", CLE: "클리블랜드", COL: "콜로라도",
   CWS: "시카고 화이트삭스", DET: "디트로이트", HOU: "휴스턴", KC: "캔자스시티", LAA: "LA 에인절스", LAD: "LA 다저스", MIA: "마이애미", MIL: "밀워키", MIN: "미네소타", NYM: "뉴욕 메츠",
   NYY: "뉴욕 양키스", PHI: "필라델피아", PIT: "피츠버그", SD: "샌디에이고", SEA: "시애틀", SF: "샌프란시스코", STL: "세인트루이스", TB: "탬파베이", TEX: "텍사스", TOR: "토론토", WSH: "워싱턴" };
-// 표시 다섯 기준(평가 계획 그대로)을 현장 말로 (2026-10-16: ACWR 같은 용어를 화면에서 뺌)
-const FLAG_NAME = { consecutive: "3일 연속 등판", apps_3d: "3일 동안 3번 등판", p7d: "최근 7일 투구가 본인 기준보다 많음", acwr: "최근 1주 투구가 평소의 1.8배 이상", long_short: "30구 이상 던지고 하루 이하 쉬고 등판" };
-const reasons = (st) => [...st.flags.map((f) => ({ t: FLAG_NAME[f], cls: "alarm" })), ...cautionReasons(st).map((t) => ({ t, cls: "warn" }))];
+// 표시 기준을 현장 말로 (2026-10-16: ACWR 같은 용어를 화면에서 뺌). 1주/평소 비율은 '주의' 1.5배로만 (2026-10-21, load.displayFlags)
+const FLAG_NAME = { consecutive: "3일 연속 등판", apps_3d: "3일 동안 3번 등판", p7d: "최근 7일 투구가 본인 평소보다 많음", long_short: "30구 이상 던지고 하루 이하 쉬고 등판" };
+const reasons = (st) => [...displayFlags(st).map((f) => ({ t: FLAG_NAME[f], cls: "alarm" })), ...cautionReasons(st).map((t) => ({ t, cls: "warn" }))];
 const STATUS_CLASS = { "평소": "ok", "주의": "warn", "표시": "alarm" };
 const STATUS_ORDER = { "표시": 0, "주의": 1, "평소": 2 };
 const SIGNAL_NAME = { velo: "구속 하락", change: "폼 변화" };
@@ -73,9 +73,9 @@ export default function Bullpen() {
       <p className="lead">MLB 팀과 날짜를 고르면 그날 경기 뒤 기준으로 불펜 투수마다 등판 부담을 신호등으로 보여 줍니다. 구속 하락 같은 투구 품질 경보는 섞지 않고 따로 표시합니다.</p>
       <details className="more">
         <summary>신호등 기준 보기</summary>
-        <p><b>표시</b>: 3일 연속 등판 · 3일 동안 3번 등판 · 최근 7일 투구가 본인 기준(시즌 초 7일 합의 95번째 백분위)보다 많음 · 최근 1주 투구가 그 앞 3주 주평균의 1.8배 이상 · 30구 이상 던지고 하루 이하 쉬고 등판 중 하나라도 해당.<br />
-          <b>주의</b>: 연투 · 최근 1주가 평소의 1.5배 이상 · 2이닝 이상 던지고 하루 이하 쉬고 등판.<br />
-          표시 기준은 2021~2023 시즌 부상 없는 투수들로 정했습니다. 부상 예측이 아니라 등판 관리용 신호이며, 2024~2025 시즌 검증에서 부상 투수에게 더 자주 켜지지는 않았습니다.</p>
+        <p><b>표시</b>: 3일 연속 등판 · 3일 동안 3번 등판 · 최근 7일 투구가 본인 평소(시즌 초 7일 합의 상위 5%)보다 많음 · 30구 이상 던지고 하루 이하 쉬고 등판 중 하나라도 해당.<br />
+          <b>주의</b>: 연투 · 최근 1주 투구가 평소(그 앞 3주의 주평균)의 1.5배 이상 — 스포츠과학에서 흔히 쓰는 주의 기준 · 2이닝 이상 던지고 하루 이하 쉬고 등판.<br />
+          부상 예측이 아니라 등판 관리용 신호이며, 2024~2025 시즌 검증에서 부상 투수에게 더 자주 켜지지는 않았습니다.</p>
       </details>
       <div className="toolbar">
         <label><span>팀</span>
@@ -118,7 +118,7 @@ export default function Bullpen() {
               <table className="tbl board">
                 <thead>
                   <tr>
-                    <th>투수</th><th>상태</th><th>마지막 등판</th><th className="num">연속 등판</th><th className="num">3일 등판</th><th className="num" title="최근 7일 투구 수 / 본인 기준">7일 투구</th><th>이유</th><th>품질 경보 (14일)</th>
+                    <th>투수</th><th>상태</th><th>마지막 등판</th><th className="num">연속 등판</th><th className="num">3일 등판</th><th className="num" title="최근 7일 투구 수 · 본인 평소(시즌 초 7일 합의 상위 5%)를 넘으면 빨간색">7일 투구</th><th>이유</th><th>품질 경보 (14일)</th>
                     <th className="cal">지난 {WINDOW}일 <small>{days[0].slice(5).replace("-", "/")} → {date.slice(5).replace("-", "/")}</small></th>
                   </tr>
                 </thead>
@@ -130,7 +130,8 @@ export default function Bullpen() {
                       <td>{st.lastDate ? <>{st.daysSince === 0 ? "오늘" : `${st.daysSince}일 전`} <span style={{ color: "var(--muted)" }}>· {st.lastPitches}구</span></> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
                       <td className="num">{st.consecutive ? `${st.consecutive}일` : "—"}</td>
                       <td className="num">{st.apps3d}</td>
-                      <td className="num">{st.p7d}{p.p7d_limit != null && <span style={{ color: "var(--muted)" }}> / {fmt.num(p.p7d_limit, 0)}</span>}</td>
+                      <td className="num" title={p.p7d_limit != null ? `본인 평소 ${fmt.num(p.p7d_limit, 0)}구 (시즌 초 7일 합의 상위 5%)` : "시즌 초 등판이 모자라 본인 평소를 아직 정하지 못함"}
+                        style={st.flags.includes("p7d") ? { color: "var(--alarm)", fontWeight: 700 } : undefined}>{st.p7d}</td>
                       <td>{reasons(st).map((r) => <span key={r.t} className={`light ${r.cls}`} style={{ marginRight: 4 }}>{r.t}</span>)}</td>
                       <td>{alarms.length ? alarms.map((o) => <span key={o.date} className="light alarm" style={{ marginRight: 4 }}>{fmt.date(o.date)} {o.signals.map((s) => SIGNAL_NAME[s]).join("·")}</span>) : <span style={{ color: "var(--muted)" }}>없음</span>}</td>
                       <td className="cal"><Strip p={p} days={days} teamDates={teamDates} /></td>
@@ -144,7 +145,7 @@ export default function Bullpen() {
                 {idle.map((r) => <button key={r.p.id} className="pill" onClick={() => set({ p: r.p.id })}>{r.p.name} <span style={{ color: "var(--muted)" }}>{fmt.date(r.st.lastDate)}</span></button>)}
               </p>
             )}
-            <p className="caption">7일 투구의 '/ 뒤' 숫자는 그 투수의 본인 기준(시즌 초 등판으로 정함, 그 기간에는 표시하지 않음). 줄을 누르면 시즌 전체 그래프가 열립니다. <span className="hover-hint">'지난 14일' 칸과 '7일 투구' 제목에 커서를 올리면 날짜별 투구 수와 설명</span></p>
+            <p className="caption">7일 투구가 빨간색이면 그 투수의 평소(시즌 초 등판으로 정함)보다 많이 던진 것입니다. 줄을 누르면 시즌 전체 그래프가 열립니다. <span className="hover-hint">'지난 14일' 칸과 '7일 투구' 제목에 커서를 올리면 날짜별 투구 수와 설명</span></p>
           </div>
           {picked && <Detail row={picked} rules={index.rules} date={date} />}
           <p className="note">불펜에서 몸만 풀고 등판하지 않은 투구는 기록에 없어 실제 부담은 이보다 큽니다. 다른 팀에서 던진 등판도 계산에 넣습니다(달력에서 점선 칸).</p>
@@ -191,10 +192,10 @@ function Detail({ row, rules, date }) {
         <div className="legend">
           <span><i className="band" style={{ background: "var(--navy-2)" }} />등판 투구 수</span>
           <span><i style={{ background: "var(--warn)" }} />7일 투구 수</span>
-          {p.p7d_limit != null && <span><i className="dash" />본인 기준 {fmt.num(p.p7d_limit, 0)}구</span>}
+          {p.p7d_limit != null && <span><i className="dash" />본인 평소 {fmt.num(p.p7d_limit, 0)}구</span>}
           <span><i className="dot" style={{ background: "var(--alarm)" }} />품질 경보</span>
           <span><i style={{ background: "var(--ink)" }} />IL 등재일</span>
-          <Link to={`/replay?p=${p.id}`} style={{ marginLeft: 8 }}>리플레이에서 품질 채널 보기 →</Link>
+          <Link to={`/replay?p=${p.id}`} style={{ marginLeft: 8 }}>투수 시즌 상세에서 구속·폼 보기 →</Link>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={280}>
@@ -206,14 +207,15 @@ function Detail({ row, rules, date }) {
           <Bar yAxisId="p" dataKey="pitches" name="등판 투구 수" fill="var(--navy-2)" maxBarSize={14} radius={[2, 2, 0, 0]} isAnimationActive={false} />
           <Line yAxisId="p" type="monotone" dataKey="p7d" name="7일 투구 수" stroke="var(--warn)" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
           <Scatter yAxisId="p" dataKey="marker" name="품질 채널 경보" shape={<Mark />} isAnimationActive={false} tooltipType="none" />
-          {p.p7d_limit != null && <ReferenceLine yAxisId="p" y={p.p7d_limit} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`본인 기준 ${fmt.num(p.p7d_limit, 0)}구`)} />}
+          {p.p7d_limit != null && <ReferenceLine yAxisId="p" y={p.p7d_limit} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`본인 평소 ${fmt.num(p.p7d_limit, 0)}구`)} />}
           {ilX && <ReferenceLine yAxisId="p" x={ilX} stroke="var(--ink)" strokeWidth={1.2} label={{ value: `IL 등재일 ${fmt.date(p.il.date)}`, position: "insideTopRight", ...LABEL }} />}
           {dateX && <ReferenceLine yAxisId="p" x={dateX} stroke="var(--velo)" strokeDasharray="3 3" label={{ value: `기준일 ${fmt.date(date)}`, position: "insideTopLeft", ...LABEL, fill: "var(--velo)" }} />}
         </ComposedChart>
       </ResponsiveContainer>
       <p className="caption"><span className="hover-hint">그래프에 커서를 올리면 그날 투구 수·3일 등판·7일 투구와 이유</span></p>
-      <h3>표시·주의나 품질 경보가 있던 등판 <span style={{ color: "var(--muted)", fontWeight: 500 }}>· {flagged.length}건</span></h3>
-      <div className="tbl-wrap">
+      <details className="more" style={{ margin: "4px 0 0" }}>
+      <summary>지난 표시·주의·품질 경보 등판 보기 ({flagged.length}건)</summary>
+      <div className="tbl-wrap" style={{ marginTop: 8 }}>
         <table className="tbl">
           <thead><tr><th>날짜</th><th className="num">투구 수</th><th className="num">3일 등판</th><th className="num">7일 투구</th><th>이유</th><th>품질 경보</th></tr></thead>
           <tbody>
@@ -227,6 +229,7 @@ function Detail({ row, rules, date }) {
           </tbody>
         </table>
       </div>
+      </details>
     </div>
   );
 }

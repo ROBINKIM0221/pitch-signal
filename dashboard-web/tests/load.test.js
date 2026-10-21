@@ -56,7 +56,9 @@ test("status: a multi-inning outing followed by at most one day of rest → 주�
 });
 
 test("status: any flag → 표시; back-to-back today or acwr above 1.5 → 주의; two appearances in three days alone is 평소", () => {
-  assert.equal(loadStatus({ flags: ["acwr"], pitchedToday: true, backToBack: false, apps3d: 1, acwr: 2.1 }), "표시");
+  // 화면에서는 1주/평소 비율을 1.5배 '주의' 하나로만 본다 (2026-10-21) — 평가용 acwr 표시만 켜져 있으면 '주의'
+  assert.equal(loadStatus({ flags: ["acwr"], pitchedToday: true, backToBack: false, apps3d: 1, acwr: 2.1 }), "주의");
+  assert.equal(loadStatus({ flags: ["acwr", "apps_3d"], pitchedToday: true, backToBack: false, apps3d: 3, acwr: 2.1 }), "표시");
   assert.equal(loadStatus({ flags: [], pitchedToday: true, backToBack: true, apps3d: 2, acwr: null }), "주의");
   assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 2, acwr: 1.1 }), "평소");
   assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, acwr: 1.6 }), "주의");
