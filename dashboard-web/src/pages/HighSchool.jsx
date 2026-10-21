@@ -270,7 +270,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             {dataset.regions.map((r) => <option key={r.key} value={r.key}>{r.name} ({r.schools}팀)</option>)}
           </select>
         </label>
-        <PlayerSearch entry={dataset} params={params} setParams={setParams} />
+        <PlayerSearch entry={dataset} region={region} params={params} setParams={setParams} />
         <span className="caption" style={{ margin: 0 }}>{ds.region} 권역 · {totals.schools}개 팀 · 투수 {totals.pitchers}명 · {totals.games}경기</span>
       </div>
       <div className="kpi">
@@ -522,16 +522,17 @@ function HsStats({ st }) {
 // 검색 칸 예시 (2026-10-20 사용자: 2025는 대구고 김민준, 2026은 하현승). 없는 자료는 목록 첫 선수
 const PLAYER_EXAMPLE = { korea_2025: "김민준 · 대구고", korea_2026: "하현승 · 부산고", tournament_2025: "하현승 · 부산고" };
 
-/** 선수 이름 검색 (2026-10-20 사용자: 학교 검색 대신, MLB 리플레이처럼 이름으로 바로) — 전국에서 찾아 그 권역·학교·투수로 이동 */
-function PlayerSearch({ entry, params, setParams }) {
-  const players = entry?.players || [];
+/** 선수 이름 검색 (2026-10-20 사용자: 학교 검색 대신 이름으로 바로) — 고른 권역의 선수만 (2026-10-21 피드백: 강원을 골라도 다른 권역 선수가 떴음) */
+function PlayerSearch({ entry, region, params, setParams }) {
+  const players = (entry?.players || []).filter((x) => !region || x.r === region.key);
   const label = (x) => `${x.n} · ${x.t}`;
   const pick = (v) => {
     const hit = players.find((x) => label(x) === v);
     if (hit) setParams({ d: entry.key, ...(hit.r ? { r: hit.r } : {}), s: hit.s, p: hit.p }, { replace: true });
   };
   if (!players.length) return null;
-  const example = PLAYER_EXAMPLE[entry.key] || `${players[0].n.split(" #")[0]} · ${players[0].t}`;
+  const preset = PLAYER_EXAMPLE[entry.key];
+  const example = preset && players.some((x) => `${x.n.split(" #")[0]} · ${x.t}` === preset) ? preset : `${players[0].n.split(" #")[0]} · ${players[0].t}`;
   return (
     <label><span>선수 검색</span>
       <input key={params.get("p") || ""} className="text" type="search" list={`hs-players-${entry.key}`} placeholder={`이름 (예: ${example})`} onChange={(e) => pick(e.target.value)} style={{ minWidth: 220 }} />
