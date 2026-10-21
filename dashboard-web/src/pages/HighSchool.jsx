@@ -140,7 +140,7 @@ function BallChart({ p }) {
   ));
   return (
     <>
-      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small></div>
+      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · {pts.some((d) => d.flag) ? "주황 점 = 평소보다 볼이 많았던 등판" : "40구 이상 등판 중 평소보다 볼이 많았던 등판 없음"}</small></div>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
