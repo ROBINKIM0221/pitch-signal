@@ -28,6 +28,7 @@ export default function Performance() {
     <div className="page">
       <h1>성능 비교</h1>
       <p className="lead">평가 계획을 고정한 뒤 한 번 계산한 결과입니다. 모든 방법을 같은 투수·같은 기간으로 비교했고, 기준값은 2021~2023 시즌에서만 맞췄습니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       {hasSealed && (
         <div className="toolbar">
           <div className="seg" role="tablist">
@@ -163,7 +164,7 @@ export function ValidationSummary() {
               <Scatter data={data.opcurve.filter((q) => q.method === "B1 구속 1mph" && q.scale === 1)} dataKey="detection" name="구속 1mph 하락 규칙" fill="var(--warn)" shape="diamond" isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">경보를 더 자주 허용할수록 더 많이 잡습니다. 굵은 선이 구속 하락 신호, 회색 선이 기존 방법, 주황 마름모가 '구속 1mph 하락' 규칙입니다. <span className="hover-hint">선에 커서를 올리면 값</span></p>
+          <p className="caption">경보를 더 자주 허용할수록 더 많이 잡습니다. 굵은 선이 구속 하락 신호, 회색 선이 기존 방법, 주황 마름모가 '구속 1mph 하락' 규칙입니다.</p>
         </div>
       </div>
     </div>

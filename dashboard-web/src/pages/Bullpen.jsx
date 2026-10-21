@@ -71,6 +71,7 @@ export default function Bullpen() {
     <div className="page">
       <h1>팀 불펜 현황판</h1>
       <p className="lead">MLB 팀과 날짜를 고르면 그날 경기 뒤 기준으로 불펜 투수마다 등판 부담을 신호등으로 보여 줍니다. 구속 하락 같은 투구 품질 경보는 섞지 않고 따로 표시합니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>표시</b>: 3일 연속 등판 · 3일 동안 3번 등판 · 최근 7일 투구가 본인 평소(시즌 초 7일 합의 상위 5%)보다 많음 · 30구 이상 던지고 하루 이하 쉬고 등판 중 하나라도 해당.<br />
@@ -212,7 +213,6 @@ function Detail({ row, rules, date }) {
           {dateX && <ReferenceLine yAxisId="p" x={dateX} stroke="var(--velo)" strokeDasharray="3 3" label={{ value: `기준일 ${fmt.date(date)}`, position: "insideTopLeft", ...LABEL, fill: "var(--velo)" }} />}
         </ComposedChart>
       </ResponsiveContainer>
-      <p className="caption"><span className="hover-hint">그래프에 커서를 올리면 그날 투구 수·3일 등판·7일 투구와 이유</span></p>
       <details className="more" style={{ margin: "4px 0 0" }}>
       <summary>지난 표시·주의·품질 경보 등판 보기 ({flagged.length}건)</summary>
       <div className="tbl-wrap" style={{ marginTop: 8 }}>

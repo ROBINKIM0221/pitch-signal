@@ -131,6 +131,7 @@ export default function Replay() {
     <div className="page">
       <h1>투수 시즌 상세 · 경보 카드</h1>
       <p className="lead">MLB 2021~2026 시즌(트리플A 일부 포함) 투수-시즌 {index.length.toLocaleString()}개를 등판 단위로 따라가며, 언제 '평소와 달라졌다'는 경보가 울렸는지 봅니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <div className="toolbar search">
         <label className="search-box"><span>투수 검색</span>
           <input type="search" value={query} placeholder="이름 (예: Cease, Eovaldi, Soroka)" onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
@@ -292,7 +293,7 @@ export function Pitcher({ data, shown, alerts, setPicked, compact, features = Ob
         </p>
       ) : rows.some((r) => r.phase === "monitor") ? <p className="caption">여기까지 경보가 없습니다.</p> : null}
       {notes.length > 0 && <p className="notice">{notes.join(" ")}</p>}
-      <h3 className="chart-title">신호 지수 <small>1을 넘으면 경보 · 경보 뒤에는 0에서 다시 시작</small><span className="hover-hint">선에 커서를 올리면 그 등판 숫자와 해석</span></h3>
+      <h3 className="chart-title">신호 지수 <small>1을 넘으면 경보 · 경보 뒤에는 0에서 다시 시작</small></h3>
       <ResponsiveContainer width="100%" height={compact ? 220 : 250}>
         <ComposedChart data={rows} onClick={onClick} margin={{ top: 14, right: 16, left: 0, bottom: compact ? 16 : 4 }}>
           {common(true)}

@@ -140,7 +140,7 @@ function BallChart({ p }) {
   ));
   return (
     <>
-      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small><span className="hover-hint">점에 커서를 올리면 그 경기 상대·볼 비율·볼 수</span></div>
+      <div className="chart-title">등판별 볼 비율 <small>점선 = 시즌 평균 · 주황 점 = 평소보다 볼이 많았던 등판</small></div>
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={pts} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke={GRID} />
@@ -257,6 +257,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
     <div className="page">
       <h1>{dataset.season} 전국 고교 투구수 현황판</h1>
       <p className="lead">{dataset.season}년 전국 고교 공식 경기 {dataset.games}경기의 투구 수로, 투수마다 KBSA 투구수 규정을 지켰는지와 규정이 보지 못하는 누적 부하를 봅니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>규정</b>: 하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 지켰는지.<br />
@@ -326,7 +327,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
               <ReferenceLine x={500} stroke="var(--alarm)" strokeDasharray="4 4" />
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="caption">점선은 시즌 500구. <span className="hover-hint">막대에 커서를 올리면 투구 수</span></p>
+          <p className="caption">점선은 시즌 500구.</p>
         </div>
       </div>
       {p && (
@@ -357,7 +358,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
             <p className="caption" style={{ marginTop: 0 }}>삼진율 {fmt.num(100 * (p.k ?? 0) / p.batters, 1)}% · 4사구율 {fmt.num(100 * (p.bb_hbp ?? 0) / p.batters, 1)}% · 피안타 {p.hits ?? "—"}(홈런 {p.hr ?? 0})</p>
           )}
           <BallChart p={p} />
-          <div className="chart-title">등판별 투구 수 <span className="hover-hint">막대·점에 커서를 올리면 날짜별 투구 수와 7일 합</span><small style={{ display: "block", marginTop: 2 }}>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
+          <div className="chart-title">등판별 투구 수<small style={{ display: "block", marginTop: 2 }}>막대 = 그날 투구 수 · 선 = 그날까지 7일 합 · 점선 = 7일 합 주의 {data.load_lights.sum7.caution}구, 높음 {data.load_lights.sum7.high}구{rule && ` · ${rule.max_pitches}구(해외 규정)를 넘은 날 ${days.filter((d) => d.over).length}일`}</small></div>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={gameDays} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke={GRID} />
@@ -550,6 +551,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
     <div className="page">
       <h1>{ds.short} 투구수 현황판</h1>
       <p className="lead">{ds.name}({ds.dates}, {schools.length}개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <div className="kpi">
         <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반</div></div>
         <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판)</div></div>
@@ -642,7 +644,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
                   <ReferenceLine y={kbsa.daily_max} stroke="var(--alarm)" strokeDasharray="4 4" label={limitLabel(`하루 ${kbsa.daily_max}구`)} />
                 </ComposedChart>
               </ResponsiveContainer>
-              <p className="caption">누적 선은 대회 기간 투구 수의 합. 투구 수가 공개되지 않은 경기(점선 막대) 뒤로는 누적을 표시하지 않습니다. <span className="hover-hint">막대·점에 커서를 올리면 그날 값</span></p>
+              <p className="caption">누적 선은 대회 기간 투구 수의 합. 투구 수가 공개되지 않은 경기(점선 막대) 뒤로는 누적을 표시하지 않습니다.</p>
             </div>
           </div>
           <ViolationsTable p={p} />

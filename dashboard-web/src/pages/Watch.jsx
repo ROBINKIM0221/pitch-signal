@@ -37,6 +37,7 @@ export default function Watch() {
     <div className="page">
       <h1>{data.season} 시즌 경보 현황</h1>
       <p className="lead">구단 분석 파트가 등판 다음 날 아침에 보는 화면입니다. 고른 날짜까지 최근 {data.weeks}주 안에 경보가 울린 MLB 투수와, 그 뒤 팔 부상 IL에 올랐는지를 보여 줍니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <div className="toolbar">
         <label><span>기준일</span>
           <button className="btn" onClick={() => setDate(addDays(date, -7) < data.start ? data.start : addDays(date, -7))} aria-label="1주 전">◀ 1주</button>

@@ -141,6 +141,7 @@ export default function Kbo() {
     <div className="page">
       <h1>KBO 외국인 투수 영입 전 점검</h1>
       <p className="lead">{ks}년 KBO 외국인 투수 {inSeason.length}명 중 MLB·트리플A 공개 추적 기록이 있는 {withData}명의 미국 시절에 같은 엔진을 돌려, 영입 전에 '평소와 달라진 흐름'이 있었는지 봅니다.</p>
+      <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
       <details className="more">
         <summary>자료와 한계 보기</summary>
         <p>MLB 2021~2026, 트리플A 2023~2025(Baseball Savant). 트리플A는 구장 보정 없이 MLB 한계값을 그대로 쓴 참고용입니다.
@@ -155,7 +156,7 @@ export default function Kbo() {
           <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="all">전체</option>{teams.map((t) => <option key={t}>{t}</option>)}</select>
         </label>
         <button className={`btn ${onlyData ? "on" : ""}`} onClick={() => setOnlyData(!onlyData)}>{onlyData ? "미국 기록 있는 투수만" : "전체 명단"}</button>
-        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '시즌 상세 →'를 누르면 그 시즌 등판별 그래프 · <span className="hover-hint">구속 그래프에 커서를 올리면 등판별 구속과 지수</span></span>
+        <span className="caption" style={{ margin: 0 }}>{shown.length}명 · '시즌 상세 →'를 누르면 그 시즌 등판별 그래프</span>
       </div>
       {shown.map((p, i) => (
         <div key={`${p.kbo_season}_${p.team}_${p.name}`}>{/* 같은 시즌 두 팀에서 뛴 투수(2024 시라카와)가 있어 팀까지 넣어야 열쇠가 겹치지 않음 */}
