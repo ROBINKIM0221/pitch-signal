@@ -378,7 +378,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
         </div>
       )}
       {/* 투수 운용 계획판은 맨 아래 (2026-10-21 사용자) */}
-      {s && <Planner school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
+      {s && <Planner key={s.code} school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
       <p className="note">
         출처: {ds.source}. 공식 경기 투구 수만 반영되며 연습·불펜 투구는 빠집니다. 상세 기록이 공개되지 않은 {ds.no_detail_games.length}경기는 선발 투수만 '투구 수 미공개'로 들어갑니다.
         고교에는 공식 부상 기록이 없어, 이 화면은 부상 탐지가 아니라 규정이 보지 못하는 부하를 보여 주는 현황판입니다.
@@ -402,7 +402,19 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
     for (const g of mine) if (!out.has(g.competition) || g.date < out.get(g.competition)) out.set(g.competition, g.date);
     return [...out.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [mine]);
-  const [date, setDate] = useState(school.end);
+  // 처음 여는 날짜: 이 학교 경기일 중 '불가' 투수가 가장 많고, 같으면 직전 7일 팀 투구가 가장 많은 날
+  // (2026-10-21 사용자: 시즌 마지막 날은 거의 모두 가용이라 볼 게 없음)
+  const busiest = useMemo(() => {
+    let best = school.end, top = -1;
+    for (const d of [...new Set(mine.map((g) => g.date))]) {
+      const before = school.pitchers.map((x) => x.games.filter((g) => g.date < d).map((g) => ({ date: g.date, pitches: g.pitches })));
+      const blocked = before.filter((o) => availability(o, d, kbsa.rest_table).status === "불가").length;
+      const week = before.reduce((s, o) => s + (sumWindow(o, addDays(d, -6), addDays(d, -1)) ?? 0), 0);
+      if (blocked * 10000 + week > top) { best = d; top = blocked * 10000 + week; }
+    }
+    return best;
+  }, [mine, school, kbsa]);
+  const [date, setDate] = useState(busiest);
   const [assumeText, setAssumeText] = useState("");          // 글자로 둔다: 숫자로 두면 0 뒤에 쳐도 '010'이 화면에 남음 (React number 입력칸)
   const assume = Math.max(0, Number(assumeText) || 0);
   const rows = school.pitchers.map((x) => {
@@ -441,18 +453,18 @@ function Planner({ school, games, kbsa, lights, onPick, picked }) {
       </div>
       <div className="tbl-wrap">
         <table className="tbl">
-          <thead><tr><th>투수</th><th>이날 등판</th><th>마지막 등판</th><th>의무 휴식</th><th>다음 등판 가능일</th><th className="num">직전 7일 합</th><th>이날 실제</th>{assume > 0 && <th>오늘 {assume}구 던지면</th>}</tr></thead>
+          <thead><tr><th>투수</th><th>이날 등판</th>{assume > 0 && <th className="hypo">오늘 {assume}구 던지면 다음 등판</th>}<th>마지막 등판</th><th>의무 휴식</th><th>다음 등판 가능일</th><th className="num">직전 7일 합</th><th>이날 실제</th></tr></thead>
           <tbody>
             {rows.map(({ x, a, next, sum7, today, hypo }) => (
               <tr key={x.code} className={x.code === picked ? "hl" : ""} onClick={() => onPick(x.code)} style={{ cursor: "pointer" }}>
                 <td><b>{x.label}</b></td>
                 <td><span className={`light ${cls[a.status]}`} title={a.reasons.join(" / ") || undefined}>{a.status}{a.status === "불가" && a.until && ` · ${fmt.date(a.until)}부터`}</span></td>
+                {assume > 0 && <td className="hypo">{hypo ? <><b>{fmt.date(hypo.date)}</b>부터 (휴식 {hypo.rest}일)</> : <span style={{ color: "var(--muted)" }}>오늘 등판 불가</span>}</td>}
                 <td>{next ? <>{fmt.date(next.last.date)} <span style={{ color: "var(--muted)" }}>· {next.last.pitches == null ? "투구 수 미공개" : `${next.last.pitches}구`}</span></> : <span style={{ color: "var(--muted)" }}>기준일 전 등판 없음</span>}</td>
                 <td>{next ? (next.rest == null ? "—" : next.rest === 0 ? "없음" : `${next.rest}일`) : "—"}</td>
                 <td>{next ? (next.date ? fmt.date(next.date) : "판정 불가") : "—"}</td>
                 <td className="num">{sum7 == null ? "—" : sum7}{sum7 != null && sum7 >= lights.sum7.caution && <span className={`light ${sum7 >= lights.sum7.high ? "alarm" : "warn"}`} style={{ marginLeft: 6 }}>{sum7 >= lights.sum7.high ? "높음" : "주의"}</span>}</td>
                 <td>{today ? <span className={`light ${a.status === "불가" ? "alarm" : "velo"}`}>{today.pitches == null ? "등판 (투구 수 미공개)" : `${today.pitches}구 등판`}{a.status === "불가" && " · 규정 위반?"}</span> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
-                {assume > 0 && <td>{hypo ? `${fmt.date(hypo.date)}부터 (휴식 ${hypo.rest}일)` : ""}</td>}
               </tr>
             ))}
           </tbody>

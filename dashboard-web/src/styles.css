@@ -366,3 +366,7 @@ p.caption > .hover-hint:first-child { margin-left: 0; }
 
 /* 화면마다 한 번만 두는 커서 안내 (2026-10-21) */
 .hint-line { margin: -6px 0 14px; font-size: 12.5px; color: var(--muted); }
+
+/* 운용 계획판 '오늘 N구 던지면' 칸 강조 (2026-10-21) */
+.tbl th.hypo { background: var(--navy-2); }
+.tbl td.hypo { background: var(--navy-bg); white-space: nowrap; }
