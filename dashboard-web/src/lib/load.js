@@ -66,18 +66,22 @@ export function dayState(outings, date, rules, p7dLimit, p7dFrom = null) {
   };
 }
 
-/** 화면의 '표시' 이유: 평가 계획의 다섯 기준 중 ACWR(1.8배)을 뺀 넷 (2026-10-21 사용자: 1주/평소 비율은 스포츠과학의
- *  흔한 주의 기준 1.5배 하나만 '주의'로 보여 줌 — 평가(H4)는 계획대로 1.8배로 계산했고 그대로다. dayState.flags는 파이프라인과 같게 둔다). */
+/** 화면의 '표시' 이유: 평가 계획의 다섯 기준 중 ACWR(1.8배)을 뺀 넷 (2026-10-21 사용자: 1주/평소 비율은 '표시'에서 뺌,
+ *  2026-10-22부터 '주의'도 비율 대신 7일 절대량 — 평가(H4)는 계획대로 1.8배로 계산했고 그대로다. dayState.flags는 파이프라인과 같게 둔다). */
 export function displayFlags(st) {
   return st.flags.filter((f) => f !== "acwr");
 }
 
-/** '주의' 이유 (평가 계획에 없는 현황판용 중간 단계): 연투, 최근 1주가 평소 주당의 1.5배 초과(스포츠과학에서 흔히 쓰는 주의 기준),
+/** '주의' 7일 투구 기준: MLB 불펜 2021~2026 등판일 7일 합의 상위 10%(73구)를 둥글린 서술적 눈금 — 부상 근거 아님(H4 기각).
+ *  2026-10-22 사용자: 평소 대비 1.5배는 평소 양이 적으면 튀어서(외부 피드백) 고교처럼 절대량으로. 현황판당 하루 0.5~1명꼴. */
+export const CAUTION_P7D = 75;
+
+/** '주의' 이유 (평가 계획에 없는 현황판용 중간 단계): 연투, 최근 7일 75구 이상(MLB 불펜 상위 10%),
  *  2이닝 이상(아웃 6개 이상) 던지고 하루 이하 쉬고 등판 (2026-10-16 추가). 3일 2등판은 불펜의 흔한 패턴이라 넣지 않는다. */
 export function cautionReasons(st) {
   const out = [];
   if (st.pitchedToday && st.backToBack) out.push("연투");
-  if (st.acwr != null && st.acwr > 1.5) out.push("최근 1주 투구가 평소의 1.5배 이상");
+  if (st.p7d >= CAUTION_P7D) out.push(`최근 7일 ${st.p7d}구 (${CAUTION_P7D}구 이상)`);
   if (st.pitchedToday && st.prevOuts != null && st.prevOuts >= 6 && st.restDays != null && st.restDays <= 1) out.push("2이닝 이상 던지고 하루 이하 쉬고 등판");
   return out;
 }

@@ -55,14 +55,14 @@ test("status: a multi-inning outing followed by at most one day of rest → 주�
   assert.equal(loadStatus(dayState([{ date: "2024-05-01", pitches: 28, outs: 5 }, { date: "2024-05-03", pitches: 12, outs: 3 }], "2024-05-03", rules, null)), "평소");
 });
 
-test("status: any flag → 표시; back-to-back today or acwr above 1.5 → 주의; two appearances in three days alone is 평소", () => {
-  // 화면에서는 1주/평소 비율을 1.5배 '주의' 하나로만 본다 (2026-10-21) — 평가용 acwr 표시만 켜져 있으면 '주의'
-  assert.equal(loadStatus({ flags: ["acwr"], pitchedToday: true, backToBack: false, apps3d: 1, acwr: 2.1 }), "주의");
-  assert.equal(loadStatus({ flags: ["acwr", "apps_3d"], pitchedToday: true, backToBack: false, apps3d: 3, acwr: 2.1 }), "표시");
-  assert.equal(loadStatus({ flags: [], pitchedToday: true, backToBack: true, apps3d: 2, acwr: null }), "주의");
-  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 2, acwr: 1.1 }), "평소");
-  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, acwr: 1.6 }), "주의");
-  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, acwr: 1.2 }), "평소");
+test("status: any shown flag → 표시; back-to-back today or 7-day pitches ≥ 75 → 주의; ratio alone and two appearances in three days are 평소", () => {
+  // 화면에서는 1주/평소 비율을 쓰지 않는다 (2026-10-22) — 평가용 acwr 표시만 켜져 있고 7일 합이 적으면 '평소'
+  assert.equal(loadStatus({ flags: ["acwr"], pitchedToday: true, backToBack: false, apps3d: 1, p7d: 20, acwr: 2.1 }), "평소");
+  assert.equal(loadStatus({ flags: ["acwr", "apps_3d"], pitchedToday: true, backToBack: false, apps3d: 3, p7d: 50, acwr: 2.1 }), "표시");
+  assert.equal(loadStatus({ flags: [], pitchedToday: true, backToBack: true, apps3d: 2, p7d: 30, acwr: null }), "주의");
+  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 2, p7d: 40, acwr: 1.1 }), "평소");
+  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, p7d: 75, acwr: 1.0 }), "주의");
+  assert.equal(loadStatus({ flags: [], pitchedToday: false, backToBack: false, apps3d: 1, p7d: 74, acwr: 1.6 }), "평소");
 });
 
 // 고교 현황판(시즌 모드)의 날짜별 7일 합·ACWR 재계산: 파이프라인(src/common/highschool.daily_table → kbsa_rules.acwr)과 같아야 한다.

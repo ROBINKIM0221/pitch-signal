@@ -3,12 +3,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, TICK, limitLabel } from "../lib/chart.jsx";
-import { addDays, cautionReasons, dateRange, dayState, displayFlags, loadStatus } from "../lib/load.js";
+import { addDays, CAUTION_P7D, cautionReasons, dateRange, dayState, displayFlags, loadStatus } from "../lib/load.js";
 
 const TEAM_KO = { ATH: "애슬레틱스", OAK: "오클랜드", ATL: "애틀랜타", AZ: "애리조나", BAL: "볼티모어", BOS: "보스턴", CHC: "시카고 컵스", CIN: "신시내티", CLE: "클리블랜드", COL: "콜로라도",
   CWS: "시카고 화이트삭스", DET: "디트로이트", HOU: "휴스턴", KC: "캔자스시티", LAA: "LA 에인절스", LAD: "LA 다저스", MIA: "마이애미", MIL: "밀워키", MIN: "미네소타", NYM: "뉴욕 메츠",
   NYY: "뉴욕 양키스", PHI: "필라델피아", PIT: "피츠버그", SD: "샌디에이고", SEA: "시애틀", SF: "샌프란시스코", STL: "세인트루이스", TB: "탬파베이", TEX: "텍사스", TOR: "토론토", WSH: "워싱턴" };
-// 표시 기준을 현장 말로 (2026-10-16: ACWR 같은 용어를 화면에서 뺌). 1주/평소 비율은 '주의' 1.5배로만 (2026-10-21, load.displayFlags)
+// 표시 기준을 현장 말로 (2026-10-16: ACWR 같은 용어를 화면에서 뺌). 1주/평소 비율은 화면에서 쓰지 않음 — '주의'는 7일 75구 (2026-10-22, load.CAUTION_P7D)
 const FLAG_NAME = { consecutive: "3일 연속 등판", apps_3d: "3일 동안 3번 등판", p7d: "최근 7일 투구가 본인 평소보다 많음", long_short: "30구 이상 던지고 하루 이하 쉬고 등판" };
 const reasons = (st) => [...displayFlags(st).map((f) => ({ t: FLAG_NAME[f], cls: "alarm" })), ...cautionReasons(st).map((t) => ({ t, cls: "warn" }))];
 const STATUS_CLASS = { "평소": "ok", "주의": "warn", "표시": "alarm" };
@@ -75,7 +75,7 @@ export default function Bullpen() {
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>표시</b>: 3일 연속 등판 · 3일 동안 3번 등판 · 최근 7일 투구가 본인 평소(시즌 초 7일 합의 상위 5%)보다 많음 · 30구 이상 던지고 하루 이하 쉬고 등판 중 하나라도 해당.<br />
-          <b>주의</b>: 연투 · 최근 1주 투구가 평소(그 앞 3주의 주평균)의 1.5배 이상 — 스포츠과학에서 흔히 쓰는 주의 기준 · 2이닝 이상 던지고 하루 이하 쉬고 등판.<br />
+          <b>주의</b>: 연투 · 최근 7일 투구 {CAUTION_P7D}구 이상(MLB 불펜 투수가 등판한 날 기준 상위 10%) · 2이닝 이상 던지고 하루 이하 쉬고 등판.<br />
           부상 예측이 아니라 등판 관리용 신호이며, 2024~2025 시즌 검증에서 부상 투수에게 더 자주 켜지지는 않았습니다.</p>
       </details>
       <div className="toolbar">
@@ -238,7 +238,7 @@ function LoadTip({ d }) {
   return (
     <>
       {d.placeholder ? <div><b>{d.date}</b> · IL 등재일</div> : <div><b>{d.date}</b> · 투구 {d.pitches}구{d.here === false ? " · 다른 팀 소속" : ""}</div>}
-      {!d.placeholder && <div>3일 등판 {d.apps3d}회 · 7일 투구 {d.p7d}구{d.acwr != null && ` · 최근 1주는 평소의 ${fmt.num(d.acwr, 1)}배`}</div>}
+      {!d.placeholder && <div>3일 등판 {d.apps3d}회 · 7일 투구 {d.p7d}구</div>}
       {d.why?.length > 0 && <div>{d.why.map((r) => r.t).join(", ")}</div>}
       {d.signals?.length > 0 && <div className="alarm">품질 채널 경보: {d.signals.map((s) => SIGNAL_NAME[s]).join(", ")}</div>}
     </>
