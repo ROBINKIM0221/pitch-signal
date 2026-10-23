@@ -178,6 +178,60 @@ def usual_band(path: Path) -> None:
     fig.savefig(path, bbox_inches="tight", transparent=True)
     plt.close(fig)
 
+def false_alarm_case(path: Path, pid: str = "675848_2026") -> dict:
+    """7페이지 실제 예 (2026-10-23 사용자 "뜬구름 잡는 느낌", "경고선은 어디서 쓰는 거고 시즌 초는 몇 경기?"):
+    부상 없던 투수 한 시즌에서 '1마일(1.6km/h) 하락' 경고선과 피치시그널의 평소 범위를 나란히.
+    1마일 기준은 FanGraphs(Petti, 2013: 1마일 이상 떨어진 투수 팔 부상률 11% vs 4%)에서 널리 쓰는 구속 하락 경고선이고,
+    비교 실험(B1)은 이를 '시즌 시작 구간 평균'(선발 첫 8등판, 불펜 첫 15등판·직구 누적 120구 — 피치시그널의 시작 구간과 같음)에 적용했다.
+    회색 = 시작 구간 등판, 회색 실선 = 그 평균, 빨간 점선 = 평균 − 1.6km/h, 빨간 × = 경고선 아래 등판, 파란 띠 = 피치시그널의 평소 범위(예상 ± 2σ)."""
+    import json
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
+    import pandas as pd
+    d = json.loads((ROOT / "dashboard-web/public/data/replay" / f"{pid}.json").read_text(encoding="utf-8"))
+    K = 1.609
+    b = [o for o in d["outings"] if o["phase"] == "baseline" and o.get("velo") is not None]
+    mon = [o for o in d["outings"] if o["phase"] == "monitor" and o.get("velo") is not None]
+    avg = sum(o["velo"] for o in b) / len(b) * K
+    line = avg - 1.0 * K
+    bx, bv = pd.to_datetime([o["date"] for o in b]), [o["velo"] * K for o in b]
+    x, v = pd.to_datetime([o["date"] for o in mon]), [o["velo"] * K for o in mon]
+    lo = [(o["exp"]["velo"] - 2 * o["sd"]["velo"]) * K for o in mon]; hi = [(o["exp"]["velo"] + 2 * o["sd"]["velo"]) * K for o in mon]
+    fired = [vi < line for vi in v]; ours = sum(bool(o["velo_alarm"]) for o in mon)
+    plt.rcParams.update({"font.family": "Malgun Gothic", "axes.unicode_minus": False})
+    fig, ax = plt.subplots(figsize=(8.4, 4.6), dpi=200)
+    fig.patch.set_facecolor("white"); ax.set_facecolor("white")              # 흰 바탕 — 찢어진 종이 테두리(RGB)로 감쌀 때 반투명 띠가 진하게 칠해지지 않게
+    RED, BLUE_T, GRAY = "#C8352E", "#2F7FC1", "#8A8A8A"
+    # 시작 구간
+    ax.axvspan(bx[0] - pd.Timedelta(days=2), bx[-1] + pd.Timedelta(days=2), color="#E9E8E3", lw=0, zorder=0)
+    ax.text(bx[0] + (bx[-1] - bx[0]) / 2, 162.3, f"시즌 초 {len(b)}등판\n(기준 구간)", ha="center", va="top", fontsize=10, color="#555", linespacing=1.3)
+    ax.plot(bx, bv, color=GRAY, lw=1.0, marker="o", ms=4.5, zorder=3)
+    ax.hlines(avg, bx[0], x[-1], color=GRAY, lw=1.3, zorder=2)
+    ax.text(x[-1] + pd.Timedelta(days=4), avg, f"시즌 초 평균\n{avg:.1f}km/h", ha="left", va="center", fontsize=9.5, color="#555", linespacing=1.2)
+    # 이후 등판
+    ax.fill_between(x, lo, hi, color="#4BA3E6", alpha=0.22, lw=0, step="mid", zorder=1)
+    ax.hlines(line, bx[0], x[-1], color=RED, linestyles=(0, (5, 4)), lw=1.6, zorder=2)
+    ax.text(x[-1] + pd.Timedelta(days=4), line - 0.1, f"경고선\n{line:.1f}km/h", ha="left", va="center", fontsize=9.5, color=RED, linespacing=1.2)
+    ax.plot(x, v, color="#111", lw=1.0, marker="o", ms=4.5, zorder=3)
+    ax.scatter([xi for xi, f in zip(x, fired) if f], [vi for vi, f in zip(v, fired) if f], marker="x", s=70, color=RED, lw=2.2, zorder=4)
+    ax.set_ylim(min(min(lo), min(v)) - 0.6, 162.5)
+    ax.set_ylabel("등판 평균 직구 구속 (km/h)", fontsize=10)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.tick_params(labelsize=9); ax.grid(axis="y", alpha=0.3)
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.set_xlim(bx[0] - pd.Timedelta(days=6), x[-1] + pd.Timedelta(days=30))   # 오른쪽 여백에 선 이름
+    last = mdates.date2num(x[-1])
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda val, _: f"{mdates.num2date(val).month}월" if val <= last + 5 else ""))
+    ax.text(0.0, 1.10, f"×  1마일(1.6km/h) 하락 경고선에 걸린 등판: {sum(fired)}번", color=RED, fontsize=10.5, fontweight="bold", transform=ax.transAxes, va="bottom")
+    ax.text(0.0, 1.03, f"■  피치시그널의 평소 범위 (등판마다 다시 배움) — 경보 {ours}번", color=BLUE_T, fontsize=10.5, fontweight="bold", transform=ax.transAxes, va="bottom")
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    return {"name": d["name"], "season": d["season"], "role": d["role"], "baseline": len(b), "baseline_fb": sum(o["n_fb"] for o in b),
+            "baseline_dates": (b[0]["date"], b[-1]["date"]), "avg_kmh": round(avg, 1), "outings": len(mon), "rule": sum(fired), "ours": ours}
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
@@ -191,6 +245,7 @@ def main() -> None:
     brush_x(OUT / "brush_x_ink.png", color=(30, 40, 70), seed=9); brush_o(OUT / "brush_o_ink.png", color=(30, 40, 70), seed=10)
     stripes(OUT / "stripes.png")
     usual_band(OUT / "usual_band.png")
+    print(false_alarm_case(OUT / "false_alarm_case.png"))
     print("저장:", OUT)
 
 
