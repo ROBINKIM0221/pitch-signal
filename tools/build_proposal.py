@@ -29,8 +29,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "proposal" / "proposal.md"
 TEMPLATE = ROOT / "docs" / "proposal" / "template.docx"
 COVER = {   # 템플릿 표지에서 바꾸는 줄 (나머지 — 행사명·제안자·연락처·링크·날짜 — 은 템플릿 그대로)
-    "subtitle": "고교부터 프로까지, 투수의 혹사와 부상 위험 신호를 알려 주는 모니터링 서비스",
-    "field": "공모 분야: 경기력 향상 기술(부상 예방) · 대회 운영·관리 기술(경기기록 판독 자동화, 선수 관리)",
+    "subtitle": "고교부터 프로까지, 투수의 누적 부하와 부상 위험 신호를 알려 주는 웹 서비스",
+    "field": "공모 분야: 대회 운영·관리 기술(경기기록 판독 자동화, 선수 관리) · 경기력 향상 기술(부상 예방)",
 }
 TEXT_W = 9072                                   # 본문 폭(dxa) = A4 21cm − 좌우 여백 2.5cm×2
 BULLET_NUM = "3"                                # 템플릿 numbering.xml: numId 3 = 글머리(•), abstractNum 3 = 번호(1.)
