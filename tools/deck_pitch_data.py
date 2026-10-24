@@ -91,9 +91,8 @@ def raw_zoom(path, n: int = 16) -> None:
     """원자료 핵심 열 9개를 영어 열 이름·원래 단위(mph, ft) 그대로 보이는 표, 공 1~n (2026-10-24 사용자: 가공 없이 raw 그대로, 엑셀 캡처 대신 이 표를 크게)."""
     s = load().head(n)
     plt.rcParams.update({"font.family": "Consolas", "axes.unicode_minus": False})
-    fig = plt.figure(figsize=(10.2, 0.95 + 0.29 * n), dpi=200); fig.patch.set_facecolor("white")
-    top = 1 - 0.55 / fig.get_figheight()
-    ax = fig.add_axes([0.02, 0.03, 0.96, top - 0.08]); ax.axis("off")
+    fig = plt.figure(figsize=(10.2, 0.5 + 0.29 * n), dpi=200); fig.patch.set_facecolor("white")      # 설명 글은 그림 밖(슬라이드 글상자)에 — 2026-10-25 사용자
+    ax = fig.add_axes([0.02, 0.03, 0.96, 0.93]); ax.axis("off")
     xs = [0.0, 0.115, 0.265, 0.345, 0.45, 0.555, 0.66, 0.79, 0.875]
     for x, h in zip(xs, RAW_COLS):
         ax.text(x, 1.0, h, fontsize=9.2, fontweight="bold", color="#111", va="top", transform=ax.transAxes)
@@ -106,7 +105,6 @@ def raw_zoom(path, n: int = 16) -> None:
         for x, c in zip(xs, RAW_COLS):
             v = r[c]
             ax.text(x, y, f"{v:g}" if isinstance(v, float) else str(v)[:10 if c == "game_date" else None], fontsize=9.8, color="#111", va="center", transform=ax.transAxes)
-    fig.text(0.02, top + 0.02, f"원자료 그대로 — Baseball Savant 열 이름과 단위(mph, ft), 이 등판 92구 중 처음 {n}구 (열 119개 중 9개)", fontsize=10, color="#555", fontfamily="Malgun Gothic")
     fig.savefig(path, facecolor="white")
     plt.close(fig)
 
@@ -119,8 +117,7 @@ def scatter(path) -> None:
     fig.patch.set_facecolor("white")
     for pt, g in s.groupby("pitch_type"):
         bx.scatter(g.release_pos_x * 0.3048, g.release_pos_z * 0.3048, s=26, color=COLOR.get(pt, "#888"), alpha=0.85, label=f"{TYPE.get(pt, pt)} {len(g)}", edgecolor="white", lw=0.4)
-    bx.set_title(f"그날 {len(s)}구의 릴리스 위치 (포수 쪽에서 봄)", fontsize=11, loc="left", fontweight="bold")
-    bx.set_xlabel("옆 위치 (m)", fontsize=10); bx.set_ylabel("높이 (m)", fontsize=10)
+    bx.set_xlabel("옆 위치 (m)", fontsize=10); bx.set_ylabel("높이 (m)", fontsize=10)       # 제목은 슬라이드 글상자에
     bx.set_xlim(-1.25, -0.45); bx.set_ylim(1.45, 2.05)
     bx.tick_params(labelsize=9)
     for sp in ("top", "right"):
