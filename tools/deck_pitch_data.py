@@ -87,24 +87,26 @@ def raw_csv(path) -> int:
     return len(s)
 
 
-def raw_zoom(path) -> None:
-    """B용: 원자료 핵심 열 9개를 영어 열 이름·원래 단위(mph, ft) 그대로 확대한 표, 공 1~10 (2026-10-24 사용자: 가공 없이 raw 그대로)."""
-    s = load().head(10)
+def raw_zoom(path, n: int = 16) -> None:
+    """원자료 핵심 열 9개를 영어 열 이름·원래 단위(mph, ft) 그대로 보이는 표, 공 1~n (2026-10-24 사용자: 가공 없이 raw 그대로, 엑셀 캡처 대신 이 표를 크게)."""
+    s = load().head(n)
     plt.rcParams.update({"font.family": "Consolas", "axes.unicode_minus": False})
-    fig = plt.figure(figsize=(10.2, 3.4), dpi=200); fig.patch.set_facecolor("white")
-    ax = fig.add_axes([0.02, 0.03, 0.96, 0.82]); ax.axis("off")
+    fig = plt.figure(figsize=(10.2, 0.95 + 0.29 * n), dpi=200); fig.patch.set_facecolor("white")
+    top = 1 - 0.55 / fig.get_figheight()
+    ax = fig.add_axes([0.02, 0.03, 0.96, top - 0.08]); ax.axis("off")
     xs = [0.0, 0.115, 0.265, 0.345, 0.45, 0.555, 0.66, 0.79, 0.875]
     for x, h in zip(xs, RAW_COLS):
-        ax.text(x, 0.98, h, fontsize=9.2, fontweight="bold", color="#111", va="top", transform=ax.transAxes)
-    ax.plot([-0.01, 1.03], [0.88, 0.88], color="#111", lw=1.2, transform=ax.transAxes, clip_on=False)
+        ax.text(x, 1.0, h, fontsize=9.2, fontweight="bold", color="#111", va="top", transform=ax.transAxes)
+    step = 0.9 / n
+    ax.plot([-0.01, 1.03], [0.92, 0.92], color="#111", lw=1.2, transform=ax.transAxes, clip_on=False)
     for k, (_, r) in enumerate(s.iterrows()):
-        y = 0.82 - k * 0.082
+        y = 0.92 - step * (k + 0.5)
         if k % 2 == 0:
-            ax.add_patch(plt.Rectangle((-0.01, y - 0.048), 1.04, 0.082, color="#f2f4f7", transform=ax.transAxes, zorder=0, lw=0))
+            ax.add_patch(plt.Rectangle((-0.01, y - step / 2), 1.04, step, color="#f2f4f7", transform=ax.transAxes, zorder=0, lw=0))
         for x, c in zip(xs, RAW_COLS):
             v = r[c]
             ax.text(x, y, f"{v:g}" if isinstance(v, float) else str(v)[:10 if c == "game_date" else None], fontsize=9.8, color="#111", va="center", transform=ax.transAxes)
-    fig.text(0.02, 0.93, "원자료 핵심 열 확대 — 열 이름과 단위(mph, ft) 그대로", fontsize=10, color="#555", fontfamily="Malgun Gothic")
+    fig.text(0.02, top + 0.02, f"원자료 그대로 — Baseball Savant 열 이름과 단위(mph, ft), 이 등판 92구 중 처음 {n}구 (열 119개 중 9개)", fontsize=10, color="#555", fontfamily="Malgun Gothic")
     fig.savefig(path, facecolor="white")
     plt.close(fig)
 
