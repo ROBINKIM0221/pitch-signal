@@ -214,7 +214,7 @@ def false_alarm_case(path: Path, pid: str = "675848_2026") -> dict:
     # 이후 등판
     ax.fill_between(x, lo, hi, color="#4BA3E6", alpha=0.22, lw=0, step="mid", zorder=1)
     ax.hlines(line, bx[0], x[-1], color=RED, linestyles=(0, (5, 4)), lw=1.6, zorder=2)
-    ax.text(x[-1] + pd.Timedelta(days=4), line - 0.1, f"경고선\n{line:.1f}km/h", ha="left", va="center", fontsize=9.5, color=RED, linespacing=1.2)
+    ax.text(x[-1] + pd.Timedelta(days=4), line - 0.1, f"1마일 규칙\n{line:.1f}km/h", ha="left", va="center", fontsize=9.5, color=RED, linespacing=1.2)
     ax.plot(x, v, color="#111", lw=1.0, marker="o", ms=4.5, zorder=3)
     ax.scatter([xi for xi, f in zip(x, fired) if f], [vi for vi, f in zip(v, fired) if f], marker="x", s=70, color=RED, lw=2.2, zorder=4)
     ax.set_ylim(min(min(lo), min(v)) - 0.6, 162.5)
@@ -226,12 +226,63 @@ def false_alarm_case(path: Path, pid: str = "675848_2026") -> dict:
     ax.set_xlim(bx[0] - pd.Timedelta(days=6), x[-1] + pd.Timedelta(days=30))   # 오른쪽 여백에 선 이름
     last = mdates.date2num(x[-1])
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda val, _: f"{mdates.num2date(val).month}월" if val <= last + 5 else ""))
-    ax.text(0.0, 1.10, f"×  1마일(1.6km/h) 하락 경고선에 걸린 등판: {sum(fired)}번", color=RED, fontsize=10.5, fontweight="bold", transform=ax.transAxes, va="bottom")
+    ax.text(0.0, 1.10, f"×  1마일 규칙(시즌 초 평균 - 1.6km/h) 아래로 떨어진 등판: {sum(fired)}번", color=RED, fontsize=10.5, fontweight="bold", transform=ax.transAxes, va="bottom")   # 2026-10-24 이름 '1마일 규칙'으로 통일
     ax.text(0.0, 1.03, f"■  피치시그널의 평소 범위 (등판마다 다시 배움) — 경보 {ours}번", color=BLUE_T, fontsize=10.5, fontweight="bold", transform=ax.transAxes, va="bottom")
     fig.savefig(path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return {"name": d["name"], "season": d["season"], "role": d["role"], "baseline": len(b), "baseline_fb": sum(o["n_fb"] for o in b),
             "baseline_dates": (b[0]["date"], b[-1]["date"]), "avg_kmh": round(avg, 1), "outings": len(mon), "rule": sum(fired), "ours": ours}
+
+def people_row(path: Path, k: int, n: int = 10, color=BLUE) -> None:
+    """2페이지 '10명 중 k명' 그림 (2026-10-24 사용자: 상위 5%·20% 대신 사람 수로): 사람 n명 중 앞 k명만 색칠, 나머지 회색. 투명 바탕."""
+    s, gap = 96, 14
+    im = Image.new("RGBA", (n * s + (n - 1) * gap, 130), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for i in range(n):
+        c = color + (255,) if i < k else (196, 196, 196, 255)
+        x = i * (s + gap)
+        d.ellipse((x + 28, 2, x + 68, 42), fill=c)
+        d.rounded_rectangle((x + 8, 50, x + 88, 128), radius=26, fill=c)
+    im.save(path)
+
+
+def opcurve(path: Path) -> None:
+    """9페이지 그래프 (2026-10-24): 오경보를 얼마나 허용하느냐에 따른 '부상 투수 중 미리 경보가 울린 비율'. 검증셋 운영 곡선(reports/tables/val_opcurve.csv)의
+    구속 하락 신호만 선으로, 1마일 규칙(B1, 고정 임계라 한 점)은 ×로. 오경보 허용 횟수를 올리면 더 잡고, 그 선택은 팀이 한다는 뜻."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    d = pd.read_csv(ROOT / "reports" / "tables" / "val_opcurve.csv")
+    ours = d[d.method == "구속 하락 신호"].sort_values("false_alarms_per100")
+    b1 = d[(d.method == "B1 구속 1mph") & (d.scale == 1.0)].iloc[0]
+    plt.rcParams.update({"font.family": "Malgun Gothic", "axes.unicode_minus": False})
+    fig, ax = plt.subplots(figsize=(8.0, 4.7), dpi=200)
+    fig.patch.set_facecolor("white"); ax.set_facecolor("white")
+    BLUE_T, RED = "#2F7FC1", "#C8352E"
+    ax.plot(ours.false_alarms_per100, ours.detection, color=BLUE_T, lw=2.4, marker="o", ms=5.5, zorder=3)
+    base = ours[ours.scale == 1.0].iloc[0]
+    ax.plot(base.false_alarms_per100, base.detection, marker="o", ms=13, mfc="white", mec=BLUE_T, mew=2.4, zorder=4)
+    ax.annotate(f"기본 설정\n{base.false_alarms_per100:.2f}번 · {base.detection:.0f}%", (base.false_alarms_per100, base.detection), xytext=(0.95, 17.5),
+                fontsize=10, color=BLUE_T, fontweight="bold", linespacing=1.3)
+    for sc, dx, dy in ((0.7, 0.2, -4.5), (0.5, -0.9, 3.5)):
+        r = ours[ours.scale == sc].iloc[0]
+        ax.text(r.false_alarms_per100 + dx, r.detection + dy, f"{r.false_alarms_per100:.1f}번 · {r.detection:.0f}%", fontsize=9.5, color=BLUE_T)
+    ax.scatter([b1.false_alarms_per100], [b1.detection], marker="x", s=130, color=RED, lw=2.6, zorder=4)
+    ax.annotate(f"1마일 규칙 (한 점뿐)\n{b1.false_alarms_per100:.1f}번 · {b1.detection:.0f}%", (b1.false_alarms_per100, b1.detection), xytext=(b1.false_alarms_per100 - 1.1, b1.detection - 11),
+                fontsize=10, color=RED, fontweight="bold", linespacing=1.3)
+    ax.set_xlim(-0.15, 8.0); ax.set_ylim(0, 44)
+    ax.set_xlabel("다치지 않은 투수 100등판당 오경보 (번)", fontsize=10.5)
+    ax.set_ylabel("부상 투수 중 미리 경보가 울린 비율 (%)", fontsize=10.5)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.tick_params(labelsize=9); ax.grid(alpha=0.3)
+    ax.text(0.0, 1.04, "오경보를 얼마나 허용할지 정하면 잡는 비율이 정해진다 — 피치시그널은 선 위 어디든 고를 수 있다", color="#111", fontsize=10.5, fontweight="bold",
+            transform=ax.transAxes, va="bottom")
+    ax.text(0.0, -0.2, "MLB 2024~2025 검증셋 · 부상 직전 5등판 안에 경보가 울린 비율", color="#666", fontsize=9, transform=ax.transAxes, va="top")
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
@@ -246,6 +297,8 @@ def main() -> None:
     stripes(OUT / "stripes.png")
     usual_band(OUT / "usual_band.png")
     print(false_alarm_case(OUT / "false_alarm_case.png"))
+    people_row(OUT / "people_2of10.png", 2); people_row(OUT / "people_1of10.png", 1, color=(31, 78, 140))
+    opcurve(OUT / "opcurve_deck.png")
     print("저장:", OUT)
 
 

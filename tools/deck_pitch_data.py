@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import glob
+from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
@@ -75,7 +76,64 @@ def draw(path) -> None:
     plt.close(fig)
 
 
+PRIVATE = Path("C:/work/private/pitchsignal/시안/deck")           # 원자료 행을 그대로 보이는 그림은 저장소 밖
+RAW_COLS = ["game_date", "player_name", "pitch_type", "release_speed", "release_pos_x", "release_pos_z", "release_spin_rate", "arm_angle", "description"]
+
+
+def raw_csv(path) -> int:
+    """A용: 그 등판의 원자료 행(견제 제외 92구)을 열 119개 그대로 csv로 — 엑셀로 열어 화면을 찍는다 (scratch의 excel_shot.ps1)."""
+    s = load()
+    s.to_csv(path, index=False, encoding="utf-8-sig")          # BOM이 없으면 엑셀이 선수 이름의 악센트 글자를 깨뜨림
+    return len(s)
+
+
+def raw_zoom(path) -> None:
+    """B용: 원자료 핵심 열 9개를 영어 열 이름·원래 단위(mph, ft) 그대로 확대한 표, 공 1~10 (2026-10-24 사용자: 가공 없이 raw 그대로)."""
+    s = load().head(10)
+    plt.rcParams.update({"font.family": "Consolas", "axes.unicode_minus": False})
+    fig = plt.figure(figsize=(10.2, 3.4), dpi=200); fig.patch.set_facecolor("white")
+    ax = fig.add_axes([0.02, 0.03, 0.96, 0.82]); ax.axis("off")
+    xs = [0.0, 0.115, 0.265, 0.345, 0.45, 0.555, 0.66, 0.79, 0.875]
+    for x, h in zip(xs, RAW_COLS):
+        ax.text(x, 0.98, h, fontsize=9.2, fontweight="bold", color="#111", va="top", transform=ax.transAxes)
+    ax.plot([-0.01, 1.03], [0.88, 0.88], color="#111", lw=1.2, transform=ax.transAxes, clip_on=False)
+    for k, (_, r) in enumerate(s.iterrows()):
+        y = 0.82 - k * 0.082
+        if k % 2 == 0:
+            ax.add_patch(plt.Rectangle((-0.01, y - 0.048), 1.04, 0.082, color="#f2f4f7", transform=ax.transAxes, zorder=0, lw=0))
+        for x, c in zip(xs, RAW_COLS):
+            v = r[c]
+            ax.text(x, y, f"{v:g}" if isinstance(v, float) else str(v)[:10 if c == "game_date" else None], fontsize=9.8, color="#111", va="center", transform=ax.transAxes)
+    fig.text(0.02, 0.93, "원자료 핵심 열 확대 — 열 이름과 단위(mph, ft) 그대로", fontsize=10, color="#555", fontfamily="Malgun Gothic")
+    fig.savefig(path, facecolor="white")
+    plt.close(fig)
+
+
+def scatter(path) -> None:
+    """오른쪽 점 그림만 따로 (6페이지에서 원자료 캡처 옆에 둔다)."""
+    s = load()
+    plt.rcParams.update({"font.family": "Malgun Gothic", "axes.unicode_minus": False})
+    fig, bx = plt.subplots(figsize=(4.6, 4.9), dpi=200)
+    fig.patch.set_facecolor("white")
+    for pt, g in s.groupby("pitch_type"):
+        bx.scatter(g.release_pos_x * 0.3048, g.release_pos_z * 0.3048, s=26, color=COLOR.get(pt, "#888"), alpha=0.85, label=f"{TYPE.get(pt, pt)} {len(g)}", edgecolor="white", lw=0.4)
+    bx.set_title(f"그날 {len(s)}구의 릴리스 위치 (포수 쪽에서 봄)", fontsize=11, loc="left", fontweight="bold")
+    bx.set_xlabel("옆 위치 (m)", fontsize=10); bx.set_ylabel("높이 (m)", fontsize=10)
+    bx.set_xlim(-1.25, -0.45); bx.set_ylim(1.45, 2.05)
+    bx.tick_params(labelsize=9)
+    for sp in ("top", "right"):
+        bx.spines[sp].set_visible(False)
+    bx.grid(alpha=0.3)
+    bx.legend(fontsize=9, frameon=False, loc="lower right")
+    fig.savefig(path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     out = A.OUT / "pitch_data.png"
     draw(out)
-    print("저장:", out)
+    PRIVATE.mkdir(parents=True, exist_ok=True)
+    print("원자료 행:", raw_csv(PRIVATE / "soroka_20250704_raw.csv"))
+    raw_zoom(PRIVATE / "raw_zoom.png")
+    scatter(A.OUT / "pitch_scatter.png")
+    print("저장:", out, PRIVATE)
