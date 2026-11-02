@@ -30,6 +30,15 @@ RAW = ROOT / "data" / "raw" / "kbsa"
 PROCESSED = ROOT / "data" / "processed"
 TABLES = ROOT / "reports" / "tables"
 log = logging.getLogger("pitchsignal.hs_records")
+SHEET_PITCHING = RAW / "sheet_pitching.csv"     # 공식 투수 기록표가 빈 경기를 기록지 투수 칸에서 옮겨 적은 줄 (실명이 있어 저장소 밖, 2026-11-02)
+
+
+def sheet_pitching() -> dict[int, list[dict]]:
+    """경기 → 옮겨 적은 투수 줄 (기록지 순서 = 등판 순서)."""
+    if not SHEET_PITCHING.exists():
+        return {}
+    t = pd.read_csv(SHEET_PITCHING, encoding="utf-8-sig", dtype={"innings": str, "result": str})
+    return {int(g): part.drop(columns="game_idx").to_dict("records") for g, part in t.groupby("game_idx", sort=False)}
 
 
 def parse_games(game_ids: list[int]) -> pd.DataFrame:
@@ -37,17 +46,22 @@ def parse_games(game_ids: list[int]) -> pd.DataFrame:
     missing = [g for g, p in pages.items() if not p.exists()]
     if missing:
         log.warning("기록 페이지가 없는 경기 %d개는 뺀다: %s", len(missing), missing[:10])
-    games, flows = [], {}
+    games, flows, sheet, from_sheet = [], {}, sheet_pitching(), set()
     for g, p in pages.items():
         if not p.exists():
             continue
         text = p.read_text(encoding="utf-8")
         game = kb.parse_record_detail(text, g)
+        if hr.fill_from_sheet(game, sheet.get(g)):
+            from_sheet.add(g)
         games.append(game)
         for key, flow in hr.flows_for_game(game, kb.parse_batting(text)).items():          # 등판 흐름 (상대 타격표의 타석을 투수에게 배정)
             flows[(g, *key)] = json.dumps(flow, ensure_ascii=False)
     rows = kb.games_to_rows(games)
     rows["flow"] = [flows.get((r.game_idx, r.team, r.name, r.number)) for r in rows.itertuples()]
+    rows["sheet"] = rows["game_idx"].isin(from_sheet)
+    if from_sheet:
+        log.info("공식 투수 기록표가 비어 기록지 투수 칸에서 옮겨 적은 경기 %d: %s", len(from_sheet), sorted(from_sheet))
     log.info("등판 흐름 재구성: 등판 %d개 중 %d개 (%.1f%%)", len(rows), rows["flow"].notna().sum(), 100 * rows["flow"].notna().mean() if len(rows) else 0)
     return rows
 
@@ -135,8 +149,12 @@ def main() -> None:
         out = convert(key, cfg, {**d, "key": key}, rules)
         maps.append(out["names"].assign(dataset=key))
         print(out["summary"].to_string(index=False))
-    if maps and not a.only:
-        pd.concat(maps, ignore_index=True).to_csv(name_path, index=False, encoding="utf-8-sig")
+    if maps:
+        new = pd.concat(maps, ignore_index=True)
+        if a.only and name_path.exists():       # 한 데이터셋만 다시 만들 때는 그 몫만 바꾼다 (안 바꾸면 새 투수로 밀린 코드에 옛 이름이 붙음, 2026-11-02)
+            old = pd.read_csv(name_path, encoding="utf-8-sig")
+            new = pd.concat([old[old["dataset"] != a.only], new], ignore_index=True)
+        new.to_csv(name_path, index=False, encoding="utf-8-sig")
         log.info("선수 실명 대응표 저장: %s", name_path)
 
 

@@ -159,6 +159,7 @@ function BallChart({ p }) {
   );
 }
 
+const SHEET_HOW = "협회 기록실에 이 경기의 투수 기록표가 올라오지 않아, 협회 기록지 사진의 투수 칸에서 투구 수·이닝·타자 수를 옮겨 적은 값입니다. 볼 비율은 내지 않습니다.";
 const BALL_HOW = "협회 기록지 사진에서 공마다 볼인지 아닌지를 읽은 값입니다. 기록원이 그리지 않은 마지막 공(4구의 넷째 볼, 삼진의 셋째 스트라이크, 인플레이 타구)은 타석 결과로 채웁니다. 볼 비율 = 볼 ÷ 공식 투구 수(읽지 못한 공은 볼이 아닌 것으로 셈). 기록지에서 읽은 공 수가 공식 투구 수와 15% 넘게 다른 등판은 뺍니다. '평소보다 볼 많음'은 40구 이상 등판을 그 투수의 다른 등판과 비교한 것이며, 원인은 해석하지 않습니다.";
 
 // 볼 수는 '공식 투구 수 중 몇 개'로만 보여 준다 (2026-10-20 외부 검토·사용자 결정: 기록지에서 센 공 수는 화면에 내지 않음)
@@ -200,7 +201,7 @@ function GamesTable({ p, withCompetition }) {
             const sum = g.flow ? flowSummary(g.flow) : null;
             return [
               <tr key={g.game_no} className={open === g.game_no ? "hl" : ""}>
-                <td>{g.date.slice(5).replace("-", "/")}</td><td className="wrap">{withCompetition ? g.competition : g.round}</td><td>{g.opponent}</td>
+                <td>{g.date.slice(5).replace("-", "/")}</td><td className="wrap">{withCompetition ? g.competition : g.round}{g.sheet && <span className="light base" style={{ marginLeft: 6 }} title={SHEET_HOW}>기록지</span>}</td><td>{g.opponent}</td>
                 <td>{g.role}{g.result !== "-" && <span style={{ color: "var(--muted)" }}> · {g.result}</span>}</td>
                 <td className="num">{innings(g.outs)}</td>
                 <td className="num">{g.pitches == null ? <span className="light base">미공개</span> : g.pitches}</td>
@@ -385,6 +386,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       {s && <Planner key={s.code} school={s} games={data.games} kbsa={kbsa} lights={data.load_lights} onPick={setCode} picked={p?.code} />}
       <p className="note">
         출처: {ds.source}. 공식 경기 투구 수만 반영되며 연습·불펜 투구는 빠집니다. 상세 기록이 공개되지 않은 {ds.no_detail_games.length}경기는 선발 투수만 '투구 수 미공개'로 들어갑니다.
+        {ds.sheet_games?.length > 0 && <> {[...new Set(data.games.filter((g) => g.sheet).map((g) => g.competition))].join("·")} {ds.sheet_games.length}경기는 협회 기록실에 투수 기록표가 올라오지 않아, 협회 기록지의 투수 칸에서 투구 수·이닝을 옮겨 적었습니다('기록지' 표시, 볼 비율 없음). </>}
         고교에는 공식 부상 기록이 없어, 이 화면은 부상 탐지가 아니라 규정이 보지 못하는 부하를 보여 주는 현황판입니다.
       </p>
     </div>

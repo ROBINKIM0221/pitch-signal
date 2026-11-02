@@ -42,6 +42,15 @@ def test_games_without_detail_get_missing_pitch_counts_not_zero():
     assert t.loc[t["game_idx"] != 3, "detail"].all() and t.loc[t["game_idx"] != 3, "pitches"].notna().all()
 
 
+def test_sheet_rows_fill_only_games_whose_official_pitching_table_is_empty():
+    sheet = [{"team": "A고", "name": "가", "number": 32, "role": "선발", "result": "승", "innings": "4.1", "batters": 18, "pitches": 54}]
+    empty = {"pitchers": []}
+    assert hr.fill_from_sheet(empty, sheet) and empty["pitchers"][0]["outs"] == 13 and empty["pitchers"][0]["pitches"] == 54
+    official = {"pitchers": [{"team": "A고", "name": "가", "number": 32, "pitches": 50}]}
+    assert not hr.fill_from_sheet(official, sheet) and official["pitchers"][0]["pitches"] == 50
+    assert not hr.fill_from_sheet({"pitchers": []}, None)
+
+
 def test_a_zero_pitch_count_with_outs_or_batters_recorded_is_treated_as_unknown():
     t = raw_rows()
     t.loc[(t["game_idx"] == 2) & (t["number"] == 1), "pitches"] = 0          # 8이닝 30타자인데 0구 → 기록 누락

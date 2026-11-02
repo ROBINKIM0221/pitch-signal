@@ -66,6 +66,15 @@ def flow_summary(flow: list[dict]) -> dict:
             "walk_innings": sorted(i for i, n in by_inning.items() if n >= 2), "wild": sum(sum(e in WALK_EVENTS for e in pa["ev"]) for pa in flow)}
 
 
+def fill_from_sheet(game: dict, sheet_rows: list[dict] | None) -> bool:
+    """공식 투수 기록표가 빈 경기만 기록지 투수 칸에서 옮겨 적은 줄(parse_record_detail의 투수 줄과 같은 열, 이닝은 '4.1' 표기)로 채운다.
+    공식 표가 있으면 손대지 않는다. 채웠으면 True (2026-11-02, 이마트노브랜드배는 기록표가 올라오지 않음)."""
+    if game["pitchers"] or not sheet_rows:
+        return False
+    game["pitchers"] = [{**r, "outs": kb.outs_from_innings(str(r["innings"]))} for r in sheet_rows]
+    return True
+
+
 def mark_missing_detail(table: pd.DataFrame) -> pd.DataFrame:
     """상세 기록이 안 올라온 경기(모든 투수의 아웃·투구수가 0)는 detail=False, 투구 수는 모름(NA)으로 바꾼다.
     아웃이나 타자가 있는데 투구수가 0인 줄(기록 누락)도 투구 수 모름으로 둔다."""
@@ -88,7 +97,7 @@ def combine_stints(table: pd.DataFrame) -> pd.DataFrame:
            "outs": "sum", "batters": lambda s: s.sum(min_count=1), "pitches": lambda s: s.sum(min_count=1),
            "result": lambda s: next((r for r in s if r in ("승", "패")), s.iloc[0]), "stints": "size",
            **{c: (lambda s: s.sum(min_count=1)) for c in kb.RESULT_COLUMNS if c in t.columns},
-           **({"flow": "first"} if "flow" in t.columns else {})}
+           **({"flow": "first"} if "flow" in t.columns else {}), **({"sheet": "first"} if "sheet" in t.columns else {})}
     out = (t.assign(stints=1).groupby(GAME_KEY, as_index=False, sort=False).agg(agg)
             .sort_values("_order").drop(columns="_order").reset_index(drop=True))
     for col in ["pitches", "batters", *[c for c in kb.RESULT_COLUMNS if c in out.columns]]:
@@ -135,7 +144,7 @@ def input_rows(table: pd.DataFrame, names: pd.DataFrame, competition: pd.Series,
         "stints": table["stints"].to_numpy() if "stints" in table else 1,
         "batters": table["batters"].astype("Float64").astype(float).to_numpy() if "batters" in table else np.nan,
         **{c: table[c].astype("Float64").astype(float).to_numpy() for c in ("k", "bb_hbp", "hits", "hr", "runs", "er") if c in table},
-        **({"flow": table["flow"].to_numpy()} if "flow" in table else {})})
+        **({"flow": table["flow"].to_numpy()} if "flow" in table else {}), **({"sheet": table["sheet"].to_numpy()} if "sheet" in table else {})})
     return out.sort_values(["game_no", "school", "row"], ignore_index=True)
 
 
@@ -313,10 +322,12 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
     label_of = names.set_index("pitcher")["label"]
     games = (outings.sort_values("game_no").groupby("game_no").agg(date=("date", "first"), competition=("competition", "first"), round=("round", "first"),
                                                                     detail=("detail", "first"), teams=("school", lambda s: sorted(school_name[c] for c in s.unique())),
-                                                                    opponents=("opponent", lambda s: sorted(set(s))))
+                                                                    opponents=("opponent", lambda s: sorted(set(s))),
+                                                                    **({"sheet": ("sheet", "first")} if "sheet" in outings else {}))
              .reset_index())
     game_list = [{"no": int(g.game_no), "date": _clean(g.date), "competition": g.competition, "round": _clean(g.round), "detail": bool(g.detail),
-                  "teams": sorted(set(g.teams) | set(g.opponents))} for g in games.itertuples()]
+                  "teams": sorted(set(g.teams) | set(g.opponents)), **({"sheet": True} if getattr(g, "sheet", False) == True else {})}
+                 for g in games.itertuples()]
     violations_of = violated[violated["rule"].isin(kbsa_rules)].groupby("pitcher").size()
     schools, per_rows = [], []
     for school, mine in outings.groupby("school"):
@@ -335,6 +346,10 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
                 for rec, raw in zip(games_out, g["flow"]):
                     flow = json.loads(raw) if isinstance(raw, str) else None
                     rec["flow"] = [[pa["inn"], pa["res"], pa["cat"], *([pa["ev"]] if pa["ev"] else [])] for pa in flow] if flow else None   # 요약은 화면이 계산
+            if "sheet" in g.columns:                                                         # 기록지 투수 칸에서 옮겨 적은 등판만 표시
+                for rec, s in zip(games_out, g["sheet"]):
+                    if s == True:
+                        rec["sheet"] = True
             if "innings" in g.columns:                                                       # 기록지 투구수 줄: [이닝, 투구 수, 스트라이크, 볼, 교체 이닝?]
                 for rec, val in zip(games_out, g["innings"]):
                     rec["innings"] = val if isinstance(val, list) else None
@@ -390,6 +405,7 @@ def payload(outings: pd.DataFrame, daily: pd.DataFrame, violated: pd.DataFrame, 
     dataset = {"key": info.get("key"), "mode": info["mode"], "name": info["name"], "short": info["short"], "season": info["season"], "region": info.get("region"),
                "dates": info.get("dates") or f"{first:%Y-%m-%d} ~ {last:%Y-%m-%d}", "source": source,
                "games": int(outings["game_no"].nunique()), "no_detail_games": no_detail,
+               "sheet_games": sorted(int(n) for n in outings.loc[outings["sheet"] == True, "game_no"].unique()) if "sheet" in outings else [],
                "competitions": {k: int(v) for k, v in outings.drop_duplicates("game_no")["competition"].value_counts().items()}}
     return {"synthetic": False, "mode": info["mode"], "season": rules["season"], "kbsa": rules["kbsa"], "load_lights": lights,
             "foreign_rules": {k: v for k, v in rules["foreign_rules"].items() if v},
