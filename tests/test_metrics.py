@@ -113,3 +113,26 @@ def test_alarm_followup_compares_arm_il_within_days_after_alarm_vs_other_outings
     assert abs(out["alarm_rate"] - 0.5) < 1e-9
     assert out["other"] == 3 and abs(out["other_rate"] - 2 / 3) < 1e-9
     assert abs(out["lift"] - 0.75) < 1e-9
+
+
+def test_cluster_risk_ratio_matches_crude_ratio_and_brackets_it():
+    rng = np.random.default_rng(0)
+    cluster = np.repeat(np.arange(200), 50)
+    flag = rng.random(len(cluster)) < 0.1
+    followed = rng.random(len(cluster)) < np.where(flag, 0.10, 0.05)
+    out = mt.cluster_risk_ratio(followed, flag, cluster, n_boot=500, seed=1)
+    crude = followed[flag].mean() / followed[~flag].mean()
+    assert abs(out["rr"] - crude) < 1e-12
+    assert out["rr_lo"] < out["rr"] < out["rr_hi"]
+
+
+def test_within_wls_removes_group_levels_that_are_correlated_with_x():
+    rng = np.random.default_rng(0)
+    group = np.repeat(np.arange(300), 20)
+    level = rng.normal(size=300)[group]                   # 그룹 수준이 x와 y에 같이 들어가 단순 회귀를 비튼다
+    x = level + rng.normal(size=len(group))
+    y = -2.0 * x + 5.0 * level + rng.normal(size=len(group))
+    df = pd.DataFrame({"y": y, "x": x, "g": group, "w": rng.integers(1, 5, len(group))})
+    out = mt.within_wls(df, "y", ["x"], group="g", weight="w", cluster="g")
+    assert abs(out.loc["x", "coef"] - (-2.0)) < 0.05
+    assert out.loc["x", "lo"] < -2.0 < out.loc["x", "hi"]

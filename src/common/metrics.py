@@ -108,11 +108,8 @@ def window_flags(windows: pd.DataFrame, dates: pd.DataFrame, load: pd.DataFrame,
     return pd.DataFrame(rows)
 
 
-def alarm_followup(table: pd.DataFrame, labels: pd.DataFrame, days: int = 30, alarm: str = "velo_alarm") -> dict:
-    """사후 지표(사전 등록 아님): 경보가 울린 등판 뒤 days일 안에 팔 부상 IL이 있는 비율과, 경보 없는 등판의 같은 비율. lift = 둘의 비.
-
-    labels: pitcher, il_date(팔꿈치·어깨만 넘길 것). 같은 투수의 IL 중 등판 날짜보다 뒤이고 days일 이내인 것이 있으면 '뒤따름'으로 센다.
-    """
+def followed_within(table: pd.DataFrame, labels: pd.DataFrame, days: int = 30) -> np.ndarray:
+    """등판마다 같은 투수의 IL(labels의 il_date)이 등판 날짜 뒤 days일 안에 있으면 True."""
     il = labels.groupby("pitcher")["il_date"].apply(lambda s: np.sort(pd.to_datetime(s).to_numpy()))
     dates = pd.to_datetime(table["game_date"]).to_numpy()
     followed = np.zeros(len(table), dtype=bool)
@@ -122,9 +119,44 @@ def alarm_followup(table: pd.DataFrame, labels: pd.DataFrame, days: int = 30, al
             continue
         nxt = events[events > d]
         followed[i] = len(nxt) > 0 and (nxt[0] - d) <= np.timedelta64(days, "D")
+    return followed
+
+
+def alarm_followup(table: pd.DataFrame, labels: pd.DataFrame, days: int = 30, alarm: str = "velo_alarm") -> dict:
+    """사후 지표(사전 등록 아님): 경보가 울린 등판 뒤 days일 안에 팔 부상 IL이 있는 비율과, 경보 없는 등판의 같은 비율. lift = 둘의 비.
+
+    labels: pitcher, il_date(팔꿈치·어깨만 넘길 것). 같은 투수의 IL 중 등판 날짜보다 뒤이고 days일 이내인 것이 있으면 '뒤따름'으로 센다.
+    """
+    followed = followed_within(table, labels, days)
     flag = table[alarm].to_numpy().astype(bool)
     a, o = followed[flag], followed[~flag]
     alarm_rate, other_rate = (a.mean() if len(a) else np.nan), (o.mean() if len(o) else np.nan)
     return {"days": days, "alarms": int(flag.sum()), "alarm_followed": int(a.sum()), "alarm_rate": float(alarm_rate),
             "other": int((~flag).sum()), "other_followed": int(o.sum()), "other_rate": float(other_rate),
             "lift": float(alarm_rate / other_rate) if other_rate else np.nan}
+
+
+def cluster_risk_ratio(followed: np.ndarray, flag: np.ndarray, cluster: np.ndarray, n_boot: int = 2000, seed: int = 0) -> dict:
+    """사후 지표: 뒤따름 비율의 비(경보 ÷ 경보 없음)와, 군집(투수)을 통째로 다시 뽑는 부트스트랩 95% 구간."""
+    codes, k = pd.factorize(cluster)
+    counts = np.zeros((len(k), 4))
+    for j, v in enumerate((flag & followed, flag, ~flag & followed, ~flag)):
+        counts[:, j] = np.bincount(codes, weights=v.astype(float), minlength=len(k))
+    rr = lambda c: (c[..., 0] / c[..., 1]) / (c[..., 2] / c[..., 3])  # noqa: E731
+    draws = np.random.default_rng(seed).integers(0, len(k), size=(n_boot, len(k)))
+    boot = rr(counts[draws].sum(axis=1))
+    lo, hi = np.nanpercentile(boot, [2.5, 97.5])
+    return {"rr": float(rr(counts.sum(axis=0))), "rr_lo": float(lo), "rr_hi": float(hi)}
+
+
+def within_wls(df: pd.DataFrame, y: str, x: list[str], group: str, weight: str, cluster: str) -> pd.DataFrame:
+    """그룹(예: 투수-시즌) 안 가중 평균을 뺀 뒤 가중 최소제곱. 표준오차는 cluster 단위로 묶는다. 계수·표준오차·95% 구간."""
+    import statsmodels.api as sm
+    d = df[list(dict.fromkeys([y, *x, group, weight, cluster]))].dropna()
+    w = d[weight].astype(float)
+    cols = [y, *x]
+    means = (d[cols].mul(w, axis=0).groupby(d[group]).transform("sum")).div(w.groupby(d[group]).transform("sum"), axis=0)
+    dm = d[cols] - means
+    fit = sm.WLS(dm[y], dm[x], weights=w).fit(cov_type="cluster", cov_kwds={"groups": pd.factorize(d[cluster])[0]})
+    ci = fit.conf_int()
+    return pd.DataFrame({"coef": fit.params, "se": fit.bse, "lo": ci[0], "hi": ci[1], "n": len(d)})
