@@ -90,6 +90,30 @@ datasets:
       competitions: [주말리그 전반기, 주말리그 후반기, 신세계 이마트배, 황금사자기, 청룡기, 대통령배, 봉황대기, 전국체전, 이마트 노브랜드배]
       input_ranges: {game_no: [1, 9999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}
 
+  korea_2027:                                     # 시즌 모드, 주 1회 갱신(live). 리그 번호를 미리 알 수 없어 권역·대회를 경기 목록의 리그 이름에서 정한다
+    mode: season
+    live: true
+    name: 2027 시즌 전국 고교 공식 경기
+    short: 2027 시즌
+    season: 2027
+    games_csv: data/raw/kbsa/games_2027.csv       # 경기 목록이 생기기 전에는 이 데이터셋을 건너뛴다
+    region_leagues: auto                          # 주말리그 리그 이름의 괄호 안 권역 (hs_records.resolve_dataset)
+    competitions:
+      주말리그 전반기: 주말리그 전반기
+      주말리그 후반기: 주말리그 후반기
+      이마트배 전국고교야구대회: 신세계 이마트배
+      황금사자기: 황금사자기
+      청룡기: 청룡기
+      대통령배: 대통령배
+      봉황대기: 봉황대기
+      전국체육대회: 전국체전
+      노브랜드배: 이마트 노브랜드배
+    competition_default: 기타                     # 위에 없는 새 대회
+    overrides:
+      season: 2027
+      competitions: [주말리그 전반기, 주말리그 후반기, 신세계 이마트배, 황금사자기, 청룡기, 대통령배, 봉황대기, 전국체전, 이마트 노브랜드배, 기타]
+      input_ranges: {game_no: [1, 9999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}
+
   tournament_2025:                                # 대회 모드: 7일 단판 토너먼트 → ACWR 대신 대회 누적 투구 수·휴식 간격
     mode: tournament
     name: 제106회 전국체육대회 18세 이하부
@@ -116,5 +140,18 @@ datasets:
     rounds: {16강: 8, 8강: 4, 준결승: 2, 결승: 1}  # 경기 순서(날짜·번호)대로 배정
     overrides:
       season: 2026
+      competitions: [전국체전]
+      input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}
+
+  tournament_2027:                                # 대회 모드, live: 전국체전이 끝난 뒤(경기 수 = 팀 수 − 1)부터 만든다. 경기·라운드·기간·이름은 경기 목록에서
+    mode: tournament
+    live: true
+    name: 2027 전국체육대회 18세 이하부
+    short: 2027 전국체전
+    season: 2027
+    games_csv: data/raw/kbsa/games_2027.csv
+    league_contains: 전국체육대회
+    overrides:
+      season: 2027
       competitions: [전국체전]
       input_ranges: {game_no: [1, 999], pitches: [1, 200], outs: [0, 60], team_outs_per_game: [0, 60]}

@@ -317,3 +317,110 @@ def test_season_stats_counts_from_flow():
 def test_season_stats_empty_without_flow():
     g = pd.DataFrame({"outs": [3], "er": [0.0], "pitches": [15.0], "flow": [None]})
     assert hr.season_stats(g) == {}
+
+
+# ---------- 주간 갱신 데이터셋: 권역·대회·토너먼트를 리그 이름에서 정한다 ----------
+LEAGUES = {1367: "2026 고교야구 주말리그 전반기(서울권A)", 1379: "2026 고교야구 주말리그 전반기(경기·인천권)",
+           1377: "2026 고교야구 주말리그 전반기(경기권A)", 1373: "2026 고교야구 주말리그 전반기(강원권)", 1398: "2026 고교야구 주말리그 후반기(서울권A)",
+           1411: "제80회 황금사자기 전국고교야구대회 겸 주말리그 왕중왕전", 1471: "제107회 전국체육대회(18세 이하부)"}
+
+
+def league_games(ligs, start=100):
+    """리그마다 한 경기씩 있는 경기 목록."""
+    return pd.DataFrame([{"game_idx": start + i, "date": f"2027-03-{7 + i:02d}", "league": LEAGUES[lig], "lig_idx": lig,
+                          "team1": f"팀{i}가", "team2": f"팀{i}나", "score1": "3", "score2": "1"} for i, lig in enumerate(ligs)])
+
+
+def knockout(n_teams, rounds_played=None, lig=1471, start=500):
+    """단판 토너먼트 경기 목록 (첫 라운드에 부전승이 있을 수 있음). rounds_played만큼만 치른 상태를 만들 수 있다."""
+    teams, rows, day, g = [f"학교{i:02d}" for i in range(n_teams)], [], 16, start
+    size = 1
+    while size * 2 < n_teams:
+        size *= 2
+    first = n_teams - size                                       # 첫 라운드 경기 수 (나머지는 부전승)
+    alive = teams[2 * first:] + []
+    played = 0
+    pairs = [(teams[2 * i], teams[2 * i + 1]) for i in range(first)]
+    while pairs and (rounds_played is None or played < rounds_played):
+        for a, b in pairs:
+            rows.append({"game_idx": g, "date": f"2027-10-{day:02d}", "league": LEAGUES[lig], "lig_idx": lig, "team1": a, "team2": b, "score1": "5", "score2": "2"})
+            g += 1
+        alive = [a for a, _ in pairs] + alive if played == 0 else [a for a, _ in pairs]
+        pairs = [(alive[2 * i], alive[2 * i + 1]) for i in range(len(alive) // 2)] if len(alive) > 1 else []
+        day += 1
+        played += 1
+    return pd.DataFrame(rows)
+
+
+def test_region_of_league_reads_the_region_inside_the_parentheses():
+    assert hr.region_of_league(LEAGUES[1367]) == "서울"
+    assert hr.region_of_league(LEAGUES[1379]) == "경기·인천"
+    assert hr.region_of_league("고교야구 주말리그 후반기(경기강원권)") == "경기강원"
+    assert hr.region_of_league(LEAGUES[1411]) is None             # 왕중왕전은 권역 리그가 아니다
+    assert hr.region_of_league(LEAGUES[1471]) is None
+
+
+def test_live_season_regions_follow_the_fixed_order_and_join_both_halves(tmp_path):
+    league_games([1373, 1377, 1398, 1379, 1367, 1411]).to_csv(tmp_path / "g.csv", index=False, encoding="utf-8-sig")
+    d = hr.resolve_dataset({"live": True, "mode": "season", "games_csv": "g.csv", "region_leagues": "auto"}, tmp_path)
+    assert list(d["region_leagues"]) == ["서울", "경기·인천", "경기", "강원"]
+    assert sorted(d["region_leagues"]["서울"]) == [1367, 1398]
+
+
+def test_unknown_region_names_come_after_the_known_ones(tmp_path):
+    g = league_games([1367])
+    g = pd.concat([g, g.assign(game_idx=999, lig_idx=2000, league="2027 고교야구 주말리그 전반기(제주권)")], ignore_index=True)
+    g.to_csv(tmp_path / "g.csv", index=False, encoding="utf-8-sig")
+    d = hr.resolve_dataset({"live": True, "mode": "season", "games_csv": "g.csv", "region_leagues": "auto"}, tmp_path)
+    assert list(d["region_leagues"]) == ["서울", "제주"]
+
+
+def test_live_dataset_is_not_ready_before_any_game(tmp_path):
+    d = {"live": True, "mode": "season", "games_csv": "none.csv", "region_leagues": "auto"}
+    assert hr.resolve_dataset(d, tmp_path) is None                # 파일 없음
+    league_games([1367]).iloc[:0].to_csv(tmp_path / "none.csv", index=False, encoding="utf-8-sig")
+    assert hr.resolve_dataset(d, tmp_path) is None                # 머리글만 있는 빈 파일
+
+
+def test_datasets_that_are_not_live_come_back_unchanged(tmp_path):
+    d = {"mode": "season", "region_leagues": {"서울": [1]}}
+    assert hr.resolve_dataset(d, tmp_path) is d
+
+
+def test_competition_falls_back_to_the_default_only_when_one_is_given():
+    d = {"competitions": {"황금사자기": "황금사자기"}, "competition_default": "기타"}
+    assert hr.competition_of(d, LEAGUES[1411]) == "황금사자기"
+    assert hr.competition_of(d, "제1회 새 대회") == "기타"
+    with pytest.raises(ValueError):
+        hr.competition_of({"competitions": {}}, "제1회 새 대회")
+
+
+def test_bracket_is_complete_only_when_games_equal_teams_minus_one():
+    assert hr.bracket(knockout(16))["rounds"] == {"16강": 8, "8강": 4, "준결승": 2, "결승": 1}
+    assert hr.bracket(knockout(15))["rounds"] == {"16강": 7, "8강": 4, "준결승": 2, "결승": 1}
+    assert hr.bracket(knockout(8))["rounds"] == {"8강": 4, "준결승": 2, "결승": 1}
+    assert hr.bracket(knockout(16, rounds_played=1)) is None      # 16강만 끝남
+    assert hr.bracket(knockout(16, rounds_played=3)) is None      # 준결승까지
+    assert hr.bracket(knockout(15, rounds_played=1)) is None      # 부전승 팀은 아직 안 보임
+
+
+def test_bracket_lists_games_in_date_order_with_the_date_range():
+    b = hr.bracket(knockout(8).sample(frac=1, random_state=0))
+    assert b["games"] == list(range(500, 507)) and b["dates"] == "2027-10-16 ~ 2027-10-18"
+
+
+def test_live_tournament_appears_only_after_the_final(tmp_path):
+    d = {"live": True, "mode": "tournament", "games_csv": "g.csv", "league_contains": "전국체육대회", "name": "2027 전국체육대회 18세 이하부"}
+    pd.concat([league_games([1367]), knockout(16, rounds_played=2)]).to_csv(tmp_path / "g.csv", index=False, encoding="utf-8-sig")
+    assert hr.resolve_dataset(d, tmp_path) is None
+    pd.concat([league_games([1367]), knockout(16)]).to_csv(tmp_path / "g.csv", index=False, encoding="utf-8-sig")
+    out = hr.resolve_dataset(d, tmp_path)
+    assert len(out["games"]) == 15 and out["rounds"]["결승"] == 1 and out["name"] == LEAGUES[1471] and out["dates"] == "2027-10-16 ~ 2027-10-19"
+
+
+def test_problem_games_names_every_game_that_failed_the_input_check():
+    t = hr.combine_stints(hr.mark_missing_detail(raw_rows()))
+    t = pd.concat([t, t[t["game_idx"] == 1].iloc[:1]], ignore_index=True)        # 1번 경기의 한 투수가 두 번 입력됨
+    rows = hr.input_rows(t, hr.name_map(t), pd.Series("전국체전", index=[1, 2, 3]), None)
+    bad = hr.problem_games(rows, hs.problems(rows, RULES))
+    assert set(bad["game_idx"]) == {1} and "중복" in set(bad["kind"])

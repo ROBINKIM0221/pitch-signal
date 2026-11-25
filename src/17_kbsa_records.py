@@ -74,24 +74,21 @@ def season_games(cfg: dict, d: dict) -> tuple[list[int], pd.Series, dict[str, st
         for team in set(games.loc[games["lig_idx"].isin(leagues), ["team1", "team2"]].stack()):
             region_of.setdefault(team, region)
     pick = games.copy()
-
-    def competition(league: str) -> str:
-        for needle, name in d["competitions"].items():
-            if needle in league:
-                return name
-        raise ValueError(f"대회 이름을 모르는 리그: {league}")
-
-    comp = pd.Series([competition(x) for x in pick["league"]], index=pick["game_idx"].to_numpy())
+    comp = pd.Series([hr.competition_of(d, x) for x in pick["league"]], index=pick["game_idx"].to_numpy())
     return pick["game_idx"].tolist(), comp, region_of
 
 
-def convert(key: str, cfg: dict, d: dict, rules: dict) -> dict:
+def convert(key: str, cfg: dict, d: dict, rules: dict, skip: frozenset = frozenset()) -> dict | None:
     if d["mode"] == "tournament":
         ids, region_of = list(d["games"]), None
         comp = pd.Series(d["overrides"]["competitions"][0], index=ids)
     else:
         ids, comp, region_of = season_games(cfg, d)
+    ids = [g for g in ids if g not in skip]
     raw = hr.combine_stints(hr.mark_missing_detail(parse_games(ids)))
+    if raw.empty:
+        log.info("%s: 기록 페이지가 있는 경기가 없어 건너뜀", key)
+        return None
     names = hr.name_map(raw)
     if region_of is not None:
         names["region"] = names["team"].map(region_of).fillna("기타")
@@ -101,6 +98,14 @@ def convert(key: str, cfg: dict, d: dict, rules: dict) -> dict:
     rules = {**rules, "schools": int(raw["team"].nunique())}
     rows = hr.input_rows(raw, names, comp, d.get("rounds"))
     problems = hs.problems(rows, rules)
+    held = PROCESSED / f"hs_{key}_quarantine.csv"                # 입력 검사에 걸려 뺀 경기 (주간 갱신 시즌만)
+    if len(problems) and d.get("live") and d["mode"] == "season" and not skip:
+        bad = hr.problem_games(rows, problems)
+        bad.to_csv(held, index=False, encoding="utf-8-sig")
+        log.warning("%s: 입력 검사에 걸린 경기 %d개를 빼고 다시 만든다: %s", key, bad["game_idx"].nunique(), sorted(set(bad["game_idx"])))
+        return convert(key, cfg, d, rules, skip=frozenset(int(g) for g in bad["game_idx"]))
+    if not skip and held.exists():
+        held.unlink()
     if len(problems):
         print(problems.to_string(index=False))
         raise SystemExit(f"{key}: 변환한 표가 입력 검사를 통과하지 못했습니다.")
@@ -146,7 +151,11 @@ def main() -> None:
     for key, (d, rules) in datasets.items():
         if a.only and key != a.only:
             continue
-        out = convert(key, cfg, {**d, "key": key}, rules)
+        d = hr.resolve_dataset(d)
+        out = convert(key, cfg, {**d, "key": key}, rules) if d is not None else None
+        if out is None:
+            log.info("%s: 경기 목록이 아직 없거나 대회가 덜 끝나 건너뜀", key)
+            continue
         maps.append(out["names"].assign(dataset=key))
         print(out["summary"].to_string(index=False))
     if maps:

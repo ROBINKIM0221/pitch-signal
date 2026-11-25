@@ -32,6 +32,74 @@ def datasets_config(root: Path = ROOT) -> tuple[dict, dict[str, tuple[dict, dict
     return cfg, {key: (d, _merge(base, d["overrides"])) for key, d in cfg["datasets"].items()}
 
 
+# 주간 갱신 데이터셋(live: true)은 리그 번호를 미리 알 수 없어 권역·대회·토너먼트를 경기 목록의 리그 이름에서 정한다.
+REGION_ORDER = ["서울", "서울·인천", "경기·인천", "경기", "강원", "충청", "대전·전북", "광주·전남", "경상", "부산"]
+WEEKEND_LEAGUE = re.compile(r"주말리그 (?:전반기|후반기)\((.+?)권[A-Z]?\)")
+ROUND_NAMES = ["결승", "준결승", "8강", "16강", "32강", "64강"]
+
+
+def region_of_league(league: str) -> str | None:
+    """주말리그 권역 리그 이름 → 권역 ('…전반기(서울권A)' → '서울'). 권역 리그가 아니면 None."""
+    m = WEEKEND_LEAGUE.search(str(league))
+    return m.group(1) if m else None
+
+
+def competition_of(d: dict, league: str) -> str:
+    """리그 이름 → 대회 이름. 아는 이름이 없으면 competition_default, 그것도 없으면 오류."""
+    for needle, name in d["competitions"].items():
+        if needle in league:
+            return name
+    if "competition_default" in d:
+        return d["competition_default"]
+    raise ValueError(f"대회 이름을 모르는 리그: {league}")
+
+
+def bracket(games: pd.DataFrame) -> dict | None:
+    """단판 토너먼트가 끝났으면(경기 수 = 팀 수 − 1) 경기 순서·라운드별 경기 수·기간, 아니면 None."""
+    n = len(games)
+    if n < 3 or n != len(set(games["team1"]) | set(games["team2"])) - 1:
+        return None
+    g = games.sort_values(["date", "game_idx"])
+    rounds, left = [], n
+    for i, name in enumerate(ROUND_NAMES):
+        take = min(2 ** i, left)
+        rounds.append((name, take))
+        left -= take
+        if left == 0:
+            break
+    dates = pd.to_datetime(g["date"])
+    return {"games": [int(x) for x in g["game_idx"]], "rounds": dict(reversed(rounds)), "dates": f"{dates.min():%Y-%m-%d} ~ {dates.max():%Y-%m-%d}"}
+
+
+def resolve_dataset(d: dict, root: Path = ROOT) -> dict | None:
+    """live가 아닌 데이터셋은 그대로. live면 경기 목록에서 권역(시즌) 또는 경기·라운드·기간·이름(대회)을 채운 사본을 돌려준다.
+    경기 목록이 아직 없거나 비었으면, 또는 대회가 덜 끝났으면 None (그 데이터셋은 이번에 만들지 않는다)."""
+    if not d.get("live"):
+        return d
+    path = Path(root) / d["games_csv"]
+    games = pd.read_csv(path, encoding="utf-8-sig") if path.exists() else pd.DataFrame()
+    if len(games) == 0:
+        return None
+    if d["mode"] == "tournament":
+        mine = games[games["league"].astype(str).str.contains(d["league_contains"], regex=False)]
+        b = bracket(mine)
+        return None if b is None else {**d, **b, "name": str(mine["league"].iloc[0]).strip()}
+    found: dict[str, list[int]] = {}
+    for lig, league in games.drop_duplicates("lig_idx")[["lig_idx", "league"]].itertuples(index=False):
+        region = region_of_league(league)
+        if region:
+            found.setdefault(region, []).append(int(lig))
+    order = [r for r in REGION_ORDER if r in found] + sorted(r for r in found if r not in REGION_ORDER)
+    return {**d, "region_leagues": {r: found[r] for r in order}}
+
+
+def problem_games(rows: pd.DataFrame, problems: pd.DataFrame) -> pd.DataFrame:
+    """입력 검사에 걸린 줄이 속한 경기: game_idx, kind, detail (경기·종류마다 한 줄)."""
+    game_of = rows.set_index("row")["game_idx"]
+    out = problems.assign(game_idx=problems["row"].map(game_of).astype(int))
+    return out[["game_idx", "kind", "detail"]].drop_duplicates(ignore_index=True)
+
+
 def flows_for_game(game: dict, batting: dict[str, list[dict]]) -> dict[tuple, list[dict]]:
     """한 경기의 '등판 흐름': 상대 타격표의 타석을 시간 순서로 펴서 이 팀 투수들에게 타자 수대로 나눠 준다.
     {(team, name, number): [{inn, res, cat, ev}, ...]} — 타석 수 합이 투수 타자 수 합과 다르면 그 팀 투수들은 비워 둔다.

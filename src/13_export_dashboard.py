@@ -184,7 +184,8 @@ def highschool_files(cfg: dict) -> dict:
     sizes, index = {}, []
     for key, (d, rules) in datasets.items():
         rows_path = PROCESSED / f"hs_{key}_rows.parquet"
-        if not rows_path.exists():
+        d = hr.resolve_dataset(d)                                                          # 주간 갱신 데이터셋: 권역·대회 경기를 경기 목록에서
+        if d is None or not rows_path.exists():
             continue
         names = pd.read_csv(PROCESSED / f"hs_{key}_names.csv", encoding="utf-8-sig")
         names["name"] = names["pitcher"]                                                   # 실명 없이도 payload가 기대하는 열 모양을 맞춘다

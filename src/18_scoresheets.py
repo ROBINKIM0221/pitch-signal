@@ -210,7 +210,7 @@ def game_split(cfg: dict) -> dict:
     pilot = set(pd.read_csv(PROCESSED / "scoresheet_pilot.csv", encoding="utf-8-sig")["game_idx"]) | set(sc.get("dev_games", []))
     split = ss.holdout_split(games, pilot, seed=sc["holdout_seed"])
     for d in cfg["datasets"].values():
-        if d.get("games_csv") and d["games_csv"] != cfg["games_csv"]:
+        if d.get("games_csv") and d["games_csv"] != cfg["games_csv"] and (ROOT / d["games_csv"]).exists():
             for g in pd.read_csv(ROOT / d["games_csv"], encoding="utf-8-sig")["game_idx"]:
                 split.setdefault(int(g), f"y{d['season']}")
     return split
