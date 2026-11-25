@@ -440,3 +440,9 @@ def test_updated_info_is_only_for_live_datasets_and_names_the_last_game_day():
     outings = pd.DataFrame({"date": pd.to_datetime(["2027-03-06", "2027-03-07", "2027-03-07"])})
     assert hr.updated_info({"live": True}, outings, datetime.date(2027, 3, 8)) == {"run": "2027-03-08", "through": "2027-03-07"}
     assert hr.updated_info({"mode": "season"}, outings, datetime.date(2027, 3, 8)) is None
+
+
+def test_a_dataset_may_state_its_own_source_line():
+    common = {"source": "KBSA 기록실, 2026-10-07 1회 수집"}
+    assert hr.source_of({"source": "KBSA 기록실, 2027 시즌 동안 주 1회 수집"}, common) == "KBSA 기록실, 2027 시즌 동안 주 1회 수집"
+    assert hr.source_of({"mode": "season"}, common) == "KBSA 기록실, 2026-10-07 1회 수집"

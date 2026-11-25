@@ -201,7 +201,7 @@ def highschool_files(cfg: dict) -> dict:
             outings = hr.attach_innings(outings, pd.read_parquet(inns), names)
         daily = pd.read_parquet(PROCESSED / f"hs_{key}_daily.parquet")
         violated = pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
-        whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, kcfg["source"], kcfg["load_lights"])
+        whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, hr.source_of(d, kcfg), kcfg["load_lights"])
         entry = {"key": key, **{k: whole["dataset"][k] for k in ("mode", "name", "short", "season", "dates", "games", "competitions")}, "totals": whole["totals"]}
         updated = hr.updated_info(d, outings, datetime.now().date())                       # 주간 갱신 데이터셋만: 화면의 '마지막 갱신' 줄
         if updated:
@@ -214,7 +214,7 @@ def highschool_files(cfg: dict) -> dict:
                 rkey = f"r{i:02d}"
                 codes = set(names.loc[names["region"] == region, "school"])
                 sub = hr.payload(outings[outings["school"].isin(codes)], daily[daily["school"].isin(codes)], violated[violated["school"].isin(codes)],
-                                 names[names["region"] == region], rules, {**d, "key": key, "region": region}, kcfg["source"], kcfg["load_lights"])
+                                 names[names["region"] == region], rules, {**d, "key": key, "region": region}, hr.source_of(d, kcfg), kcfg["load_lights"])
                 sizes[f"highschool/{key}/{rkey}.json"] = dump(f"highschool/{key}/{rkey}.json", sub)
                 entry["regions"].append({"key": rkey, "name": region, "file": f"highschool/{key}/{rkey}.json", "schools": sub["totals"]["schools"],
                                          "pitchers": sub["totals"]["pitchers"], "outings": sub["totals"]["outings"], "violations": sub["totals"]["violations"],

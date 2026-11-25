@@ -99,6 +99,11 @@ def dataset_game_ids(cfg: dict, key: str, root: Path = ROOT) -> set[int]:
     return set(pd.read_csv(path, encoding="utf-8-sig")["game_idx"].astype(int)) if path.exists() else set()
 
 
+def source_of(d: dict, cfg: dict) -> str:
+    """화면에 적는 자료 출처 문구: 데이터셋에 따로 적었으면 그것, 아니면 공통 문구."""
+    return d.get("source") or cfg["source"]
+
+
 def updated_info(d: dict, outings: pd.DataFrame, today) -> dict | None:
     """주간 갱신 데이터셋(live)의 화면 표시용 갱신 정보: 만든 날(run)과 마지막 경기일(through). 그 밖의 데이터셋은 None."""
     if not d.get("live"):

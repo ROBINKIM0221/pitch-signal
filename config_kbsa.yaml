@@ -96,6 +96,7 @@ datasets:
     name: 2027 시즌 전국 고교 공식 경기
     short: 2027 시즌
     season: 2027
+    source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail), 2027 시즌 동안 주 1회 수집
     games_csv: data/raw/kbsa/games_2027.csv       # 경기 목록이 생기기 전에는 이 데이터셋을 건너뛴다
     region_leagues: auto                          # 주말리그 리그 이름의 괄호 안 권역 (hs_records.resolve_dataset)
     competitions:
@@ -149,6 +150,7 @@ datasets:
     name: 2027 전국체육대회 18세 이하부
     short: 2027 전국체전
     season: 2027
+    source: KBSA 기록실 경기 기록(korea-baseball.com/game/record_detail), 2027 시즌 동안 주 1회 수집
     games_csv: data/raw/kbsa/games_2027.csv
     league_contains: 전국체육대회
     overrides:
