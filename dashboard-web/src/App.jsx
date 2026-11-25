@@ -17,6 +17,8 @@ const GROUPS = [
     { to: "/", d: "tournament_2025", label: "2025 전국체전", file: "highschool.json" },
     { to: "/", d: "korea_2026", label: "2026 전국 고교 시즌", file: "highschool.json" },
     { to: "/", d: "tournament_2026", label: "2026 전국체전", file: "highschool.json" },
+    { to: "/", d: "korea_2027", label: "2027 전국 고교 시즌", file: "highschool.json" },
+    { to: "/", d: "tournament_2027", label: "2027 전국체전", file: "highschool.json" },
   ] },
   { key: "pro", label: "MLB · KBO", items: [
     { to: "/replay", label: "투수 시즌 상세 · 경보 카드", file: "pitchers.json" },

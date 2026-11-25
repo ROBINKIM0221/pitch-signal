@@ -99,6 +99,13 @@ def dataset_game_ids(cfg: dict, key: str, root: Path = ROOT) -> set[int]:
     return set(pd.read_csv(path, encoding="utf-8-sig")["game_idx"].astype(int)) if path.exists() else set()
 
 
+def updated_info(d: dict, outings: pd.DataFrame, today) -> dict | None:
+    """주간 갱신 데이터셋(live)의 화면 표시용 갱신 정보: 만든 날(run)과 마지막 경기일(through). 그 밖의 데이터셋은 None."""
+    if not d.get("live"):
+        return None
+    return {"run": today.isoformat(), "through": f"{pd.to_datetime(outings['date']).max():%Y-%m-%d}"}
+
+
 def problem_games(rows: pd.DataFrame, problems: pd.DataFrame) -> pd.DataFrame:
     """입력 검사에 걸린 줄이 속한 경기: game_idx, kind, detail (경기·종류마다 한 줄)."""
     game_of = rows.set_index("row")["game_idx"]

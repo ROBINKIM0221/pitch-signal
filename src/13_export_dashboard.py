@@ -203,6 +203,9 @@ def highschool_files(cfg: dict) -> dict:
         violated = pd.read_csv(PROCESSED / f"hs_{key}_violations.csv", encoding="utf-8-sig", parse_dates=["date"])
         whole = hr.payload(outings, daily, violated, names, rules, {**d, "key": key}, kcfg["source"], kcfg["load_lights"])
         entry = {"key": key, **{k: whole["dataset"][k] for k in ("mode", "name", "short", "season", "dates", "games", "competitions")}, "totals": whole["totals"]}
+        updated = hr.updated_info(d, outings, datetime.now().date())                       # 주간 갱신 데이터셋만: 화면의 '마지막 갱신' 줄
+        if updated:
+            entry["updated"] = updated
         if "region" in names.columns:                                                      # 시즌(전국): 권역별 파일
             order = list(d["region_leagues"]) + ["기타"]
             regions = [r for r in order if r in set(names["region"])]

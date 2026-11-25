@@ -433,3 +433,10 @@ def test_dataset_game_ids_come_from_that_datasets_game_list(tmp_path):
     assert hr.dataset_game_ids(cfg, "korea_2027", tmp_path) == {7, 8}
     assert hr.dataset_game_ids(cfg, "korea_2025", tmp_path) == {1}
     assert hr.dataset_game_ids(cfg, "korea_2028", tmp_path) == set()
+
+
+def test_updated_info_is_only_for_live_datasets_and_names_the_last_game_day():
+    import datetime
+    outings = pd.DataFrame({"date": pd.to_datetime(["2027-03-06", "2027-03-07", "2027-03-07"])})
+    assert hr.updated_info({"live": True}, outings, datetime.date(2027, 3, 8)) == {"run": "2027-03-08", "through": "2027-03-07"}
+    assert hr.updated_info({"mode": "season"}, outings, datetime.date(2027, 3, 8)) is None

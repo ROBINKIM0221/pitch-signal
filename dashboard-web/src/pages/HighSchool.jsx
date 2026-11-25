@@ -5,6 +5,7 @@ import { fmt, useJson } from "../lib/data.js";
 import { ChartTip, GRID, LABEL, LEGEND_STYLE, TICK, TIP_STYLE, limitLabel } from "../lib/chart.jsx";
 import { addDays, dailySeries, dateRange } from "../lib/load.js";
 import { availability, nextEligible, requiredRest } from "../lib/rules.js";
+import { updatedLabel } from "../lib/updated.js";
 
 const RULE_NAME = { daily_max: "하루 105구 초과", rest: "의무 휴식일 미준수", three_days: "3일 연속 등판", unknown: "투구 수 기록 없음(판정 불가)" };
 const LOAD_CLASS = { "보통": "ok", "주의": "warn", "높음": "alarm", "계산 불가": "base" };
@@ -263,6 +264,7 @@ function SeasonBoard({ data, index, dataset, region, selector, params, setParams
       <h1>{dataset.season} 전국 고교 투구수 현황판</h1>
       <p className="lead">{dataset.season}년 전국 고교 공식 경기 {dataset.games}경기의 투구 수로, 투수마다 KBSA 투구수 규정을 지켰는지와 규정이 보지 못하는 누적 부하를 봅니다.</p>
       <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
+      {updatedLabel(dataset.updated) && <p className="hint-line">{updatedLabel(dataset.updated)}</p>}
       <details className="more">
         <summary>신호등 기준 보기</summary>
         <p><b>규정</b>: 하루 {kbsa.daily_max}구, 투구 수별 의무 휴식일, 3일 연속 등판 금지를 지켰는지.<br />
@@ -572,6 +574,7 @@ function TournamentBoard({ data, index, selector, params, setParams }) {
       <h1>{ds.short} 투구수 현황판</h1>
       <p className="lead">{ds.name}({ds.dates}, {schools.length}개교 {ds.games}경기)에서 투수마다 규정 준수와 대회 7일 동안의 누적 투구 수를 봅니다. 누적 {data.load_lights.sum7.caution}구 이상은 주의, {data.load_lights.sum7.high}구 이상은 높음입니다.</p>
       <p className="hint-line">그래프와 표에 커서를 올리면 값과 설명이 나옵니다.</p>
+      {updatedLabel(entry?.updated) && <p className="hint-line">{updatedLabel(entry?.updated)}</p>}
       <div className="kpi">
         <div><div className="v">{totals.violations}<span className="sub"> 건</span></div><div className="l">규정 위반</div></div>
         <div><div className="v">{totals.back_to_back}<span className="sub"> 건</span></div><div className="l">연투(이튿날 다시 등판)</div></div>
