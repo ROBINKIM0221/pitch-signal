@@ -141,3 +141,13 @@ def test_to_render_lists_unfinished_batches_without_pictures_in_name_order(tmp_p
     reread.write_batches([item(i) for i in range(100, 103)], tmp_path, 2027, "20270315", 1)
     (b / "sheet_01.png").unlink()
     assert [p.name for p in reread.to_render(tmp_path)] == ["y27-20270308-s1-02", "y27-20270315-s1-01"]
+
+
+def test_planning_twice_with_the_same_tag_never_reuses_a_batch_name(tmp_path):
+    first = reread.write_batches([item(i) for i in range(61)], tmp_path, 2027, "20270308", 1)
+    (tmp_path / first[0] / "first_pass.json").write_text(json.dumps({f"s_{i}": ["B"] for i in range(60)}), encoding="utf-8")
+    before = [(tmp_path / n / "items.json").read_text(encoding="utf-8") for n in first]
+    second = reread.write_batches([item(i) for i in range(100, 103)], tmp_path, 2027, "20270308", 1)     # 같은 날 다시 계획
+    assert second == ["y27-20270308-s1-03"]
+    assert [(tmp_path / n / "items.json").read_text(encoding="utf-8") for n in first] == before          # 앞 묶음은 그대로
+    assert reread.finished(tmp_path / first[0]) is True

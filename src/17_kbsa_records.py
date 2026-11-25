@@ -41,7 +41,8 @@ def sheet_pitching() -> dict[int, list[dict]]:
     return {int(g): part.drop(columns="game_idx").to_dict("records") for g, part in t.groupby("game_idx", sort=False)}
 
 
-def parse_games(game_ids: list[int]) -> pd.DataFrame:
+def parse_games(game_ids: list[int], unreadable: dict[int, str] | None = None) -> pd.DataFrame:
+    """unreadable을 주면 해석할 수 없는 기록 페이지의 경기를 거기에 적고 빼며(주간 갱신), 안 주면 멈춘다."""
     pages = {g: RAW / f"record_detail_{g}.html" for g in game_ids}
     missing = [g for g, p in pages.items() if not p.exists()]
     if missing:
@@ -51,7 +52,13 @@ def parse_games(game_ids: list[int]) -> pd.DataFrame:
         if not p.exists():
             continue
         text = p.read_text(encoding="utf-8")
-        game = kb.parse_record_detail(text, g)
+        try:
+            game = kb.parse_record_detail(text, g)
+        except ValueError as e:
+            if unreadable is None:
+                raise
+            unreadable[g] = str(e)
+            continue
         if hr.fill_from_sheet(game, sheet.get(g)):
             from_sheet.add(g)
         games.append(game)
@@ -85,7 +92,16 @@ def convert(key: str, cfg: dict, d: dict, rules: dict, skip: frozenset = frozens
     else:
         ids, comp, region_of = season_games(cfg, d)
     ids = [g for g in ids if g not in skip]
-    raw = hr.combine_stints(hr.mark_missing_detail(parse_games(ids)))
+    live, unreadable = bool(d.get("live")), {}
+    raw = hr.combine_stints(hr.mark_missing_detail(parse_games(ids, unreadable if live else None)))
+    held = PROCESSED / f"hs_{key}_quarantine.csv"                # 뺀 경기 (주간 갱신 데이터셋만): 해석 못 한 기록 페이지, 입력 검사에 걸린 경기
+    pages = pd.DataFrame([(g, "기록 페이지", why) for g, why in unreadable.items()], columns=["game_idx", "kind", "detail"])
+    if not skip:
+        if len(pages):
+            log.warning("%s: 기록 페이지를 해석할 수 없는 경기 %d개를 뺀다: %s", key, len(pages), sorted(unreadable))
+            pages.to_csv(held, index=False, encoding="utf-8-sig")
+        else:
+            held.unlink(missing_ok=True)
     if raw.empty:
         log.info("%s: 기록 페이지가 있는 경기가 없어 건너뜀", key)
         return None
@@ -98,14 +114,11 @@ def convert(key: str, cfg: dict, d: dict, rules: dict, skip: frozenset = frozens
     rules = {**rules, "schools": int(raw["team"].nunique())}
     rows = hr.input_rows(raw, names, comp, d.get("rounds"))
     problems = hs.problems(rows, rules)
-    held = PROCESSED / f"hs_{key}_quarantine.csv"                # 입력 검사에 걸려 뺀 경기 (주간 갱신 시즌만)
-    if len(problems) and d.get("live") and d["mode"] == "season" and not skip:
-        bad = hr.problem_games(rows, problems)
+    if len(problems) and live and d["mode"] == "season" and not skip:
+        bad = pd.concat([pages, hr.problem_games(rows, problems)], ignore_index=True)
         bad.to_csv(held, index=False, encoding="utf-8-sig")
-        log.warning("%s: 입력 검사에 걸린 경기 %d개를 빼고 다시 만든다: %s", key, bad["game_idx"].nunique(), sorted(set(bad["game_idx"])))
+        log.warning("%s: 뺄 경기 %d개(입력 검사·기록 페이지)를 빼고 다시 만든다: %s", key, bad["game_idx"].nunique(), sorted(set(bad["game_idx"])))
         return convert(key, cfg, d, rules, skip=frozenset(int(g) for g in bad["game_idx"]))
-    if not skip and held.exists():
-        held.unlink()
     if len(problems):
         print(problems.to_string(index=False))
         raise SystemExit(f"{key}: 변환한 표가 입력 검사를 통과하지 못했습니다.")

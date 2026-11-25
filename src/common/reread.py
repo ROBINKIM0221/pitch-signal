@@ -91,7 +91,9 @@ def write_batches(items: list[dict], seq_dir: Path, season: int, tag: str, stage
     seen = already_planned(seq_dir)
     new = [it for it in items if it["id"] not in seen]
     names = []
-    for n, j in enumerate(range(0, len(new), per), start=1):
+    prefix = batch_name(season, tag, stage, 0)[:-2]
+    used = [int(p.name[len(prefix):]) for p in Path(seq_dir).glob(prefix + "*") if p.name[len(prefix):].isdigit()]
+    for n, j in enumerate(range(0, len(new), per), start=max(used, default=0) + 1):      # 같은 날 다시 계획해도 있는 묶음은 건드리지 않는다
         name = batch_name(season, tag, stage, n)
         d = Path(seq_dir) / name
         d.mkdir(parents=True, exist_ok=True)
