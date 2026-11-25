@@ -178,9 +178,9 @@ def _read_one(args) -> dict:
         return dict(sheet=Path(path).stem, error=f"{type(e).__name__}: {str(e)[:120]}")
 
 
-def read_all(cfg: dict, workers: int = 4) -> pd.DataFrame:
+def read_all(cfg: dict, workers: int = 4, games: set[int] | None = None) -> pd.DataFrame:
     SHEET_OUT.mkdir(parents=True, exist_ok=True)
-    photos = sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg"))
+    photos = [p for p in sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg")) if in_scope(p.stem, games)]
     todo = [str(p) for p in photos if not (SHEET_OUT / f"{p.stem}.parquet").exists()]
     log.info("기록지 사진 %d장 · 이번에 읽을 것 %d장", len(photos), len(todo))
     keys = reread_keys(cfg["scoresheets"].get("readings_dir"))
@@ -200,6 +200,17 @@ def read_all(cfg: dict, workers: int = 4) -> pd.DataFrame:
 
 
 INPLAY = {"OUT", "H", "HR", "E", "FC", "SAC"}
+
+
+def dataset_game_ids(cfg: dict, key: str) -> set[int]:
+    """그 데이터셋 경기 목록의 경기 번호 (목록 파일이 아직 없으면 빈 집합). --dataset 범위 계산에 쓴다."""
+    path = ROOT / cfg["datasets"][key].get("games_csv", cfg["games_csv"])
+    return set(pd.read_csv(path, encoding="utf-8-sig")["game_idx"].astype(int)) if path.exists() else set()
+
+
+def in_scope(sheet: str, games: set[int] | None) -> bool:
+    """기록지 이름(<경기 번호>_<사진 번호>)이 범위 안 경기인지. 범위가 없으면 전부."""
+    return games is None or int(str(sheet).split("_")[0]) in games
 
 
 def game_split(cfg: dict) -> dict:
@@ -457,7 +468,8 @@ def load_sequences(seq_dir: Path, sheet_dir: Path = SHEET_OUT) -> tuple[pd.DataF
     return pd.DataFrame(rows, columns=cols), read
 
 
-def score(cfg: dict, clf) -> pd.DataFrame:
+def score(cfg: dict, clf, games: set[int] | None = None) -> pd.DataFrame | None:
+    """games를 주면 그 경기의 기록지만 계산하고, 표시 파일의 다른 경기 줄은 그대로 둔다 (읽은 기록지가 없으면 None)."""
     sc = cfg["scoresheets"]
     cm_path = PROCESSED / "scoresheet_count_model.pkl"
     count_model = pickle.load(open(cm_path, "rb")) if cm_path.exists() else None
@@ -466,6 +478,8 @@ def score(cfg: dict, clf) -> pd.DataFrame:
     log.info("개수 모형 %s", f"사용 (beta {count_model['beta']})" if count_model else "없음 — 덩어리 하나 = 표시 하나")
     parts = []
     for f in sorted(SHEET_OUT.glob("*.parquet")):
+        if not in_scope(f.stem, games):
+            continue
         df = pd.read_parquet(f)
         if len(df) == 0:
             continue
@@ -475,6 +489,8 @@ def score(cfg: dict, clf) -> pd.DataFrame:
             continue
         df["p_ball"] = ball_proba(clf, df)
         parts.append(df.drop(columns=[c for c in ("pix", "crop") if c in df]))
+    if games is not None and not parts:
+        return None
     marks = pd.concat(parts, ignore_index=True)
     marks["ball"] = (marks["p_ball"] >= 0.5).astype(int)
     marks["number"] = marks["number"].astype(int)
@@ -506,7 +522,8 @@ def score(cfg: dict, clf) -> pd.DataFrame:
         drawn = marks[~marks["filled"].astype(bool)]
         rr = drawn[["game_idx", "team", "number"]].assign(reread=(drawn["read_by"] != "모델").to_numpy().astype(float))
         o = o.merge(rr.groupby(["game_idx", "team", "number"], as_index=False)["reread"].mean(), on=["game_idx", "team", "number"], how="left")
-    marks.to_parquet(PROCESSED / "hs_scoresheet_marks.parquet", index=False)
+    path = PROCESSED / "hs_scoresheet_marks.parquet"
+    (marks if games is None else ss.merge_scope(pd.read_parquet(path) if path.exists() else None, marks, games)).to_parquet(path, index=False)
     return o
 
 
@@ -539,9 +556,9 @@ def _row_one(path: str) -> str | None:
         return f"{Path(path).stem}: {type(e).__name__}: {str(e)[:120]}"
 
 
-def read_rows(cfg: dict, workers: int = 4) -> None:
+def read_rows(cfg: dict, workers: int = 4, games: set[int] | None = None) -> None:
     ROWS_OUT.mkdir(parents=True, exist_ok=True)
-    photos = sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg"))
+    photos = [p for p in sorted(Path(cfg["scoresheets"]["dir"]).glob("*.jpg")) if in_scope(p.stem, games)]
     todo = [str(p) for p in photos if not (ROWS_OUT / f"{p.stem}.pkl").exists()]
     log.info("투구수 줄: 사진 %d장 · 이번에 읽을 것 %d장", len(photos), len(todo))
     errors = []
@@ -597,7 +614,7 @@ def _sheet_context(game_idx: int, bat_team: str, cache: dict) -> dict | None:
                 last=max(c for cs in inning_cols.values() for c in cs))
 
 
-def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def innings(cfg: dict, digit_model, games: set[int] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """기록지마다 투구수 줄을 풀어 (열별 이닝 투구 수) → 등판별 이닝 투구 수·볼·스트라이크(추정).
     풀 때는 그 열 기록지 표시 수(사전)와 공식 기록으로 아는 누적(투수 교체가 이닝 경계인 곳)을 쓴다.
     정직한 평가는 따로: 시험용 경기에서 고정점 없이 풀어 교체 경계 누적이 공식과 맞는지."""
@@ -606,6 +623,7 @@ def innings(cfg: dict, digit_model) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
     split = game_split(cfg)
     meta = pd.read_csv(PROCESSED / "scoresheet_read_meta.csv", encoding="utf-8-sig")
     meta = meta[meta["error"].isna()] if "error" in meta else meta
+    meta = meta if games is None else meta[meta["game_idx"].isin(games)]
     marks = pd.read_parquet(PROCESSED / "hs_scoresheet_marks.parquet", columns=["sheet", "number", "inning", "col", "ball", "filled"])
     marks["filled"] = marks["filled"].fillna(False).astype(bool)
     marks_by = dict(tuple(marks.groupby("sheet")))
@@ -699,8 +717,15 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--games", help="list: 이 경기 목록(csv)의 기록지 (기본 2025)")
     ap.add_argument("--out", help="list: 저장 파일 이름 (data/processed 안)")
+    ap.add_argument("--dataset", help="read·rows·score·innings: 이 데이터셋의 경기만 계산하고 다른 경기 결과는 그대로 둔다")
     a = ap.parse_args()
     cfg = load_cfg()
+    games = dataset_game_ids(cfg, a.dataset) if a.dataset else None
+    tag = f"_{a.dataset}" if a.dataset else ""                 # 범위 실행의 요약표는 따로 (전체 요약표는 건드리지 않는다)
+
+    def save(new: pd.DataFrame, name: str) -> None:
+        path = PROCESSED / name
+        (new if games is None else ss.merge_scope(pd.read_parquet(path) if path.exists() else None, new, games)).to_parquet(path, index=False)
     if a.step == "select":
         out = PROCESSED / "scoresheet_pilot.csv"
         select_pilot(cfg).to_csv(out, index=False, encoding="utf-8-sig")
@@ -710,7 +735,7 @@ def main() -> None:
         list_all(cfg, a.games).to_csv(out, index=False, encoding="utf-8-sig")
         log.info("→ %s", out)
     if a.step == "read":
-        read_all(cfg, a.workers)
+        read_all(cfg, a.workers, games)
     if a.step == "train-count":
         with open(PROCESSED / "scoresheet_count_model.pkl", "wb") as fh:
             pickle.dump(train_count(cfg), fh)
@@ -720,23 +745,26 @@ def main() -> None:
     if a.step == "score":
         with open(PROCESSED / "scoresheet_ball_model.pkl", "rb") as fh:
             clf = pickle.load(fh)
-        o = score(cfg, clf)
-        o.to_parquet(PROCESSED / "hs_scoresheet_outings.parquet", index=False)
+        o = score(cfg, clf, games)
+        if o is None:
+            log.info("%s: 읽은 기록지가 없어 점수 단계를 건너뜀", a.dataset)
+            return
+        save(o, "hs_scoresheet_outings.parquet")
         s = summary(o, cfg)
-        s.to_csv(TABLES / "hs_scoresheet_summary.csv", index=False, encoding="utf-8-sig")
+        s.to_csv(TABLES / f"hs_scoresheet_summary{tag}.csv", index=False, encoding="utf-8-sig")
         log.info("등판 %d개\n%s", len(o), s.to_string(index=False))
     if a.step == "rows":
-        read_rows(cfg, a.workers)
+        read_rows(cfg, a.workers, games)
     if a.step == "train-digits":
         with open(PROCESSED / "scoresheet_digit_model.pkl", "wb") as fh:
             pickle.dump(train_digits(cfg), fh)
     if a.step == "innings":
         with open(PROCESSED / "scoresheet_digit_model.pkl", "rb") as fh:
             dm = pickle.load(fh)
-        cols, inns, s = innings(cfg, dm)
-        cols.to_parquet(PROCESSED / "hs_scoresheet_rows.parquet", index=False)
-        inns.to_parquet(PROCESSED / "hs_scoresheet_innings.parquet", index=False)
-        s.to_csv(TABLES / "hs_scoresheet_rows_summary.csv", index=False, encoding="utf-8-sig")
+        cols, inns, s = innings(cfg, dm, games)
+        save(cols, "hs_scoresheet_rows.parquet")
+        save(inns, "hs_scoresheet_innings.parquet")
+        s.to_csv(TABLES / f"hs_scoresheet_rows_summary{tag}.csv", index=False, encoding="utf-8-sig")
         log.info("투구수 줄\n%s", s.T.to_string(header=False))
 
 

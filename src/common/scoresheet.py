@@ -618,3 +618,11 @@ def holdout_split(game_ids, pilot: set, seed: int = 2025) -> dict:
     rest = np.array(sorted(set(int(g) for g in game_ids) - set(pilot)))
     test = set(np.random.default_rng(seed).permutation(rest)[: len(rest) // 2].tolist())
     return {int(g): ("pilot" if g in pilot else "test" if g in test else "label") for g in game_ids}
+
+
+def merge_scope(existing: pd.DataFrame | None, new: pd.DataFrame, games: set[int]) -> pd.DataFrame:
+    """한 데이터셋 범위(games)만 다시 계산했을 때: 기존 표에서 범위 밖 경기 줄은 순서 그대로 두고, 범위 안 줄은 new로 바꾼다.
+    열은 기존 열 순서 뒤에 새 열."""
+    if existing is None:
+        return new
+    return pd.concat([existing[~existing["game_idx"].isin(games)], new], ignore_index=True)

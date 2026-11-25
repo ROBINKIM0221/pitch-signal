@@ -386,3 +386,58 @@ def test_apply_sequences_replaces_every_mark_of_the_pa_but_keeps_person_checked_
     assert out[out.pa == 1][["ball", "read_by"]].values.tolist() == [[0, "사람"]]
     assert (out.pa == 2).sum() == 0                                                              # 표시가 없다고 읽은 타석은 모델 표시도 지운다
     assert ss.apply_sequences(marks, seqs.iloc[:0], set()).equals(marks)
+
+
+# ---------- 데이터셋 범위로 다시 계산할 때: 범위 밖 경기 줄은 그대로 둔다 ----------
+def test_merge_scope_keeps_other_games_unchanged_and_replaces_the_scope():
+    existing = pd.DataFrame({"game_idx": [1, 1, 2], "v": [0.1, 0.2, 0.3], "filled": [True, False, True]})
+    new = pd.DataFrame({"game_idx": [2, 2], "v": [9.0, 8.0], "extra": ["a", "b"]})
+    out = ss.merge_scope(existing, new, {2, 3})
+    kept = out[out["game_idx"] == 1].reset_index(drop=True)
+    pd.testing.assert_frame_equal(kept[["game_idx", "v", "filled"]], existing.iloc[:2].reset_index(drop=True), check_dtype=False)
+    assert out[out["game_idx"] == 2]["v"].tolist() == [9.0, 8.0]
+    assert list(out.columns) == ["game_idx", "v", "filled", "extra"]
+    assert list(out.index) == [0, 1, 2, 3]
+
+
+def test_merge_scope_without_existing_returns_the_new_rows():
+    new = pd.DataFrame({"game_idx": [2], "v": [9.0]})
+    pd.testing.assert_frame_equal(ss.merge_scope(None, new, {2}), new)
+
+
+def test_merge_scope_with_no_new_rows_only_drops_the_scope():
+    existing = pd.DataFrame({"game_idx": [1, 2], "v": [0.1, 0.3]})
+    out = ss.merge_scope(existing, existing.iloc[:0], {2})
+    assert out["game_idx"].tolist() == [1] and out["v"].tolist() == [0.1]
+
+
+def test_merge_scope_keeps_kept_rows_in_their_original_order():
+    existing = pd.DataFrame({"game_idx": [5, 1, 9, 1], "v": [1.0, 2.0, 3.0, 4.0]})
+    out = ss.merge_scope(existing, pd.DataFrame({"game_idx": [9], "v": [7.0]}), {9})
+    assert out["v"].tolist() == [1.0, 2.0, 4.0, 7.0]
+
+
+def test_merge_scope_result_can_be_saved_when_new_rows_lack_a_flag_column(tmp_path):
+    existing = pd.DataFrame({"game_idx": [1, 1], "unsure": [True, False], "read_by": ["AI", "모델"], "n": [3, 4]})
+    out = ss.merge_scope(existing, pd.DataFrame({"game_idx": [2], "n": [5]}), {2})
+    out.to_parquet(tmp_path / "m.parquet", index=False)                       # 참·거짓과 빈 값이 섞여도 저장돼야 한다
+    back = pd.read_parquet(tmp_path / "m.parquet")
+    pd.testing.assert_frame_equal(back[back["game_idx"] == 1].reset_index(drop=True), existing, check_dtype=False)
+    assert back["n"].tolist() == [3, 4, 5] and pd.isna(back.loc[2, "unsure"])
+
+
+def test_dataset_game_ids_reads_that_datasets_game_list(tmp_path, monkeypatch):
+    m18 = importlib.import_module("src.18_scoresheets")
+    monkeypatch.setattr(m18, "ROOT", tmp_path)
+    pd.DataFrame({"game_idx": [7, 8]}).to_csv(tmp_path / "g.csv", index=False)
+    pd.DataFrame({"game_idx": [1]}).to_csv(tmp_path / "base.csv", index=False)
+    cfg = {"games_csv": "base.csv", "datasets": {"korea_2027": {"games_csv": "g.csv"}, "korea_2025": {}, "korea_2028": {"games_csv": "none.csv"}}}
+    assert m18.dataset_game_ids(cfg, "korea_2027") == {7, 8}
+    assert m18.dataset_game_ids(cfg, "korea_2025") == {1}          # 경기 목록을 따로 안 적은 데이터셋은 기본 목록
+    assert m18.dataset_game_ids(cfg, "korea_2028") == set()        # 아직 경기 목록이 없음
+
+
+def test_in_scope_matches_the_game_number_at_the_front_of_a_sheet_name():
+    m18 = importlib.import_module("src.18_scoresheets")
+    assert m18.in_scope("36897_99665", {36897}) and not m18.in_scope("36897_99665", {3689})
+    assert m18.in_scope("36897_99665", None)                       # 범위가 없으면 전부
