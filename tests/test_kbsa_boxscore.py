@@ -145,3 +145,16 @@ def test_tiebreak_runners_count_as_pseudo_plate_appearances_at_the_start_of_the_
     # 9회 마지막 타자가 3번 → 10회는 승부주자 둘 다음 4번부터, 그다음 3번
     assert [(p["inning"], p["slot"], p["result"]) for p in pas] == [(9, 3, "삼진"), (10, 1, "승부주자"), (10, 2, "승부주자"), (10, 4, "4구"), (10, 3, "중안")]
     assert kb.pa_category("승부주자") == "TB" and pas[2]["events"] == ["폭투"]
+
+
+def test_game_pas_gives_each_plate_appearance_the_opposing_pitcher():
+    page = ('<html><head><meta name="description" content="2025.10.17/09:00 어느 구장 보조2구장 가나고 vs 다라고" />'
+            '<meta property="og:title" content="제1회 가상대회(18세 이하부)"/></head><body>'
+            + pitcher_table("가나고", [("홍길동", 17, "선발", "패", "5", 20, 70), ("나다라", 23, "교체", "-", "4", 11, 40)])
+            + pitcher_table("다라고", [("사아자", 54, "선발", "승", "9", 30, 101)])
+            + BATTING + "</body></html>")
+    game, teams = kb.game_pas(page, 7)
+    assert game["game_idx"] == 7 and sorted(game["teams"]) == ["가나고", "다라고"]
+    pas = teams["다라고"]
+    assert len(pas) == 31
+    assert [p["pitcher"] for p in pas] == [17] * 20 + [23] * 11      # 상대(가나고) 투수의 타자 수대로 차례로 배정

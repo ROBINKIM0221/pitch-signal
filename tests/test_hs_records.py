@@ -424,3 +424,12 @@ def test_problem_games_names_every_game_that_failed_the_input_check():
     rows = hr.input_rows(t, hr.name_map(t), pd.Series("전국체전", index=[1, 2, 3]), None)
     bad = hr.problem_games(rows, hs.problems(rows, RULES))
     assert set(bad["game_idx"]) == {1} and "중복" in set(bad["kind"])
+
+
+def test_dataset_game_ids_come_from_that_datasets_game_list(tmp_path):
+    pd.DataFrame({"game_idx": [7, 8]}).to_csv(tmp_path / "g.csv", index=False)
+    pd.DataFrame({"game_idx": [1]}).to_csv(tmp_path / "base.csv", index=False)
+    cfg = {"games_csv": "base.csv", "datasets": {"korea_2027": {"games_csv": "g.csv"}, "korea_2025": {}, "korea_2028": {"games_csv": "none.csv"}}}
+    assert hr.dataset_game_ids(cfg, "korea_2027", tmp_path) == {7, 8}
+    assert hr.dataset_game_ids(cfg, "korea_2025", tmp_path) == {1}
+    assert hr.dataset_game_ids(cfg, "korea_2028", tmp_path) == set()

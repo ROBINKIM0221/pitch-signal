@@ -29,6 +29,7 @@ import yaml
 from scipy.stats import spearmanr
 from sklearn.ensemble import HistGradientBoostingClassifier
 
+from src.common import hs_records as hr
 from src.common import kbsa_boxscore as kb
 from src.common import scoresheet as ss
 from src.common import scoresheet_row as sr
@@ -86,18 +87,7 @@ def list_all(cfg: dict, games_csv: str | None = None) -> pd.DataFrame:
 
 def game_pas(game_idx: int) -> tuple[dict, dict]:
     """경기 기록 → 팀별 공식 타석(시간 순, 상대 투수 등번호 붙임)."""
-    text = (RAW / f"record_detail_{game_idx}.html").read_text(encoding="utf-8")
-    game = kb.parse_record_detail(text, game_idx)
-    teams = {}
-    for team, rows in kb.parse_batting(text).items():
-        pas = kb.plate_appearances(rows)
-        opp = [p for p in game["pitchers"] if p["team"] != team]
-        parts = kb.assign_to_pitchers(pas, [p["batters"] for p in opp])
-        for p, part in zip(opp, parts or []):
-            for x in part:
-                x["pitcher"] = p["number"]
-        teams[team] = pas
-    return game, teams
+    return kb.game_pas((RAW / f"record_detail_{game_idx}.html").read_text(encoding="utf-8"), game_idx)
 
 
 def read_sheet(path: Path, overflow: bool = True, own: bool = True, own_ext: int = 4, own_min: float = 0.5,
@@ -204,8 +194,7 @@ INPLAY = {"OUT", "H", "HR", "E", "FC", "SAC"}
 
 def dataset_game_ids(cfg: dict, key: str) -> set[int]:
     """그 데이터셋 경기 목록의 경기 번호 (목록 파일이 아직 없으면 빈 집합). --dataset 범위 계산에 쓴다."""
-    path = ROOT / cfg["datasets"][key].get("games_csv", cfg["games_csv"])
-    return set(pd.read_csv(path, encoding="utf-8-sig")["game_idx"].astype(int)) if path.exists() else set()
+    return hr.dataset_game_ids(cfg, key, ROOT)
 
 
 def in_scope(sheet: str, games: set[int] | None) -> bool:

@@ -93,6 +93,12 @@ def resolve_dataset(d: dict, root: Path = ROOT) -> dict | None:
     return {**d, "region_leagues": {r: found[r] for r in order}}
 
 
+def dataset_game_ids(cfg: dict, key: str, root: Path = ROOT) -> set[int]:
+    """그 데이터셋 경기 목록의 경기 번호 (목록을 따로 안 적은 데이터셋은 기본 목록, 파일이 아직 없으면 빈 집합)."""
+    path = Path(root) / cfg["datasets"][key].get("games_csv", cfg["games_csv"])
+    return set(pd.read_csv(path, encoding="utf-8-sig")["game_idx"].astype(int)) if path.exists() else set()
+
+
 def problem_games(rows: pd.DataFrame, problems: pd.DataFrame) -> pd.DataFrame:
     """입력 검사에 걸린 줄이 속한 경기: game_idx, kind, detail (경기·종류마다 한 줄)."""
     game_of = rows.set_index("row")["game_idx"]

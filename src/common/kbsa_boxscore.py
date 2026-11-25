@@ -176,3 +176,19 @@ def pa_category(result: str) -> str:
     if "야선" in r:
         return "FC"
     return "OUT"
+
+
+def game_pas(text: str, game_idx: int) -> tuple[dict, dict]:
+    """경기 기록 페이지 → (경기, 팀별 공식 타석). 타석은 시간 순이고, 상대 투수의 타자 수대로 나눠 그 투수의 등번호(pitcher)를 붙인다
+    (타자 수 합이 타석 수와 안 맞는 팀은 붙이지 않는다)."""
+    game = parse_record_detail(text, game_idx)
+    teams = {}
+    for team, rows in parse_batting(text).items():
+        pas = plate_appearances(rows)
+        opp = [p for p in game["pitchers"] if p["team"] != team]
+        parts = assign_to_pitchers(pas, [p["batters"] for p in opp])
+        for p, part in zip(opp, parts or []):
+            for x in part:
+                x["pitcher"] = p["number"]
+        teams[team] = pas
+    return game, teams
