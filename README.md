@@ -13,7 +13,7 @@ Early-warning signals for pitcher arm-injury risk — from MLB pitch tracking to
 ## How it works
 
 - **A baseline per pitcher.** Each pitcher's own "normal" velocity and delivery is learned and updated after every outing.
-- **Signals when an outing drifts.** Multivariate control charts (variable-sample T² and MEWMA) flag outings outside that normal, tuned so a healthy pitcher sees about one false alarm per 100 outings.
+- **Two signals when an outing drifts.** The main signal is a one-sided EWMA on velocity that fires only when velocity keeps coming in below the pitcher's expected level (a velocity drop). A secondary form-change signal applies multivariate control charts (variable-sample T² and MEWMA) to delivery features. Both are tuned so a healthy pitcher sees about one false alarm per 100 outings.
 - **High-school games too.** Official high-school records have no ball/strike data, so a model reads photos of handwritten scoresheets to recover pitch-by-pitch results.
 - **Rules fixed before results.** Hypotheses and decision rules were made public on GitHub before the results were seen, and the held-out 2026 season was evaluated only once.
 
@@ -21,7 +21,7 @@ Early-warning signals for pitcher arm-injury risk — from MLB pitch tracking to
 
 | Measure | Result |
 |---|---|
-| False alarms (validation, MLB 2021–2026) | 0.85 per 100 outings (designed for 1) |
+| False alarms (validation, MLB 2024–2025) | 0.85 per 100 outings (designed for 1) |
 | Arm-injury IL within 30 days after a velocity-drop alert* | 10.5% vs 4.8% without an alert (2.2×, validation) · 9.8% vs 4.9% (2.0×, held-out 2026) |
 | Handwritten scoresheets read | 3,906 photos · ball-rate error 1.3 percentage points against game video |
 

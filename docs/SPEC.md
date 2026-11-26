@@ -409,7 +409,7 @@ Savant 마이너리그 검색으로 트리플A 투구 데이터를 받을 수 �
 
 ## 3.17 대시보드 명세
 
-AICP 사이트와 같은 구조다. Python(src/13_export_dashboard.py)이 결과를 JSON으로 내보내고, React + Vite + Recharts로 만든 정적 사이트가 이를 읽는다. GitHub Actions가 빌드해 GitHub Pages에 올린다. 공개 저장소라면 비용이 없고, 서버가 없어 잠들지 않는다.
+Python(src/13_export_dashboard.py)이 결과를 JSON으로 내보내고, React + Vite + Recharts로 만든 정적 사이트가 이를 읽는다. GitHub Actions가 빌드해 GitHub Pages에 올린다. 공개 저장소라면 비용이 없고, 서버가 없어 잠들지 않는다.
 
 ![그림 3. 대시보드 화면 배치 (와이어프레임, 화면 ① 리플레이)](figures/fig_wire.png)
 
