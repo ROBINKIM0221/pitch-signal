@@ -28,6 +28,7 @@ python -m pytest -q                 # 모두 통과해야 함
 | `config.yaml` | 모든 선택값과 숫자 설정 (평가 계획 고정 뒤 변경 없음) |
 | `config_scout.yaml`, `config_kbsa.yaml` | 화면 5 영입 전 점검 대상 목록, 2025·2026 고교 시즌·전국체전 기록 변환과 손기록지 판독 설정 (평가 설정과 분리) |
 | `docs/SPEC.md` | 명세서 |
+| `docs/HANDOVER.md` | 작업 인수인계 — 이어서 작업할 때 먼저 읽는다 |
 | `src/core/` | 검증된 참조 구현 (수정 금지): 핵심 통계 함수, KBSA 규정 엔진 |
 | `tests/` | 참조 구현 테스트 |
 | `tools/sim_short_outings.py` | 짧은 등판 처리 방식 비교 시뮬레이션 |
