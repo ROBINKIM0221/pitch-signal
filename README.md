@@ -1,42 +1,61 @@
-# PitchSignal 피치시그널
+# PitchSignal
 
-투구 추적 데이터로 투수마다 '평소의 투구'를 학습하고, 오경보율을 미리 정한 다변량 관리도
-(가변 표본 T²·MEWMA)로 '평소와 달라진 등판'을 알리는 투구 이상 신호 모니터링 시스템.
-2026 경기스포츠산업 공모전 출품작 · 김형준 (UNIST, robin1967@unist.ac.kr)
+Early-warning signals for pitcher arm-injury risk — from MLB pitch tracking to Korean high-school scoresheets.
 
-> 부상을 진단하거나 예측하지 않는다. 통계적 관리도가 점검을 시작할 신호를 내고, 판단은 사람이 한다.
+**Paper:** *One Step Past the Box Score: Pitcher-Safety Signals the Official Record Leaves Out, from Korean High School Scoresheets to Statcast* — accepted (conditional), Wharton Sports Analytics Research Journal, Fall 2026
+**Dashboard:** https://robinkim0221.github.io/pitch-signal/
+**Author:** HyeongJun Kim (UNIST) · robin1967@unist.ac.kr
 
-![전체 흐름](docs/figures/fig_flow.png)
+> PitchSignal does not diagnose or predict injuries. A statistical monitor raises a signal to start a check; people make the call.
 
-## 시작하기 (Windows)
+![Overview](docs/figures/fig_flow.png)
+
+## How it works
+
+- **A baseline per pitcher.** Each pitcher's own "normal" velocity and delivery is learned and updated after every outing.
+- **Signals when an outing drifts.** Multivariate control charts (variable-sample T² and MEWMA) flag outings outside that normal, tuned so a healthy pitcher sees about one false alarm per 100 outings.
+- **High-school games too.** Official high-school records have no ball/strike data, so a model reads photos of handwritten scoresheets to recover pitch-by-pitch results.
+- **Rules fixed before results.** Hypotheses and decision rules were made public on GitHub before the results were seen, and the held-out 2026 season was evaluated only once.
+
+## Results
+
+| Measure | Result |
+|---|---|
+| False alarms (validation, MLB 2021–2026) | 0.85 per 100 outings (designed for 1) |
+| Arm-injury IL within 30 days after a velocity-drop alert* | 10.5% vs 4.8% without an alert (2.2×, validation) · 9.8% vs 4.9% (2.0×, held-out 2026) |
+| Handwritten scoresheets read | 3,906 photos · ball-rate error 1.3 percentage points against game video |
+
+\* A follow-up measure added after the pre-registered plan. The held-out 2026 evaluation was smaller and weaker than validation on the main hypotheses; the paper discusses these limits.
+
+## Getting started (Windows)
+
 ```powershell
-# Python 3.12 이상(3.13에서 확인), Git, Node.js LTS 설치 후
+# Python 3.12+ (tested on 3.13), Git, Node.js LTS
 py -m venv .venv
-.venv\Scripts\Activate.ps1          # 막히면: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 pip install -r requirements.txt
-python -m pytest -q                 # 모두 통과해야 함
+python -m pytest -q                 # all tests should pass
 ```
 
-## 진행 방법
-1. 단계를 번호 순서대로 진행한다.
-2. 모든 단계는 `docs/SPEC.md`의 명세와 `config.yaml`의 설정을 따른다.
-3. 관문 ①~⑤(데이터 확보 → 평가 계획 고정 → 검증 결과 → 봉인 평가 → 제출)를 통과하며 진행한다.
+Work runs in numbered steps that follow the spec in `docs/SPEC.md` and the settings in `config.yaml`, passing five gates: data → evaluation plan fixed → validation results → held-out evaluation → submission.
 
-## 폴더
-| 경로 | 내용 |
+## Repository layout
+
+| Path | Contents |
 |---|---|
-| `config.yaml` | 모든 선택값과 숫자 설정 (평가 계획 고정 뒤 변경 없음) |
-| `config_scout.yaml`, `config_kbsa.yaml` | 화면 5 영입 전 점검 대상 목록, 2025·2026 고교 시즌·전국체전 기록 변환과 손기록지 판독 설정 (평가 설정과 분리) |
-| `docs/SPEC.md` | 명세서 |
-| `docs/HANDOVER.md` | 작업 인수인계 — 이어서 작업할 때 먼저 읽는다 |
-| `src/core/` | 검증된 참조 구현 (수정 금지): 핵심 통계 함수, KBSA 규정 엔진 |
-| `tests/` | 참조 구현 테스트 |
-| `tools/sim_short_outings.py` | 짧은 등판 처리 방식 비교 시뮬레이션 |
-| `templates/` | 고교 기록 점검표·투구수 입력 Excel, 평가 계획서 양식 |
-| `.github/workflows/deploy-pages.yml` | 대시보드 GitHub Pages 배포 |
+| `config.yaml` | All choices and numeric settings (unchanged after the evaluation plan was fixed) |
+| `config_scout.yaml`, `config_kbsa.yaml` | Scouting-check list; conversion of 2025–2026 high-school records and scoresheet-reading settings (kept apart from evaluation settings) |
+| `docs/SPEC.md` | Specification |
+| `docs/HANDOVER.md` | Current state and how to continue the work |
+| `src/core/` | Verified reference implementation (do not modify): core statistics, high-school rule engine |
+| `tests/` | Tests for the reference implementation |
+| `tools/sim_short_outings.py` | Simulation comparing ways to handle short outings |
+| `templates/` | Excel templates for high-school record checks and pitch-count entry; evaluation-plan form |
+| `.github/workflows/deploy-pages.yml` | Deploys the dashboard to GitHub Pages |
 
-## 데이터와 이용 조건
-- MLB Statcast(Baseball Savant), MLB Stats API: 비상업 연구 목적으로만 사용, 원데이터는 저장소에 올리지 않음
-- 고교 기록(KBSA 기록실 2025·2026 공식 경기 기록, 시즌마다 한 차례 수집·원본 비공개): 학교와 선수는 기록실에 공개된 이름으로 표시한다(선수는 '이름 #등번호'). 이름 대응표는 저장소 밖에 두고 대시보드 데이터를 만들 때만 붙인다
-- 손기록지 사진(2025·2026, 3,906장): 판독에만 쓰고 저장소와 사이트에는 올리지 않음
-- 공개하는 것은 코드, 설정, 집계 결과, 대시보드용 요약 JSON뿐
+## Data and terms of use
+
+- MLB Statcast (Baseball Savant) and the MLB Stats API: non-commercial research only; raw data is not stored in this repository.
+- Korean high-school records (official 2025–2026 game records from the KBSA record room, collected once per season; originals not shared): schools and players appear under the names shown in the record room (players as "name #number"). The name lookup table stays outside the repository and is joined only when building dashboard data.
+- Handwritten scoresheet photos (2025–2026, 3,906 images): used only for reading; not uploaded to the repository or the site.
+- Only code, settings, aggregated results, and summary JSON for the dashboard are public.
